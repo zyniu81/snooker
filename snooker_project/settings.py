@@ -82,6 +82,9 @@ DATABASES = {
         'PASSWORD': 'coderslab',
         'HOST': 'localhost',
         'PORT': '5432',
+        'OPTIONS': {
+            'options': '-c search_path=public'
+        },
     }
 }
 
