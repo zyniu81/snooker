@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h1>Venue List</h1>
+    <a class="btn btn-sm btn-success" href="{% url 'add_venue' %}">Add Venue</a>
+    <table class="table">
+        <thead>
+        <tr>
+            <th scope="col">#</th>
+            <th scope="col">Name</th>
+            <th scope="col">Address</th>
+            <th scope="col">Capacity</th>
+        </tr>
+        </thead>
+        <tbody>
+            {% for venue in venues %}
+            <tr>
+                <th scope="row">{{ forloop.counter }}</th>
+                <td><a href="{% url 'venue_detail' venue.pk %}">{{ venue.name }}</a></td>
+                <td>{{ venue.address|default_if_none:"" }}</td>
+                <td>{{ venue.capacity|default_if_none:"" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">No venues to display.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h2>Referee Detail</h2>
+    <p>Name: {{ referee }}</p>
+    <p>License Number: {{ referee.license_number }}</p>
+    <p>Matches: {% for match in referee.matches.all %}{{ match }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+
+    <a href="{% url 'edit_referee' referee.pk %}" class="btn btn-sm btn-primary">Edit</a>
+    <a href="{% url 'delete_referee' referee.pk %}" class="btn btn-sm btn-danger">Delete</a>
+    <a href="{% url 'referee_list' %}" class="btn btn-sm btn-secondary">Back to list</a>
+</div>
+{% endblock %}

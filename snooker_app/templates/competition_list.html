@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h2>Competition List</h2>
+    <a class="btn btn-sm btn-success" href="{% url 'add_competition' %}">Add Competition</a>
+    <table class="table">
+        <thead>
+        <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Active</th>
+            <th>Phase</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for competition in competitions %}
+        <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><a href="{% url 'competition_detail' competition.pk %}">{{ competition.name }}</a></td>
+            <td>{{ competition.start_date }}</td>
+            <td>{{ competition.end_date }}</td>
+            <td>
+                {% if competition.is_active %}
+                    <span style="color: green;">Yes</span>
+                {% else %}
+                    <span style="color: red;">No</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if competition.is_group_stage %}
+                    <span>Group Stage</span>
+                {% elif competition.is_knockout %}
+                    <span>Knockout Stage</span>
+                {% else %}
+                    <span>Unknown</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="7">No competitions to display.</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

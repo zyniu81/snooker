@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container">
+    <h2>Player Detail</h2>
+    <p>Name: {{ player }}</p>
+    <a href="{% url 'player_edit' player.pk %}" class="btn btn-sm btn-primary">Edit Player</a>
+    <a href="{% url 'player_delete' player.pk %}" class="btn btn-sm btn-danger">Delete Player</a>
+    <a href="{% url 'player_list' %}" class="btn btn-sm btn-secondary">Back to list</a>
+</div>
+{% endblock %}

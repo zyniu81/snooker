@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h2>Stages for {{ competition.name }}</h2>
+    <ul>
+        {% for stage in stages %}
+        <li>{{ stage.name }} (Start: {{ stage.start_date }}, End: {{ stage.end_date }})</li>
+        {% empty %}
+        <li>No stages available for this competition.</li>
+        {% endfor %}
+    </ul>
+    <a href="{% url 'competition_detail' competition.pk %}" class="btn btn-secondary">Back to Competition Details</a>
+</div>
+{% endblock %}

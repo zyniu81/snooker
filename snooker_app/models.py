@@ -40,9 +40,7 @@ class Player(models.Model):
         if not self.first_name and not self.last_name and not self.nickname:
             if not self.id:
                 super().save(*args, **kwargs)
-            self.first_name = None
-            self.last_name = None
-            self.nickname = None
+                self.first_name = f'Player {self.id}'
         super().save(*args, **kwargs)
 
     def formatted_avg_shot_time(self):
