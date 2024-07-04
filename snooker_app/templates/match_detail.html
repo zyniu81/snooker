@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h2>Match Details</h2>
+    <p>Date: {{ match.date }}</p>
+    <p>Time: {{ match.time }}</p>
+    <p>Venue: {{ match.venue }}</p>
+    <p>Number of Frames: {{ match.number_of_frames }}</p>
+    <p>Players:</p>
+    <ul>
+        {% for player in match.players.all %}
+        <li>{{ player }}</li>
+        {% endfor %}
+    </ul>
+    <p>Referees:</p>
+    <ul>
+        {% for referee in match.referees.all %}
+        <li>{{ referee }}</li>
+        {% endfor %}
+    </ul>
+    <a href="{% url 'edit_match' match.pk %}" class="btn btn-sm btn-primary">Edit</a>
+    <a href="{% url 'delete_match' match.pk %}" class="btn btn-sm btn-danger">Delete</a>
+    <a href="{% url 'match_list' %}" class="btn btn-sm btn-secondary">Back to List</a>
+    <a href="{% url 'start_game' match.pk %}" class="btn btn-sm btn-success">Start Game</a>
+</div>
+{% endblock %}

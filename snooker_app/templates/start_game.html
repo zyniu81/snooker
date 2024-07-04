@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block content %}
+{% load static %}
+<div class="container">
+    <div class="row">
+        {% for player in players %}
+        <div class="col-md-6">
+            <h4>{{ player }}</h4>
+            <div class="mt-2">
+                <input type="text" class="form-control player-score" value="0" readonly>
+            </div>
+            <button class="btn btn-outline-primary mt-2 set-active-player" data-player="{{ forloop.counter }}">Set as Active Player</button>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="btn-group" role="group">
+                <button class="btn btn-danger rounded-circle m-1" onclick="updateScore(1)" style="width: 60px; height: 60px;" aria-label="Red"></button>
+                <button class="btn rounded-circle m-1" onclick="updateScore(2)" style="width: 60px; height: 60px; background-color: #FFFF00; color: black;" aria-label="Yellow"></button>
+                <button class="btn btn-success rounded-circle m-1" onclick="updateScore(3)" style="width: 60px; height: 60px;" aria-label="Green"></button>
+                <button class="btn rounded-circle m-1" onclick="updateScore(4)" style="width: 60px; height: 60px; background-color: #8B4513; color: white;" aria-label="Brown"></button>
+                <button class="btn btn-primary rounded-circle m-1" onclick="updateScore(5)" style="width: 60px; height: 60px;" aria-label="Blue"></button>
+                <button class="btn rounded-circle m-1" onclick="updateScore(6)" style="width: 60px; height: 60px; background-color: #FFC0CB;" aria-label="Pink"></button>
+                <button class="btn btn-dark rounded-circle m-1" onclick="updateScore(7)" style="width: 60px; height: 60px;" aria-label="Black"></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-2">
+        <div class="col-md-12">
+            <div class="btn-group" role="group">
+                <button class="btn btn-danger" onclick="miss()">Miss</button>
+                <button class="btn btn-success" onclick="safetyShot()">Safety</button>
+                <button class="btn btn-warning" onclick="showFoulModal()">Foul</button>
+            </div>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <h5>On Table: <span id="points-on-table">147</span></h5>
+        </div>
+        <div class="col-md-6">
+            <h5>Max Possible Break: <span id="max-possible-break">147</span></h5>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <h4>Match Duration:</h4>
+            <div id="match-timer">00:00:00</div>
+            <div class="mt-2">
+                <div class="btn-group" role="group">
+                    <button class="btn btn-success" onclick="startTimer()">Start</button>
+                    <button class="btn btn-warning" onclick="pauseTimer()">Pause</button>
+                    <button class="btn btn-danger" onclick="stopTimer()">Stop</button>
+                    <button class="btn btn-secondary" onclick="resetGame()">Reset Game</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="foulModal" tabindex="-1" role="dialog" aria-labelledby="foulModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal_header">
+                <h5 class="modal-title" id="foulModalLabel">Select Foul Points</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <button class="btn btn-primary" onclick="foul(4)">4 points</button>
+                <button class="btn btn-primary" onclick="foul(5)">5 points</button>
+                <button class="btn btn-primary" onclick="foul(6)">6 points</button>
+                <button class="btn btn-primary" onclick="foul(7)">7 points</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/game_script.js' %}"></script>
+{% endblock %}

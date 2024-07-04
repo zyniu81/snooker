@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Referee List - Snooker App{% endblock %}
+{% block content %}
+<div class="container">
+  <h1>Referee List</h1>
+  <a class="btn btn-sm btn-success" href="{% url 'add_referee' %}">Add Referee</a>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for referee in referees %}
+      <tr>
+        <th scope="row">{{ forloop.counter }}</th>
+        <td><a href="{% url 'referee_detail' referee.pk %}">{{ referee }}</a> </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="5">No referees to display.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
