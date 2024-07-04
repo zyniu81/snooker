@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h2>Venue Details</h2>
+    <table class="table">
+        <tr>
+            <th scope="row">Name:</th>
+            <td>{{ venue.name }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Address:</th>
+            <td>{{ venue.address|default_if_none:"" }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Capacity:</th>
+            <td>{{ venue.capacity|default_if_none:"" }}</td>
+        </tr>
+    </table>
+    <a href="{% url 'edit_venue' venue.pk %}" class="btn btn-sm btn-primary">Edit</a>
+    <a href="{% url 'delete_venue' venue.pk %}" class="btn btn-sm btn-danger">Delete</a>
+    <a href="{% url 'venue_list' %}" class="btn btn-sm btn-secondary">Back to List</a>
+</div>
+{% endblock %}

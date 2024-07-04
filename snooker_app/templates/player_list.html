@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block title %}Player List - Snooker App{% endblock %}
+
+{% block content %}
+    <div class="row mt-3">
+        <h2>Player List</h2>
+    </div>
+    <a class="btn btn-sm btn-success" href="{% url 'add_player' %}">Add Player</a>
+
+    <div class="row mt-3">
+        <div class="col">
+            <table class="table">
+                <thead class="thead-dark">
+                    <tr>
+                        <th scope="col">#</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Highest Break</th>
+                        <th scope="col">Avg Shot Time</th>
+                        <th scope="col">Pot Success</th>
+                        <th scope="col">Avg Fouls Per Match</th>
+                        <th scope="col">Avg Foul Points Per Match</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for player in players %}
+                        <tr>
+                            <th scope="row">{{ forloop.counter }}</th>
+                            <td><a href="{% url 'player_detail' player.pk %}">{{ player }}</a></td>
+                            <td>{{ player.highest_break|default_if_none:"" }}</td>
+                            <td>{{ player.avg_shot_time|default_if_none:"" }}</td>
+                            <td>{{ player.pot_success_percentage|default_if_none:"" }}</td>
+                            <td>{{ player.avg_fouls_per_match|default_if_none:"" }}</td>
+                            <td>{{ player.avg_foul_points_per_match|default_if_none:"" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5">No players to display.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}
