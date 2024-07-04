@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h2>Match List</h2>
+    <a class="btn btn-sm btn-success" href="{% url 'add_match' %}">Add Match</a>
+    <table class="table">
+        <thead>
+        <tr>
+            <th>#</th>
+            <th>Date and Time</th>
+            <th>Venue</th>
+            <th>Number of Frames</th>
+            <th>Players</th>
+            <th>Referees</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for match in matches %}
+        <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><a href="{% url 'match_detail' match.pk %}">{{ match }}</a></td>
+            <td>{{ match.venue|default_if_none:"" }}</td>
+            <td>{{ match.number_of_frames }}</td>
+            <td>
+                {% for player in match.players.all %}
+                <div>{{ player }}</div>
+                {% if not forloop.last %}
+                {% endif %}
+                {% endfor %}
+            </td>
+            <td>
+                {% for referee in match.referees.all %}
+                <div>{{ referee|default_if_none:"" }}</div>
+                {% if not forloop.last %}
+                {% endif %}
+                {% endfor %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5">No matches to display.</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

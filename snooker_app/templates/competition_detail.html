@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container">
+    <h2>Competition Details</h2>
+    <p>Name: {{ competition.name }}</p>
+    <p>Start date: {{ competition.start_date }}</p>
+    <p>End Date: {{ competition.end_date }}</p>
+    <p>Venue: {{ competition.venue }}</p>
+    <p>Type: {{ competition.is_group_stage|yesno:"Yes,No" }}</p>
+    <p>Knockout Stage: {{ competition.is_knockout|yesno:"Yes,No" }}</p>
+    <a href="{% url 'edit_competition' competition.pk %}" class="btn btn-sm btn-primary">Edit</a>
+    <a href="{% url 'delete_competition' competition.pk %}" class="btn btn-sm btn-danger">Delete</a>
+    <a href="{% url 'competition_list' %}" class="btn btn-sm btn-secondary">Back to List</a>
+    <a href="{% url 'competition_stages' competition.pk %}" class="btn btn-sm btn-primary">Competition Stages</a>
+</div>
+{% endblock %}
