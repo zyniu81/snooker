@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container">
+    <h2>User Settings: {{ user.username }}</h2>
+    <h4>Change Password</h4>
+    <form method="post" action="{% url 'user_settings' %}">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="btn btn-primary">Change Password</button>
+    </form>
+
+    <form method="post">
+        {% csrf_token %}
+        <a href="{% url 'delete_user' %}" class="btn btn-danger">Delete User</a>
+    </form>
+</div>
+{% endblock %}
