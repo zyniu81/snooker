@@ -166,11 +166,16 @@ cython_debug/
 **/migrations/*.py
 !**/migrations/__init__.py
 
-#Django static files
-static/
+#Django static files except JavaScript files
+static/*
+!static/js/
+!static/js/**
 
 # Django secret key
 *.secret
 
 # Django media files
 media/
+
+# Ignore Django settings
+/snooker_app/settings.py

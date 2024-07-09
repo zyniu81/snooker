@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h2>Add Matches to {{ competition.name }}</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ forms.as_p }}
+        <h3>Assign matches to stages:</h3>
+        {% for match in form.matches.field.queryset %}
+            <div>
+                <label>
+                    <input type="checkbox" name="{{ form.matches.name }}" value="{{ match.pk }}">
+                    {{ match }}
+                </label>
+                <select name="stage_{{ match.id }}">
+                    <option value="">--Select Stage--</option>
+                    {% for stage in stages %}
+                        <option value="{{ stage.id }}">{{ stage.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Add Selected Matches</button>
+        <a href="{% url 'competition_detail' competition.pk %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

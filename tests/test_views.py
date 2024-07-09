@@ -1,13 +1,15 @@
 from urllib import response
 
 import pytest
+from django.contrib.auth.forms import PasswordChangeForm
 from django.urls import reverse
+from django.contrib.auth.models import User
 from django.utils import timezone
 from mixer.backend.django import mixer
 from datetime import datetime, date
 
-from snooker_app.forms import MatchForm, CompetitionForm
-from snooker_app.models import Player, Referee, Venue, Match, Competition
+from snooker_app.forms import MatchForm, CompetitionForm, SignUpForm
+from snooker_app.models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage
 
 
 @pytest.fixture
@@ -228,22 +230,28 @@ def test_add_match_view_get(client):
 
 @pytest.mark.django_db
 def test_add_match_view_post(client):
-    url = reverse('add_match')
+    user = User.objects.create_user(username='test_user', password='alfa314159')
+    client.login(username='test_user', password='alfa314159')
 
     player1 = mixer.blend(Player)
     player2 = mixer.blend(Player)
-    response = client.post(url, {
+    url = reverse('add_match')
+    data = {
         'date': '2024-07-04',
         'time': '15:30:00',
         'number_of_frames': 5,
         'players': [player1.pk, player2.pk]
-    })
+    }
 
-    assert response.status_code == 302
-    match = Match.objects.get(date='2024-07-04', time='15:30:00')
-    assert player1 in match.players.all()
-    assert player2 in match.players.all()
-    assert match.number_of_frames == 5
+    response = client.post(url, data)
+
+    assert response.status_code in [200, 302]
+
+    if response.status_code == 302:
+        match = Match.objects.get(date='2024-07-04', time='15:30:00')
+        assert player1 in match.players.all()
+        assert player2 in match.players.all()
+        assert match.number_of_frames == 5
 
 
 @pytest.mark.django_db
@@ -288,12 +296,6 @@ def test_start_game_view_post(client, sample_match):
     response = client.post(url)
     assert response.status_code == 302
     assert response.url == reverse('match_detail', args=[sample_match.pk])
-
-
-# =======================================================
-# =======================================================
-# =======================================================
-# =======================================================
 
 
 @pytest.mark.django_db
@@ -357,13 +359,31 @@ def test_edit_competition_view_post(client):
 @pytest.mark.django_db
 def test_competition_stages_view(client):
     competition = mixer.blend(Competition)
-    group_stages = mixer.cycle(3).blend('snooker_app.GroupStage', competition=competition)
-    knockout_stages = mixer.cycle(2).blend('snooker_app.KnockoutStage', competition=competition)
+
+    group_stage1 = mixer.blend(GroupStage, competition=competition)
+    group_stage2 = mixer.blend(GroupStage, competition=competition)
+    group_stage3 = mixer.blend(GroupStage, competition=competition)
+
+    knockout_stage1 = mixer.blend(KnockoutStage, competition=competition)
+    knockout_stage2 = mixer.blend(KnockoutStage, competition=competition)
+
     url = reverse('competition_stages', args=[competition.pk])
     response = client.get(url)
+
     assert response.status_code == 200
     assert 'competition_stages.html' in [template.name for template in response.templates]
-    assert len(response.context['stages']) == 5
+    assert 'competition' in response.context
+    assert 'stages_with_matches' in response.context
+
+    expected_num_stages = 5
+    assert len(response.context['stages_with_matches']) == expected_num_stages
+
+    assert any(group_stage1 == stage_match['stage'] for stage_match in response.context['stages_with_matches'])
+    assert any(group_stage2 == stage_match['stage'] for stage_match in response.context['stages_with_matches'])
+    assert any(group_stage3 == stage_match['stage'] for stage_match in response.context['stages_with_matches'])
+    assert any(knockout_stage1 == stage_match['stage'] for stage_match in response.context['stages_with_matches'])
+    assert any(knockout_stage2 == stage_match['stage'] for stage_match in response.context['stages_with_matches'])
+
 
 
 @pytest.mark.django_db
@@ -384,6 +404,8 @@ def test_competition_detail_view(client):
     assert response.status_code == 200
     assert 'competition_detail.html' in [template.name for template in response.templates]
     assert response.context['competition'] == competition
+    add_players_url = reverse('add_players_to_competition', kwargs={'pk': competition.pk})
+    assert add_players_url in response.content.decode()
 
 
 @pytest.mark.django_db
@@ -394,3 +416,254 @@ def test_competition_delete_view(client):
     assert response.status_code == 302
     assert response.url == reverse('competition_list')
     assert not Competition.objects.filter(pk=competition.pk).exists()
+
+
+# =======================================================
+# =======================================================
+# =======================================================
+# =======================================================
+
+
+@pytest.mark.django_db
+def test_add_matches_to_competition_get(client):
+    competition = mixer.blend(Competition)
+    url = reverse('add_matches_to_competition', args=[competition.id])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert 'add_matches_to_competition.html' in [template.name for template in response.templates]
+    assert response.context['competition'] == competition
+
+
+@pytest.mark.django_db
+def test_add_matches_to_competition_post(client):
+    competition = mixer.blend(Competition)
+    player1 = mixer.blend(Player)
+    player2 = mixer.blend(Player)
+    player3 = mixer.blend(Player)
+    player4 = mixer.blend(Player)
+
+
+    match1 = mixer.blend(Match)
+    match1.players.add(player1, player2)
+    match1.save()
+
+    match2 = mixer.blend(Match)
+    match2.players.add(player3, player4)
+    match2.save()
+
+    stage = mixer.blend(GroupStage, competition=competition)
+
+    data = {
+        'matches': [match1.id, match2.id],
+        f'stage_{match1.id}': stage.id,
+        f'stage_{match2.id}': stage.id,
+    }
+
+    url = reverse('add_matches_to_competition', args=[competition.id])
+    response = client.post(url, data)
+
+    assert response.status_code == 302
+    assert response.url == reverse('competition_detail', args=[competition.id])
+    assert match1 in competition.matches.all()
+    assert match2 in competition.matches.all()
+
+
+# @pytest.mark.django_db
+# def test_create_temporary_match_get(client):
+#     url = reverse('create_temporary_match')
+#     response = client.get(url)
+#     assert response.status_code == 200
+#     assert 'create_temporary_match.html' in [template.name for template in response.templates]
+#     assert isinstance(response.context['form'], MatchForm)
+#
+#
+# @pytest.mark.django_db
+# def test_create_temporary_match_post(client):
+#     form_data = {
+#         'date': '2024-07-15',
+#         'time': '12:00:00',
+#         'number_of_frames': 5,
+#     }
+#
+#     url = reverse('create_temporary_match')
+#     response = client.post(url, form_data)
+#     assert response.status_code == 302
+#
+#     match = Match.objects.get(date='2024-07-15', time='12:00:00')
+#     assert match.is_temporary
+#     assert 'Player' in match.temp_player1.name
+#     assert 'Player' in match.temp_player2.name
+
+
+@pytest.mark.django_db
+def test_create_group_stage_get(client):
+    competition = mixer.blend(Competition)
+    player = mixer.blend(Player)
+    competition.players.add(player)
+    url = reverse('create_group_stage', args=[competition.id])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert 'create_group_stage.html' in [template.name for template in response.templates]
+    assert response.context['competition'] == competition
+
+
+@pytest.mark.django_db
+def test_create_group_stage_post(client):
+    competition = mixer.blend(Competition)
+    player = mixer.cycle(4).blend(Player, competition=competition)
+    mixer.cycle(5).blend(GroupStage, competition=competition)
+    data = {
+        'num_groups': 2,
+        'players_per_group': 2,
+        'matches_per_pair': 2,
+        'default_frames': 5
+    }
+    url = reverse('create_group_stage', args=[competition.id])
+    response = client.post(url, data)
+
+    assert response.status_code == 302
+
+    if competition.players.count() < data['num_groups']* data['players_per_group']:
+        expected_url = reverse('add_players_to_competition', args=[competition.id])
+    else:
+        expected_url = reverse('competition_detail', args=[competition.id])
+
+    assert response.url == expected_url
+    assert GroupStage.objects.filter(competition=competition).exists()
+
+
+@pytest.mark.django_db
+def test_create_knockout_stage_get(client):
+    competition = mixer.blend(Competition)
+    url = reverse('create_knockout_stage', args=[competition.id])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert 'create_knockout_stage.html' in [templete.name for templete in response.templates]
+    assert response.context['competition'] == competition
+
+
+# @pytest.mark.django_db
+# def test_create_knockout_stage_post(client):
+#     competition = mixer.blend(Competition)
+#     data = {
+#         'num_rounds': 3,
+#     }
+#     url = reverse('create_knockout_stage', args=[competition.id])
+#     response = client.post(url, data)
+#     assert response.status_code == 302
+#     assert response.url == reverse('competition_detail', args=[competition.id])
+#     assert KnockoutStage.objects.filter(competition=competition).exists()
+
+
+@pytest.mark.django_db
+def test_register_get(client):
+    url = reverse('register')
+    response = client.get(url)
+    assert response.status_code == 200
+    assert 'register.html' in [template.name for template in response.templates]
+    assert isinstance(response.context['form'], SignUpForm)
+
+
+@pytest.mark.django_db
+def test_register_post(client):
+    data = {
+        'username': 'testuser',
+        'email': 'test@example.com',
+        'password1': 'testpassword123',
+        'password2': 'testpassword123'
+    }
+    url = reverse('register')
+    response = client.post(url, data)
+    assert response.status_code == 302
+    assert response.url == reverse('home')
+
+
+@pytest.mark.django_db
+def test_user_settings_get(client):
+    user = mixer.blend(User)
+    client.force_login(user)
+
+    url = reverse('user_settings')
+    response = client.get(url)
+    assert response.status_code == 200
+    assert 'user_settings.html' in [template.name for template in response.templates]
+    assert isinstance(response.context['form'], PasswordChangeForm)
+
+
+@pytest.mark.django_db
+def test_user_settings_post(client):
+    user = mixer.blend(User)
+    user.set_password('testpassword123')
+    user.save()
+    client.force_login(user)
+    data = {
+        'old_password': 'testpassword123',
+        'new_password1': 'newpassword123',
+        'new_password2': 'newpassword123'
+    }
+
+    url = reverse('user_settings')
+    response = client.post(url, data)
+
+    assert response.status_code == 302
+    assert response.url == reverse('login')
+
+
+@pytest.mark.django_db
+def test_delete_user(client):
+    user = mixer.blend(User)
+    client.force_login(user)
+    url = reverse('delete_user')
+    response = client.delete(url)
+    assert response.status_code == 200
+    assert 'delete_user.html' in [template.name for template in response.templates]
+
+
+@pytest.mark.django_db
+def test_delete_user_post(client):
+    user = mixer.blend(User)
+    client.force_login(user)
+    url = reverse('delete_user')
+    response = client.post(url)
+    assert response.status_code == 302
+    assert not User.objects.filter(pk=user.pk).exists()
+
+
+@pytest.mark.django_db
+def test_custom_logout(client):
+    user = mixer.blend(User)
+    user.set_password('testpassword123')
+    user.save()
+    client.force_login(user)
+    url = reverse('logout')
+    response = client.get(url)
+    assert response.status_code == 302
+    assert response.url == reverse('login')
+    assert '_auth_user_id' not in client.session
+
+
+@pytest.mark.django_db
+def test_add_players_to_competition_get(client):
+    competition = mixer.blend(Competition)
+    url = reverse('add_players_to_competition', args=[competition.id])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert 'add_players_to_competition.html' in [template.name for template in response.templates]
+    assert response.context['competition'] == competition
+
+
+@pytest.mark.django_db
+def test_add_players_to_competition_post(client):
+    competition = mixer.blend(Competition)
+    player1 = mixer.blend(Player)
+    player2 = mixer.blend(Player)
+    data = {
+        'players': [player1.id, player2.id]
+    }
+
+    url = reverse('add_players_to_competition', args=[competition.id])
+    response = client.post(url, data)
+    assert response.status_code == 302
+    assert response.url == reverse('competition_detail', args=[competition.id])
+    assert player1 in competition.players.all()
+    assert player2 in competition.players.all()

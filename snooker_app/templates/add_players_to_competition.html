@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="tow mt-3">
+    <h2>Add Players to Competition</h2>
+    <form method="post">
+        {% csrf_token %}
+        {% for player in available_players %}
+            <tr>
+                <td><input type="checkbox" name="players" value="{{ player.pk }}"></td>
+                <td>{{ player }}</td>
+            </tr><br>
+        {% empty %}
+        <tr>
+            <td colspan="2">No players to display.</td>
+        </tr>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Add Selected Players</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block content %}
+{% load static %}
+<div class="container">
+    <h2>Achievements</h2>
+    <div class="row mt-5">
+        <div class="col-md-12">
+            <table id="achievements-table" class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th><a href="#" class="column-chart" data-column="tournaments_won">Tournaments Won</a></th>
+                        <th><a href="#" class="column-chart" data-column="matches_won">Matches Won</a></th>
+                        <th><a href="#" class="column-chart" data-column="frames_won">Frames Won</a></th>
+                        <th><a href="#" class="column-chart" data-column="frames_lost">Frames Lost</a></th>
+                        <th><a href="#" class="column-chart" data-column="fastest_frame_won">Fastest Frame Won</a></th>
+                        <th><a href="#" class="column-chart" data-column="longest_frame_won">Longest Frame Won</a></th>
+                        <th><a href="#" class="column-chart" data-column="consecutive_frames_won">Consecutive Frames Won</a></th>
+                        <th><a href="#" class="column-chart" data-column="consecutive_matches_won">Consecutive Matches Won</a></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for achievement in achievements %}
+                    <tr>
+                        <td>{{ achievement.player }}</td>
+                        <td>{{ achievement.tournaments_won }}</td>
+                        <td>{{ achievement.matches_won }}</td>
+                        <td>{{ achievement.frames_won }}</td>
+                        <td>{{ achievement.frames_lost }}</td>
+                        <td>{{ achievement.fastest_frame_won }}</td>
+                        <td>{{ achievement.longest_frame_won }}</td>
+                        <td>{{ achievement.consecutive_frames_won }}</td>
+                        <td>{{ achievement.consecutive_matches_won }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <canvas id="myChart" width="800" height="400"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'js/chart.js' %}"></script>
+{% endblock %}

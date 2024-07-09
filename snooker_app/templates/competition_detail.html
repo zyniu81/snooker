@@ -1,13 +1,84 @@
 {% extends 'base.html' %}
+
 {% block content %}
 <div class="container">
-    <h2>Competition Details</h2>
-    <p>Name: {{ competition.name }}</p>
+    <p>{{ competition.name }}</p>
     <p>Start date: {{ competition.start_date }}</p>
     <p>End Date: {{ competition.end_date }}</p>
     <p>Venue: {{ competition.venue }}</p>
-    <p>Type: {{ competition.is_group_stage|yesno:"Yes,No" }}</p>
-    <p>Knockout Stage: {{ competition.is_knockout|yesno:"Yes,No" }}</p>
+    <p>Type: {{ competition.get_competition_type_display }}</p>
+    {% if group_data %}
+        <h3>Group Stages</h3>
+        {% for group in group_data %}
+            <h4>{{ group.stage.name }}</h4>
+
+            <h5>Standings</h5>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Played</th>
+                        <th>Won</th>
+                        <th>Frames Won</th>
+                        <th>Frames Lost</th>
+                        <th>Points</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for stat in group.player_stats %}
+                    <tr>
+                        <td>{{ stat.player }}</td>
+                        <td> {{stat.played }}</td>
+                        <td>{{ stat.won }}</td>
+                        <td>{{ stat.frames_won }}</td>
+                        <td>{{ stat.frames_lost }}</td>
+                        <td>{{ stat.points }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <h5>Matches</h5>
+            <ul>
+                {% for match in group.matches %}
+                    <li>
+                        {{ match }} -
+                        {% for player in match.players.all %}
+                            {{ player }}
+                            {% if not forloop.last %} vs {% endif %}
+                        {% endfor %}
+                        {% if match.matchresult %}
+                            (Result: {{ match.matchresult.match_score }})
+                        {% else %}
+                            (Not played yet)
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endfor %}
+    {% else %}
+        <p>No group stages for this competition.</p>
+    {% endif %}
+
+        <h3>Knockout Stage</h3>
+        {% for stage in knockout_data %}
+            <h4>{{ stage.stage.name }}</h4>
+            {% for match in stage.matches %}
+                <p>
+                    {{ match.group_name }}:
+                    {% if match.players.count == 2 %}
+                        {{ match.players.all.0 }} vs {{ match.players.all.1 }}
+                    {% else %}
+                        TBD vs TBD
+                    {% endif %}
+                </p>
+            {% endfor %}
+        {% endfor %}
+
+    <a href="{{ add_players_url }}" class="btn btn-sm btn-secondary">Add Player to Competition</a>
+    <a href="{% url 'create_knockout_stage' competition.id %}" class="btn btn-sm btn-success">Create Knockout Stag</a>
+    <a href="{% url 'create_group_stage' competition.id %}" class="btn btn-sm btn-primary">Create Group Stage</a>
+    <a href="{% url 'add_matches_to_competition' competition.pk %}" class="btn btn-sm btn-success">Add Matches</a>
     <a href="{% url 'edit_competition' competition.pk %}" class="btn btn-sm btn-primary">Edit</a>
     <a href="{% url 'delete_competition' competition.pk %}" class="btn btn-sm btn-danger">Delete</a>
     <a href="{% url 'competition_list' %}" class="btn btn-sm btn-secondary">Back to List</a>

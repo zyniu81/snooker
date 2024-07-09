@@ -15,13 +15,14 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.contrib.auth import views as auth_views
 from django.urls import path
 from snooker_app import views
 from snooker_app.views import PlayerDeleteView, VenueDeleteView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', views.player_list, name='player_list'),
+    path('players/', views.player_list, name='player_list'),
     path('players/add/', views.add_player, name='add_player'),
     path('players/<int:pk>/', views.player_detail, name='player_detail'),
     path('players/<int:pk>/edit/', views.player_edit, name='player_edit'),
@@ -48,4 +49,17 @@ urlpatterns = [
     path('competitions/<int:pk>/edit/', views.edit_competition, name='edit_competition'),
     path('competitions/<int:pk>/delete/', views.CompetitionDeleteView.as_view(), name='delete_competition'),
     path('competitions/<int:pk>/stages/', views.competition_stages, name='competition_stages'),
+    path('competitions/<int:competition_id>/add-matches/', views.add_matches_to_competition,
+         name='add_matches_to_competition'),
+    path('login/', auth_views.LoginView.as_view(template_name='login.html'), name='login'),
+    path('logout/', views.custom_logout, name='logout'),
+    path('register/', views.register, name='register'),
+    path('user/settings/', views.user_settings, name='user_settings'),
+    path('user/delete/', views.delete_user, name='delete_user'),
+    path('', views.home, name='home'),
+    path('competitions/<int:competition_id>/create-group-stage/', views.create_group_stage, name='create_group_stage'),
+    path('competitions/<int:competition_id>/create-knockout-stage/', views.create_knockout_stage,
+         name='create_knockout_stage'),
+    path('competitions/<int:pk>/add-players/', views.add_players_to_competition, name='add_players_to_competition'),
+    path('achievements/',views.achievement_list, name='achievement_list'),
 ]

@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block content%}
+<div class="container">
+    <h2>Create Temporary Match</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="btn btn-primary">Create Temporary Match</button>
+    </form>
+</div>
+{% endblock %}
