@@ -35,14 +35,13 @@
                 <button class="btn btn-danger" onclick="miss()">Miss</button>
                 <button class="btn btn-success" onclick="safetyShot()">Safety</button>
                 <button class="btn btn-warning" onclick="showFoulModal()">Foul</button>
+                <button class="btn btn-secondary" id="reverseButton">Reverse</button>
             </div>
         </div>
     </div>
     <div class="row mt-4">
         <div class="col-md-6">
             <h5>On Table: <span id="points-on-table">147</span></h5>
-        </div>
-        <div class="col-md-6">
             <h5>Max Possible Break: <span id="max-possible-break">147</span></h5>
         </div>
     </div>
@@ -66,7 +65,7 @@
 <div class="modal fade" id="foulModal" tabindex="-1" role="dialog" aria-labelledby="foulModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
-            <div class="modal_header">
+            <div class="modal-header">
                 <h5 class="modal-title" id="foulModalLabel">Select Foul Points</h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>

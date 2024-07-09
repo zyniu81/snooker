@@ -3,13 +3,20 @@
 {% block content %}
 <div class="container">
     <h2>Stages for {{ competition.name }}</h2>
-    <ul>
-        {% for stage in stages %}
-        <li>{{ stage.name }} (Start: {{ stage.start_date }}, End: {{ stage.end_date }})</li>
-        {% empty %}
-        <li>No stages available for this competition.</li>
-        {% endfor %}
-    </ul>
+    {% for stage_data in stages_with_matches %}
+        <h3>{{ stage_data.stage.name }}</h3>
+        {% if stage_data.matches %}
+            <ul>
+                {% for match in stage_data.matches %}
+                    <li>{{ match }} - <a href="{% url 'match_detail' match.id %}">Details</a></li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No matches in this stage yet.</p>
+        {% endif %}
+    {% empty %}
+        <p>No stages available for this competition.</p>
+    {% endfor %}
     <a href="{% url 'competition_detail' competition.pk %}" class="btn btn-secondary">Back to Competition Details</a>
 </div>
 {% endblock %}

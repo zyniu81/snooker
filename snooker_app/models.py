@@ -1,7 +1,12 @@
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.contrib.postgres.fields import ArrayField
+
+from datetime import timedelta
+
+import random
 
 # Create your models here.
 
@@ -51,6 +56,14 @@ class Player(models.Model):
         return "N/A"
 
 
+class TemporaryPlayer(models.Model):
+    name = models.CharField(max_length=30)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Match(models.Model):
     date = models.DateField()
     time = models.TimeField()
@@ -64,6 +77,12 @@ class Match(models.Model):
     referee_ids = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    group_stage = models.ForeignKey('GroupStage', on_delete=models.SET_NULL, null=True, blank=True, related_name='matches')
+    knockout_stage = models.ForeignKey('KnockoutStage', on_delete=models.SET_NULL, null=True, blank=True, related_name='matches')
+    temp_player1 = models.ForeignKey('TemporaryPlayer', null=True, blank=True, related_name='temp_player1_matches', on_delete=models.CASCADE)
+    temp_player2 = models.ForeignKey('TemporaryPlayer', null=True, blank=True, related_name='temp_player2_matches', on_delete=models.CASCADE)
+    is_temporary = models.BooleanField(default=False)
+    group_name = models.CharField(max_length=1, blank=True, null=True)
 
     class Meta:
         indexes = [
@@ -80,17 +99,34 @@ class Match(models.Model):
         if self.number_of_frames <= 0:
             raise ValidationError('The number of frames must be greater than zero.')
 
+    def get_stage(self):
+        return self.group_stage or self.knockout_stage
+
+    def set_stage(self, stage):
+        if isinstance(stage, GroupStage):
+            self.group_stage = stage
+            self.knockout_stage = None
+        elif isinstance(stage, KnockoutStage):
+            self.knockout_stage = stage
+            self.group_stage = None
+
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         super().save(*args, **kwargs)
 
         if not is_new:
-            self.player_names = ', '.join([player.__str__() for player in self.players.all()])
+            self.player_names = ', '.join([str(player) for player in self.players.all()])
             self.player_ids = ', '.join([str(player.id) for player in self.players.all()])
-            self.referee_names = ', '.join([referee.__str__() for referee in self.referees.all()])
+            self.referee_names = ', '.join([str(referee) for referee in self.referees.all()])
             self.referee_ids = ', '.join([str(referee.id) for referee in self.referees.all()])
-            self.full_clean()
             super().save(update_fields=['player_names', 'player_ids', 'referee_names', 'referee_ids'])
+
+    def is_expired(self):
+        return self.is_temporary and self.created_at < timezone.now() - timedelta(days=30)
+
+    def delete_if_expired(self):
+        if self.is_expired():
+            self.delete()
 
 
 class MatchPlayer(models.Model):
@@ -133,6 +169,44 @@ class MatchPlayer(models.Model):
         super().save(*args, **kwargs)
 
 
+class Frame(models.Model):
+    match_player = models.ForeignKey('MatchPlayer', on_delete=models.CASCADE)
+    frame_number = models.PositiveIntegerField()
+    points_scored_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    points_scored_player2 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    max_break_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    max_break_player2 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    player1_fouls = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    player2_fouls = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    foul_points_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    foul_points_player2 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    winner = models.ForeignKey('Player', on_delete=models.SET_NULL, null=True, blank=True, related_name='frames_won')
+    time_duration = models.DurationField(blank=True, null=True)
+    pot_success_percentage_player1 = models.FloatField(default=0.0)
+    pot_success_percentage_player2 = models.FloatField(default=0.0)
+    safety_shot_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    safety_shot_player2 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    misses_player1 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    misses_player2 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    total_shots_player1 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    total_shots_player2 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    break_points_player1 = ArrayField(
+        models.IntegerField(validators=[MinValueValidator(10), MaxValueValidator(155)]),
+        default=list,
+        blank=True
+    )
+    break_points_player2 = ArrayField(
+        models.IntegerField(validators=[MinValueValidator(10), MaxValueValidator(155)]),
+        default=list,
+        blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('match_player', 'frame_number')
+
+
 class Referee(models.Model):
     first_name = models.CharField(max_length=30, blank=True)
     last_name = models.CharField(max_length=30, blank=True)
@@ -163,6 +237,9 @@ class Venue(models.Model):
 
 
 class Competition(models.Model):
+    players = models.ManyToManyField('Player', related_name='competitions', blank=True)
+    matches = models.ManyToManyField('Match', related_name='competitions', blank=True)
+    group_stages = models.ManyToManyField('GroupStage', related_name='competitions', blank=True)
     name = models.CharField(max_length=100)
     start_date = models.DateField()
     end_date = models.DateField()
@@ -197,24 +274,82 @@ class Stage(models.Model):
 
 class GroupStage(Stage):
     num_groups = models.IntegerField(validators=[MinValueValidator(1)])
-    teams_per_group = models.IntegerField(validators=[MinValueValidator(2)])
+    players_per_group = models.IntegerField(validators=[MinValueValidator(2)])
+    matches_per_pair = models.IntegerField(default=1, validators=[MinValueValidator(1)])
 
-    class Meta(Stage.Meta):
-        verbose_name = 'Group Stage'
-        verbose_name_plural = 'Group Stages'
+    def create_groups_and_matches(self, default_frames):
+        players = list(self.competition.players.all())
+        random.shuffle(players)
+
+        for i in range(self.num_groups):
+            group_name = chr(65 + i)
+            group_players = players[i*self.players_per_group:(i+1)*self.players_per_group]
+
+            for j, player1 in enumerate(group_players):
+                for player2 in group_players[j+1:]:
+                    for _ in range(self.matches_per_pair):
+                        match = Match.objects.create(
+                            date=self.competition.start_date,
+                            time=timezone.now().time(),
+                            venue=self.competition.venue,
+                            number_of_frames=default_frames,
+                            group_stage=self,
+                            player_names=f"{player1}, {player2}",
+                            player_ids=f"{player1.id},{player2.id}",
+                            referee_names="",
+                            referee_ids="",
+                            group_name=group_name
+                        )
+                        match.players.add(player1, player2)
+                        match.save()
 
 
 class KnockoutStage(Stage):
     num_rounds = models.IntegerField(validators=[MinValueValidator(1)])
-    num_participants = models.IntegerField(validators=[MinValueValidator(1)])
+    frames_per_match = models.IntegerField(validators=[MinValueValidator(1)])
+
+    def create_knockout_matches(self):
+        players = list(self.competition.players.all())
+        random.shuffle(players)
+        num_matches = 2 ** (self.num_rounds - 1)
+
+        for round_num in range(self.num_rounds):
+            round_name = f'Round {round_num + 1}'
+            matches_in_round = num_matches // (2 ** round_num)
+
+            for i in range(matches_in_round):
+                if round_num == 0:
+                    player1 = players[2*i] if 2*i < len(players) else None
+                    player2 = players[2*i+1] if 2*i+1 < len(players) else None
+                else:
+                    player1 = player2 = None
+
+                match = Match.objects.create(
+                    date=self.competition.start_date + timedelta(days=round_num),
+                    time=timezone.now().time(),
+                    venue=self.competition.venue,
+                    number_of_frames=self.frames_per_match,
+                    knockout_stage=self,
+                    player_names="" if not player1 and not player2 else f'{player1},{player2}',
+                    player_ids="" if not player1 and not player2 else f"{player1.id},{player2.id}" if player1 and player2 else "",
+                    referee_names="",
+                    referee_ids="",
+                    group_name=round_name
+                )
+                if player1:
+                    match.players.add(player1)
+                if player2:
+                    match.players.add(player2)
+                match.save()
 
     class Meta(Stage.Meta):
         verbose_name = 'Knockout Stage'
         verbose_name_plural = 'Knockout Stages'
 
     def clean(self):
-        if self.num_participants != 2 ** self.num_rounds:
-            raise ValidationError('Number of participants must be a power of 2 and match the number of rounds.')
+        super().clean()
+        if self.num_rounds < 1:
+            raise ValidationError('Number of rounds must be at least 1.')
 
 
 class MatchResult(models.Model):
@@ -248,7 +383,7 @@ class Achievement(models.Model):
     frames_won = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     frames_lost = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     tournaments_won = models.IntegerField(default=0, validators=[MinValueValidator(0)])
-    fastest_break = models.DurationField(blank=True, null=True)
+    fastest_frame_won = models.DurationField(blank=True, null=True)
     longest_frame_won = models.DurationField(blank=True, null=True)
     consecutive_frames_won = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     consecutive_matches_won = models.IntegerField(default=0, validators=[MinValueValidator(0)])
