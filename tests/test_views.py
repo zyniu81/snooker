@@ -7,9 +7,10 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from mixer.backend.django import mixer
 from datetime import datetime, date
+from django.test import Client
 
 from snooker_app.forms import MatchForm, CompetitionForm, SignUpForm
-from snooker_app.models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage
+from snooker_app.models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Achievement
 
 
 @pytest.fixture
@@ -538,21 +539,22 @@ def test_create_knockout_stage_get(client):
     url = reverse('create_knockout_stage', args=[competition.id])
     response = client.get(url)
     assert response.status_code == 200
-    assert 'create_knockout_stage.html' in [templete.name for templete in response.templates]
+    assert 'create_knockout_stage.html' in [template.name for template in response.templates]
     assert response.context['competition'] == competition
 
 
-# @pytest.mark.django_db
-# def test_create_knockout_stage_post(client):
-#     competition = mixer.blend(Competition)
-#     data = {
-#         'num_rounds': 3,
-#     }
-#     url = reverse('create_knockout_stage', args=[competition.id])
-#     response = client.post(url, data)
-#     assert response.status_code == 302
-#     assert response.url == reverse('competition_detail', args=[competition.id])
-#     assert KnockoutStage.objects.filter(competition=competition).exists()
+@pytest.mark.django_db
+def test_create_knockout_stage_post(client):
+    competition = mixer.blend(Competition)
+    data = {
+        'num_rounds': 3,
+        'frames_per_match': 5,
+    }
+    url = reverse('create_knockout_stage', args=[competition.id])
+    response = client.post(url, data)
+    assert response.status_code == 302
+    assert response.url == reverse('competition_detail', args=[competition.id])
+    assert KnockoutStage.objects.filter(competition=competition).exists()
 
 
 @pytest.mark.django_db
@@ -667,3 +669,38 @@ def test_add_players_to_competition_post(client):
     assert response.url == reverse('competition_detail', args=[competition.id])
     assert player1 in competition.players.all()
     assert player2 in competition.players.all()
+
+
+@pytest.fixture
+def sample_achievements():
+    return mixer.cycle(5).blend(Achievement)
+
+
+@pytest.mark.django_db
+def test_achievement_list_view_table_content(sample_player):
+    achievement1 = Achievement.objects.create(
+        player=sample_player,
+        tournaments_won=2,
+        matches_won=10,
+        frames_won=50,
+        frames_lost=20,
+        fastest_frame_won=None,
+        longest_frame_won=None,
+        consecutive_frames_won=3,
+        consecutive_matches_won=4
+    )
+
+    client = Client()
+    url = reverse('achievement_list')
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert f'<td>{sample_player}</td>' in str(response.content)
+    assert f'<td>{achievement1.tournaments_won}</td>' in str(response.content)
+    assert f'<td>{achievement1.matches_won}</td>' in str(response.content)
+    assert f'<td>{achievement1.frames_won}</td>' in str(response.content)
+    assert f'<td>{achievement1.frames_lost}</td>' in str(response.content)
+    assert f'<td>{achievement1.fastest_frame_won}</td>' in str(response.content)
+    assert f'<td>{achievement1.longest_frame_won}</td>' in str(response.content)
+    assert f'<td>{achievement1.consecutive_frames_won}</td>' in str(response.content)
+    assert f'<td>{achievement1.consecutive_matches_won}</td>' in str(response.content)

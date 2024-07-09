@@ -178,4 +178,4 @@ static/*
 media/
 
 # Ignore Django settings
-/snooker_app/settings.py
+/snooker_project/settings.py

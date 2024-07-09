@@ -76,7 +76,7 @@
         {% endfor %}
 
     <a href="{{ add_players_url }}" class="btn btn-sm btn-secondary">Add Player to Competition</a>
-    <a href="{% url 'create_knockout_stage' competition.id %}" class="btn btn-sm btn-success">Create Knockout Stag</a>
+    <a href="{% url 'create_knockout_stage' competition.id %}" class="btn btn-sm btn-success">Create Knockout Stage</a>
     <a href="{% url 'create_group_stage' competition.id %}" class="btn btn-sm btn-primary">Create Group Stage</a>
     <a href="{% url 'add_matches_to_competition' competition.pk %}" class="btn btn-sm btn-success">Add Matches</a>
     <a href="{% url 'edit_competition' competition.pk %}" class="btn btn-sm btn-primary">Edit</a>

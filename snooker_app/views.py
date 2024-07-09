@@ -422,7 +422,7 @@ def create_knockout_stage(request, competition_id):
     else:
         form = KnockoutStageForm()
 
-    return render(request, 'create_knockout_stage.html', {'fomr': form, 'competition': competition})
+    return render(request, 'create_knockout_stage.html', {'form': form, 'competition': competition})
 
 
 def register(request):

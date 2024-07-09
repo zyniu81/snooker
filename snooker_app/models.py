@@ -83,6 +83,7 @@ class Match(models.Model):
     temp_player2 = models.ForeignKey('TemporaryPlayer', null=True, blank=True, related_name='temp_player2_matches', on_delete=models.CASCADE)
     is_temporary = models.BooleanField(default=False)
     group_name = models.CharField(max_length=1, blank=True, null=True)
+    knockout_name = models.CharField(max_length=100, blank=True, null=True)
 
     class Meta:
         indexes = [
@@ -334,7 +335,7 @@ class KnockoutStage(Stage):
                     player_ids="" if not player1 and not player2 else f"{player1.id},{player2.id}" if player1 and player2 else "",
                     referee_names="",
                     referee_ids="",
-                    group_name=round_name
+                    knockout_name=round_name
                 )
                 if player1:
                     match.players.add(player1)
@@ -342,14 +343,16 @@ class KnockoutStage(Stage):
                     match.players.add(player2)
                 match.save()
 
+    def clean(self):
+        super().clean()
+        if self.num_rounds is not None and self.num_rounds < 1:
+            raise ValidationError('Number of rounds must be at least 1.')
+        elif self.num_rounds is None:
+            raise ValidationError('Number of rounds cannot be None.')
+
     class Meta(Stage.Meta):
         verbose_name = 'Knockout Stage'
         verbose_name_plural = 'Knockout Stages'
-
-    def clean(self):
-        super().clean()
-        if self.num_rounds < 1:
-            raise ValidationError('Number of rounds must be at least 1.')
 
 
 class MatchResult(models.Model):
