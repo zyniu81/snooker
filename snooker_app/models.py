@@ -21,6 +21,7 @@ class Player(models.Model):
     avg_shots_per_match = models.FloatField(blank=True, null=True)
     avg_fouls_per_match = models.FloatField(blank=True, null=True)
     avg_foul_points_per_match = models.FloatField(blank=True, null=True)
+    is_temporary = models.BooleanField(default=False)
 
     def __str__(self):
         if self.nickname:
@@ -56,14 +57,6 @@ class Player(models.Model):
         return "N/A"
 
 
-class TemporaryPlayer(models.Model):
-    name = models.CharField(max_length=30)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.name
-
-
 class Match(models.Model):
     date = models.DateField()
     time = models.TimeField()
@@ -79,8 +72,8 @@ class Match(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     group_stage = models.ForeignKey('GroupStage', on_delete=models.SET_NULL, null=True, blank=True, related_name='matches')
     knockout_stage = models.ForeignKey('KnockoutStage', on_delete=models.SET_NULL, null=True, blank=True, related_name='matches')
-    temp_player1 = models.ForeignKey('TemporaryPlayer', null=True, blank=True, related_name='temp_player1_matches', on_delete=models.CASCADE)
-    temp_player2 = models.ForeignKey('TemporaryPlayer', null=True, blank=True, related_name='temp_player2_matches', on_delete=models.CASCADE)
+    temp_player1 = models.ForeignKey('Player', null=True, blank=True, related_name='temp_player1_matches', on_delete=models.CASCADE)
+    temp_player2 = models.ForeignKey('Player', null=True, blank=True, related_name='temp_player2_matches', on_delete=models.CASCADE)
     is_temporary = models.BooleanField(default=False)
     group_name = models.CharField(max_length=1, blank=True, null=True)
     knockout_name = models.CharField(max_length=100, blank=True, null=True)
@@ -185,12 +178,26 @@ class Frame(models.Model):
     time_duration = models.DurationField(blank=True, null=True)
     pot_success_percentage_player1 = models.FloatField(default=0.0)
     pot_success_percentage_player2 = models.FloatField(default=0.0)
+    total_pot_success_percentage_player1 = models.FloatField(default=0.0)
+    total_pot_success_percentage_player2 = models.FloatField(default=0.0)
     safety_shot_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
     safety_shot_player2 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
     misses_player1 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     misses_player2 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     total_shots_player1 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     total_shots_player2 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    time_shots_player1 = models.DurationField(blank=True, null=True)
+    time_shots_player2 = models.DurationField(blank=True, null=True)
+    successful_safety_shots_player1 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    successful_safety_shots_player2 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+
+    active_player = models.ForeignKey(
+        'Player',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='active_frames'
+    )
     break_points_player1 = ArrayField(
         models.IntegerField(validators=[MinValueValidator(10), MaxValueValidator(155)]),
         default=list,
@@ -203,6 +210,26 @@ class Frame(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def average_shot_time_player1(self):
+        if self.total_shots_player1 > 0 and self.time_shots_player1:
+            return self.time_shots_player1 / self.total_shots_player1
+        return None
+
+    def average_shot_time_player2(self):
+        if self.total_shots_player2 > 0 and self.time_shots_player2:
+            return self.time_shots_player2 / self.total_shots_player2
+        return None
+
+    def safety_shot_success_rate_player1(self):
+        if self.safety_shot_player1 > 0:
+            return self.successful_safety_shots_player1 / self.safety_shot_player1
+        return 0.0
+
+    def safety_shot_success_rate_player2(self):
+        if self.safety_shot_player2 > 0:
+            return self.successful_safety_shots_player2 / self.safety_shot_player2
+        return 0.0
 
     class Meta:
         unique_together = ('match_player', 'frame_number')
@@ -390,6 +417,9 @@ class Achievement(models.Model):
     longest_frame_won = models.DurationField(blank=True, null=True)
     consecutive_frames_won = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     consecutive_matches_won = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    highest_break = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+    average_pot_success_percentage = models.FloatField(default=0.0)
+    average_total_pot_success_percentage = models.FloatField(default=0.0)
 
     def __str__(self):
         return f'Achievements for {self.player}'

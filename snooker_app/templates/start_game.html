@@ -2,21 +2,43 @@
 
 {% block content %}
 {% load static %}
+
 <div class="container">
+    <div class="container" data-frame-id="{{ frame.id }}" data-match-id="{{ match.id }}">
     <div class="row">
-        {% for player in players %}
-        <div class="col-md-6">
-            <h4>{{ player }}</h4>
+        <div class="col-md-4">
+            <div class="d-flex flex-column align-items-start">
+            <h4>{{ players.0.player }}</h4>
             <div class="mt-2">
-                <input type="text" class="form-control player-score" value="0" readonly>
+                <input type="text" class="form-control mx-1 text-center player-score" data-player="1" value="0" readonly style="width: 80px;">
             </div>
-            <button class="btn btn-outline-primary mt-2 set-active-player" data-player="{{ forloop.counter }}">Set as Active Player</button>
+            <button class="btn btn-outline-primary mt-2 set-active-player" data-player="1">Set as Active Player</button>
+            </div>
         </div>
-        {% endfor %}
+
+        <div class="col-md-4">
+            <div class="d-flex flex-column align-items-center">
+                <div class="mt-5 d-flex justify-content-center">
+                    <input type="text" class="form-control mx-1 text-center" value="{{ players.0.frames_won }}" readonly style="width: 80px;">
+                    <input type="text" class="form-control mx-1 text-center" value="( {{ number_of_frames }} )" readonly style="width: 80px;">
+                    <input type="text" class="form-control mx-1 text-center" value="{{ players.1.frames_won }}" readonly style="width: 80px;">
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="d-flex flex-column align-items-end">
+            <h4>{{ players.1.player }}</h4>
+            <div class="mt-2">
+                <input type="text" class="form-control mx-1 text-center player-score" data-player="2" value="0" readonly style="width: 80px;">
+            </div>
+            <button class="btn btn-outline-primary mt-2 set-active-player" data-player="2">Set as Active Player</button>
+            </div>
+        </div>
     </div>
 
     <div class="row mt-4">
-        <div class="col-md-12">
+        <div class="col-md-12 text-center">
             <div class="btn-group" role="group">
                 <button class="btn btn-danger rounded-circle m-1" onclick="updateScore(1)" style="width: 60px; height: 60px;" aria-label="Red"></button>
                 <button class="btn rounded-circle m-1" onclick="updateScore(2)" style="width: 60px; height: 60px; background-color: #FFFF00; color: black;" aria-label="Yellow"></button>
@@ -30,7 +52,7 @@
     </div>
 
     <div class="row mt-2">
-        <div class="col-md-12">
+        <div class="col-md-12 text-center">
             <div class="btn-group" role="group">
                 <button class="btn btn-danger" onclick="miss()">Miss</button>
                 <button class="btn btn-success" onclick="safetyShot()">Safety</button>
@@ -39,15 +61,30 @@
             </div>
         </div>
     </div>
+
     <div class="row mt-4">
-        <div class="col-md-6">
+        <div class="col-md-12 text-center">
             <h5>On Table: <span id="points-on-table">147</span></h5>
+            <div class="mt-4 d-flex justify-content-center align-items-center" style="gap: 10px;">
+                <div class="d-flex align-items-center" style="gap: 5px;">
+                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: red;">
+                        <span class="red-ball-count">15</span>
+                    </div>
+                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: yellow;"></div>
+                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: green;"></div>
+                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: brown;"></div>
+                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: blue;"></div>
+                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: pink;"></div>
+                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: black;"></div>
+                </div>
+            </div>
+            <div class="mt-4"></div>
             <h5>Max Possible Break: <span id="max-possible-break">147</span></h5>
         </div>
     </div>
 
     <div class="row mt-4">
-        <div class="col-md-6">
+        <div class="col-md-12 text-center">
             <h4>Match Duration:</h4>
             <div id="match-timer">00:00:00</div>
             <div class="mt-2">
@@ -61,6 +98,7 @@
         </div>
     </div>
 </div>
+</div>
 
 <div class="modal fade" id="foulModal" tabindex="-1" role="dialog" aria-labelledby="foulModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
@@ -72,10 +110,19 @@
                 </button>
             </div>
             <div class="modal-body">
-                <button class="btn btn-primary" onclick="foul(4)">4 points</button>
-                <button class="btn btn-primary" onclick="foul(5)">5 points</button>
-                <button class="btn btn-primary" onclick="foul(6)">6 points</button>
-                <button class="btn btn-primary" onclick="foul(7)">7 points</button>
+                <div class="mb-3">
+                    <h6>Select Foul Points:</h6>
+                    <button class="btn btn-primary foul-points" data-points="4">4 points</button>
+                    <button class="btn btn-primary foul-points" data-points="5">5 points</button>
+                    <button class="btn btn-primary foul-points" data-points="6">6 points</button>
+                    <button class="btn btn-primary foul-points" data-points="7">7 points</button>
+                </div>
+                <div class="mb-3">
+                    <h6>Choose Next Player:</h6>
+                    <button class="btn btn-outline-primary next-player" data-player="1">Player 1</button>
+                    <button class="btn btn-outline-primary next-player" data-player="2">Player 2</button>
+                </div>
+                <button class="btn btn-success" id="confirmFoul">OK</button>
             </div>
         </div>
     </div>

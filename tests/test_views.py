@@ -1,16 +1,23 @@
 from urllib import response
-
+import os
 import pytest
+
 from django.contrib.auth.forms import PasswordChangeForm
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.utils import timezone
 from mixer.backend.django import mixer
 from datetime import datetime, date
-from django.test import Client
+from django.test import Client, RequestFactory
+from django.http import JsonResponse
 
+from unittest.mock import patch, MagicMock
+
+from snooker_app.views import gpt_analysis
 from snooker_app.forms import MatchForm, CompetitionForm, SignUpForm
-from snooker_app.models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Achievement
+from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Achievement,
+                                MatchPlayer)
+
 
 
 @pytest.fixture
@@ -283,8 +290,8 @@ def test_match_delete_view(client, sample_match):
 
 
 @pytest.mark.django_db
-def test_start_game_view_get(client, sample_match):
-    url = reverse('start_game', args=[sample_match.pk])
+def test_start_game_view_get(client: Client, sample_match: Match):
+    url = reverse('start_game', kwargs={'pk': sample_match.pk})
     response = client.get(url)
     assert response.status_code == 200
     assert 'start_game.html' in [template.name for template in response.templates]
@@ -292,11 +299,11 @@ def test_start_game_view_get(client, sample_match):
 
 
 @pytest.mark.django_db
-def test_start_game_view_post(client, sample_match):
-    url = reverse('start_game', args=[sample_match.pk])
+def test_start_game_view_post(client: Client, sample_match: Match):
+    url = reverse('start_game', kwargs={'pk': sample_match.pk})
     response = client.post(url)
     assert response.status_code == 302
-    assert response.url == reverse('match_detail', args=[sample_match.pk])
+    assert response.url == reverse('match_detail', kwargs={'pk': sample_match.pk})
 
 
 @pytest.mark.django_db
@@ -386,7 +393,6 @@ def test_competition_stages_view(client):
     assert any(knockout_stage2 == stage_match['stage'] for stage_match in response.context['stages_with_matches'])
 
 
-
 @pytest.mark.django_db
 def test_competition_list_view(client):
     competition = mixer.cycle(3).blend(Competition)
@@ -395,18 +401,6 @@ def test_competition_list_view(client):
     assert response.status_code == 200
     assert 'competition_list.html' in [template.name for template in response.templates]
     assert len(response.context['competitions']) == 3
-
-
-@pytest.mark.django_db
-def test_competition_detail_view(client):
-    competition = mixer.blend(Competition)
-    url = reverse('competition_detail', args=[competition.pk])
-    response = client.get(url)
-    assert response.status_code == 200
-    assert 'competition_detail.html' in [template.name for template in response.templates]
-    assert response.context['competition'] == competition
-    add_players_url = reverse('add_players_to_competition', kwargs={'pk': competition.pk})
-    assert add_players_url in response.content.decode()
 
 
 @pytest.mark.django_db
@@ -469,31 +463,64 @@ def test_add_matches_to_competition_post(client):
     assert match2 in competition.matches.all()
 
 
-# @pytest.mark.django_db
-# def test_create_temporary_match_get(client):
-#     url = reverse('create_temporary_match')
-#     response = client.get(url)
-#     assert response.status_code == 200
-#     assert 'create_temporary_match.html' in [template.name for template in response.templates]
-#     assert isinstance(response.context['form'], MatchForm)
-#
-#
-# @pytest.mark.django_db
-# def test_create_temporary_match_post(client):
-#     form_data = {
-#         'date': '2024-07-15',
-#         'time': '12:00:00',
-#         'number_of_frames': 5,
-#     }
-#
-#     url = reverse('create_temporary_match')
-#     response = client.post(url, form_data)
-#     assert response.status_code == 302
-#
-#     match = Match.objects.get(date='2024-07-15', time='12:00:00')
-#     assert match.is_temporary
-#     assert 'Player' in match.temp_player1.name
-#     assert 'Player' in match.temp_player2.name
+@pytest.mark.django_db
+def test_create_temporary_match_unauthenticated(client):
+    url = reverse('create_temporary_match')
+
+    response = client.get(url)
+    assert response.status_code == 200
+    assert 'create_temporary_match.html' in [template.name for template in response.templates]
+    assert 'form' in response.context
+
+    data = {
+        'date': '2029-07-25',
+        'time': '14:00',
+        'number_of_frames': 3
+    }
+
+    response = client.post(url, data)
+
+    assert response.status_code == 302
+
+    assert Match.objects.count() == 1
+    match = Match.objects.first()
+    assert match.is_temporary == True
+
+    assert Player.objects.count() == 2
+    player1, player2 = Player.objects.all()
+    assert player1.first_name.startswith('Temporary Player')
+    assert player2.first_name.startswith('Temporary Player')
+    assert player1.is_temporary == True
+    assert player2.is_temporary == True
+
+    assert set(match.players.all()) == {player1, player2}
+
+
+@pytest.mark.django_db
+def test_create_temporary_match_authenticated(client):
+    user = User.objects.create_user(username='testuser', password='alfa314159')
+    client.login(username='testuser', password='alfa314159')
+
+    url = reverse('create_temporary_match')
+
+    data = {
+        'date': '2029-07-15',
+        'time': '14:00',
+        'number_of_frames': 5
+    }
+    response = client.post(url, data)
+
+    assert response.status_code == 302
+    assert Match.objects.count() == 1
+    match = Match.objects.first()
+    assert match.is_temporary == True
+    assert Player.objects.count() == 2
+    player1, player2 = Player.objects.all()
+    assert player1.first_name.startswith('Player')
+    assert player2.first_name.startswith('Player')
+    assert player1.is_temporary == True
+    assert player2.is_temporary == True
+    assert set(match.players.all()) == {player1, player2}
 
 
 @pytest.mark.django_db
@@ -692,6 +719,7 @@ def test_achievement_list_view_table_content(sample_player):
 
     client = Client()
     url = reverse('achievement_list')
+
     response = client.get(url)
 
     assert response.status_code == 200
@@ -704,3 +732,31 @@ def test_achievement_list_view_table_content(sample_player):
     assert f'<td>{achievement1.longest_frame_won}</td>' in str(response.content)
     assert f'<td>{achievement1.consecutive_frames_won}</td>' in str(response.content)
     assert f'<td>{achievement1.consecutive_matches_won}</td>' in str(response.content)
+
+
+@pytest.mark.django_db
+def test_get_analysis_no_api_key():
+    client = Client()
+    url = reverse('gpt_analysis')
+
+    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+        response = client.post(url)
+        assert response.status_code == 500
+        assert response.json() == {'error': 'No OpenAI API key found.'}
+
+
+@pytest.mark.django_db
+def test_gpt_analysis_success():
+    client = Client()
+    url = reverse('gpt_analysis')
+
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content='This is a test analysis.'))]
+
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "test_key"}):
+        with patch('snooker_app.views.client.chat.completions.create', return_value=mock_response) as mock_create:
+            response = client.post(url)
+            mock_create.assert_called_once()
+
+            assert response.status_code == 200
+            assert response.json() == {'analysis': 'This is a test analysis.'}

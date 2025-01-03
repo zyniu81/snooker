@@ -1,247 +1,151 @@
-let activePlayer = 1;
-let scores = [0, 0];
 let timerInterval;
-let startTime;
-let elapsedTime = 0;
-let timerRunning = false;
-let pointsOnTable = 147;
-let maxPossibleBreak = 147;
-let actionHistory = [];
+let elapsedSeconds = 0;
+let activePlayer = null;
+let foulPoints = 0;
+let nextPlayerId = null;
 
-
-function addToHistory(action) {
-    actionHistory.push(action);
-    console.log('Action added to history:', action);
-    console.log('Current history:', actionHistory);
-}
-
-
-function setActivePlayer(player) {
-    activePlayer = parseInt(player);
-    document.querySelectorAll('.player-score').forEach((el, index) => {
-        el.parentElement.classList.remove('active-player');
-        if (index + 1 === activePlayer) {
-            el.parentElement.classList.add('active-player');
-        }
+function resetScores() {
+    document.querySelectorAll('.player-score').forEach(input => {
+        input.value = 0;
     });
 }
 
-
-function updateScore(points) {
-    let previousScore = scores[activePlayer - 1];
-    let previousPointsOnTable = pointsOnTable;
-
-    scores[activePlayer - 1] += points;
-    document.querySelectorAll('.player-score')[activePlayer - 1].value = scores[activePlayer - 1];
-
-    pointsOnTable = Math.max(0, pointsOnTable - points);
-    document.getElementById('points-on-table').textContent = pointsOnTable;
-
-    maxPossibleBreak = pointsOnTable + scores[activePlayer - 1];
-    document.getElementById('max-possible-break').textContent = maxPossibleBreak;
-
-    addToHistory({
-        type: 'updateScore',
-        player: activePlayer,
-        points: points,
-        previousScore: previousScore,
-        previousPointsOnTable: previousPointsOnTable
-    });
-}
-
-
-function reverse() {
-    console.log('Reverse function called');
-    if (actionHistory.length === 0) {
-        console.log('No actions to reverse');
-        return;
-    }
-
-    let lastAction = actionHistory.pop();
-    console.log('Reversing action:', lastAction);
-
-    switch (lastAction.type) {
-        case 'updateScore':
-            scores[lastAction.player - 1] = lastAction.previousScore;
-            document.querySelectorAll('.player-score')[lastAction.player - 1].value = lastAction.previousScore;
-            pointsOnTable = lastAction.previousPointsOnTable;
-            document.getElementById('points-on-table').textContent = pointsOnTable;
-            maxPossibleBreak = pointsOnTable + Math.max(...scores);
-            document.getElementById('max-possible-break').textContent = maxPossibleBreak;
-            break;
-        case 'miss':
-        case 'safetyShot':
-            setActivePlayer(lastAction.previousPlayer);
-            maxPossibleBreak = lastAction.previousMaxPossibleBreak;
-            document.getElementById('max-possible-break').textContent = maxPossibleBreak;
-            break;
-        case 'foul':
-            scores[lastAction.player - 1] = lastAction.previousScore;
-            document.querySelectorAll('.player-score')[lastAction.player - 1].value = lastAction.previousScore;
-            scores[lastAction.previousActivePlayer - 1] = lastAction.currentPlayerScore;
-            document.querySelectorAll('.player-score')[lastAction.previousActivePlayer - 1].value = lastAction.currentPlayerScore;
-            setActivePlayer(lastAction.previousActivePlayer);
-            pointsOnTable = lastAction.previousPointsOnTable;
-            document.getElementById('points-on-table').textContent = pointsOnTable;
-            maxPossibleBreak = pointsOnTable + Math.max(...scores);
-            document.getElementById('max-possible-break').textContent = maxPossibleBreak;
-            break;
-        default:
-            console.log('Unknown action type:', lastAction.type);
-    }
-
-    console.log('Reverse completed. New state:', {
-        scores,
-        pointsOnTable,
-        maxPossibleBreak,
-        activePlayer
-    });
-}
-
-
-function miss() {
-    let previousPlayer = activePlayer;
-    let previousMaxPossibleBreak = maxPossibleBreak;
-    setActivePlayer(activePlayer === 1 ? 2 : 1);
-    resetMaxPossibleBreak();
-    addToHistory({
-        type: 'miss',
-        previousPlayer: previousPlayer,
-        previousMaxPossibleBreak: previousMaxPossibleBreak
-    })
-}
-
-
-function safetyShot() {
-    let previousPlayer = activePlayer;
-    let previousMaxPossibleBreak = maxPossibleBreak;
-    setActivePlayer(activePlayer === 1 ? 2 : 1);
-    resetMaxPossibleBreak();
-    addToHistory({
-        type: 'safetyShot',
-        previousPlayer: previousPlayer,
-        previousMaxPossibleBreak: previousMaxPossibleBreak
-    })
-}
-
-
-function resetMaxPossibleBreak() {
-    maxPossibleBreak = pointsOnTable;
-    document.getElementById('max-possible-break').textContent = maxPossibleBreak;
-}
-
-
-function resetGame() {
-    pointsOnTable = 147;
-    maxPossibleBreak = 147;
-    scores = [0, 0];
-    document.getElementById('points-on-table').textContent = pointsOnTable;
-    document.getElementById('max-possible-break').textContent = maxPossibleBreak;
-    document.querySelectorAll('.player-score').forEach(el => el.value = 0);
-    setActivePlayer(1);
-    resetTimer();
-    actionHistory = [];
-}
-
-
-function showFoulModal() {
-    $('#foulModal').modal('show');
-}
-
-
-function foul(points) {
-    let opponent = activePlayer === 1 ? 2 : 1;
-    let previousScore = scores[opponent - 1];
-    let previousActivePlayer = activePlayer;
-    let previousPointsOnTable = pointsOnTable;
-    let currentPlayerScore = scores[activePlayer - 1];
-
-    scores[opponent - 1] += points;
-    document.querySelectorAll('.player-score')[opponent - 1].value = scores[opponent - 1];
-
-    pointsOnTable = Math.max(0, pointsOnTable - points);
-    document.getElementById('points-on-table').textContent = pointsOnTable;
-
-    setActivePlayer(opponent)
-
-    $('#foulModal').modal('hide');
-
-    addToHistory({
-        type: 'foul',
-        points: points,
-        previousScore: previousScore,
-        previousActivePlayer: previousActivePlayer,
-        previousPointsOnTable: previousPointsOnTable,
-        player: opponent,
-        currentPlayerScore: currentPlayerScore
-    });
-}
-
-
-function updateTimer() {
-    if (timerRunning) {
-        let currentTime = new Date().getTime();
-        let totalElapsedTime = new Date(currentTime - startTime + elapsedTime);
-        let hours = totalElapsedTime.getUTCHours().toString().padStart(2, '0');
-        let minutes = totalElapsedTime.getUTCMinutes().toString().padStart(2, '0');
-        let seconds = totalElapsedTime.getUTCSeconds().toString().padStart(2, '0');
-        document.getElementById('match-timer').textContent = `${hours}:${minutes}:${seconds}`;
-    }
+function formatTime(seconds) {
+    const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
+    const minutes = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${hours}:${minutes}:${secs}`;
 }
 
 function startTimer() {
-    if (!timerRunning) {
-        startTime = new Date().getTime();
-        timerInterval = setInterval(updateTimer, 1000);
-        timerRunning = true;
+    if (!timerInterval) {
+        timerInterval = setInterval(() => {
+            elapsedSeconds++;
+            document.getElementById("match-timer").textContent = formatTime(elapsedSeconds);
+        }, 1000);
     }
 }
 
 function pauseTimer() {
-    if (timerRunning) {
-        clearInterval(timerInterval);
-        elapsedTime += new Date().getTime() - startTime;
-        timerRunning = false;
-    }
+    clearInterval(timerInterval);
+    timerInterval = null;
 }
 
 function stopTimer() {
-    if (timerRunning) {
-        clearInterval(timerInterval);
-        elapsedTime += new Date().getTime() - startTime;
-        timerRunning = false;
-    }
+    pauseTimer();
 }
 
-function resetTimer() {
-    clearInterval(timerInterval);
-    elapsedTime = 0;
-    timerRunning = false;
-    document.getElementById('match-timer').textContent = '00:00:00';
+    function resetGame() {
+    pauseTimer();
+    elapsedSeconds = 0;
+    document.getElementById("match-timer").textContent = formatTime(elapsedSeconds);
+
+    resetScores();
+    activePlayer = null;
+    document.querySelectorAll(".set-active-player").forEach(button => {
+        button.classList.remove("active");
+    });
 }
 
+function setActivePlayer(playerId) {
+    activePlayer = playerId;
+    updateActivePlayerUI(playerId);
+}
 
-
-document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.set-active-player').forEach(button => {
-        button.addEventListener('click', function () {
-            setActivePlayer(this.dataset.player);
-        });
+function updateActivePlayerUI(playerId) {
+    document.querySelectorAll(".set-active-player").forEach(button => {
+        button.classList.remove("active");
     });
 
-    const resetGameButton = document.querySelector('button[onclick="resetGame()"]');
-    if (resetGameButton) {
-        resetGameButton.addEventListener('click', resetGame);
-    } else {
-        console.error("Reset Game button not found");
+    const activeButton = document.querySelector(`.set-active-player[data-player="${playerId}"]`);
+    if (activeButton) {
+        activeButton.classList.add("active");
+    }
+}
+
+function updateScore(points) {
+    if (activePlayer === null) {
+        alert("Please select an active player first!");
+        return;
     }
 
-    const reverseButton = document.getElementById('reverseButton');
-    if (reverseButton) {
-        reverseButton.addEventListener('click', reverse);
-    } else {
-        console.error("Reverse button not found")
+    const playerScoreInput = document.querySelector(
+        `.set-active-player[data-player="${activePlayer}"]`
+    ).closest('.d-flex').querySelector('.player-score');
+
+    const currentScore = parseInt(playerScoreInput.value, 10) || 0;
+    playerScoreInput.value = currentScore + points;
+}
+
+function miss() {
+    if (activePlayer === null) {
+        alert("Please select an active player first!");
+        return;
     }
-    setActivePlayer(1);
-    resetGame();
+    switchActivePlayer();
+}
+
+function safetyShot() {
+    if (activePlayer === null) {
+        alert("Please select an active player first!");
+        return;
+    }
+    switchActivePlayer();
+}
+
+function switchActivePlayer() {
+    if (activePlayer === null) {
+        alert("No active player to switch!");
+        return;
+    }
+    activePlayer = activePlayer === 1 ? 2 : 1;
+    updateActivePlayerUI(activePlayer);
+}
+
+function showFoulModal() {
+    $('#foulModal').modal('show');
+
+    foulPoints = 0;
+    nextPlayerId = null;
+    document.querySelectorAll('.foul-points').forEach(button => button.classList.remove('active'));
+    document.querySelectorAll('.next-player').forEach(button => button.classList.remove('active'));
+}
+
+document.querySelectorAll('.foul-points').forEach(button => {
+    button.addEventListener('click', () => {
+        document.querySelectorAll('.foul-points').forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        foulPoints = parseInt(button.getAttribute('data-points'));
+    });
+});
+
+document.querySelectorAll('.next-player').forEach(button => {
+    button.addEventListener('click', () => {
+        document.querySelectorAll('.next-player').forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        nextPlayerId = parseInt(button.getAttribute('data-player'));
+    });
+});
+
+document.getElementById('confirmFoul').addEventListener('click', () => {
+    if (foulPoints > 0 && nextPlayerId !== null) {
+        const opponentId = activePlayer === 1 ? 2 : 1;
+
+        const opponentScoreElement = document.querySelector(`.player-score[data-player="${opponentId}"]`);
+
+        opponentScoreElement.value = parseInt(opponentScoreElement.value || '0', 10) + foulPoints;
+
+        setActivePlayer(nextPlayerId);
+
+        $('#foulModal').modal('hide');
+    } else {
+        alert("Please select foul points and the next player.");
+    }
+});
+
+document.querySelectorAll('.set-active-player').forEach(button => {
+    button.addEventListener('click', () => {
+        const playerId = parseInt(button.dataset.player, 10);
+        setActivePlayer(playerId);
+    });
 });

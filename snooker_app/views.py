@@ -1,17 +1,25 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
+from django.views.decorators.http import require_POST
 from django.views.generic import DeleteView
 from django.contrib import messages
 from django.db.models import Count, Sum, F, Case, When, IntegerField
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+
+import os
+from openai import OpenAI
+import sys
+import json
 
 from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueForm,
                                MatchForm, CompetitionForm, AddMatchesToCompetitionForm,
                                GroupStageForm, SignUpForm, KnockoutStageForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
-                                TemporaryPlayer, MatchPlayer, Achievement)
+                                MatchPlayer, Achievement, Frame)
 
 # Create your views here.
 
@@ -148,13 +156,13 @@ class VenueDeleteView(DeleteView):
     success_url = reverse_lazy('venue_list')
 
 
-def delete_venue(request, pk):
-    venue = get_object_or_404(Venue, pk=pk)
-    if request.method == 'POST':
-        venue.delete()
-        return redirect('venue_list')
-
-    return render(request, 'delete_venue.html', {'venue': venue})
+# def delete_venue(request, pk):
+#     venue = get_object_or_404(Venue, pk=pk)
+#     if request.method == 'POST':
+#         venue.delete()
+#         return redirect('venue_list')
+#
+#     return render(request, 'delete_venue.html', {'venue': venue})
 
 
 def venue_detail(request, pk):
@@ -181,8 +189,8 @@ def add_match(request):
     return render(request, 'add_match.html', {'form': form})
 
 
-def match_detail(request, match_id):
-    match = get_object_or_404(Match, pk=match_id)
+def match_detail(request, pk):
+    match = get_object_or_404(Match, pk=pk)
     return render(request, 'match_detail.html', {'match': match})
 
 
@@ -209,16 +217,25 @@ class MatchDeleteView(DeleteView):
         return get_object_or_404(Match, pk=self.kwargs['pk'])
 
 
-def start_game(request, match_id):
-    match = get_object_or_404(Match, id=match_id)
+def start_game(request, pk):
+    match = get_object_or_404(Match, pk=pk)
     players = match.players.all()
-    if request.method == 'POST':
-        return redirect('match_detail', match_id=match_id)
+
+    frame_results = Frame.objects.filter(match_player__match=match).values('winner').annotate(frames_won=Count('winner'))
+    frames_won = {result['winner']: result['frames_won'] for result in frame_results if result['winner']}
+
+    player_results = []
+    for player in players:
+        player_results.append({
+            'player': player,
+            'frames_won': frames_won.get(player.id, 0)
+        })
 
     context = {
         'match': match,
-        'players': players,
-        'match_id': match_id
+        'players': player_results,
+        'pk': pk,
+        'number_of_frames': match.number_of_frames,
     }
 
     return render(request, 'start_game.html', context)
@@ -292,19 +309,21 @@ def competition_detail(request, pk):
             stats = MatchPlayer.objects.filter(
                 match__in=matches,
                 player=player).aggregate(
-                played=Count('match'),
-                won=Sum(Case(When(points_scored__gt=F('match__matchplayer__points_scored'), then=1), default=0,
-                             output_field=IntegerField())),
-                drawn=Sum(Case(When(points_scored=F('match__matchplayer__points__scored'), then=1), default=0,
-                               output_field=IntegerField())),
+                played=Count('match', distinct=True),
+                won=Sum(Case(
+                    When(points_scored__gt=F('points_scored'), then=1),
+                    default=0, output_field=IntegerField())),
+                drawn=Sum(Case(
+                    When(points_scored=F('points_scored'), then=1),
+                    default=0, output_field=IntegerField())),
                 frames_won=Sum('points_scored'),
-                frames_lost=Sum('match__matchplayer__points_scored') - Sum('points_scored')
+                frames_lost=Sum(F('points_scored')) - Sum('points_scored')
             )
-            stats['player'] = player
-            stats['points'] = stats['won'] * 3 + stats['drawn']
+            stats['match_points'] = (stats['won'] or 0) * 3 + (stats['drawn'] or 0)
+
             player_stats.append(stats)
 
-        player_stats.sort(key=lambda x: (x['points'], x['frames_won'] - x['frames_lost']), reverse=True)
+        player_stats.sort(key=lambda x: (x['match_points'], x['frames_won'] - x['frames_lost']), reverse=True)
 
         group_data.append({
             'stage': group_stage,
@@ -370,15 +389,10 @@ def add_matches_to_competition(request, competition_id):
 
 def create_temporary_match(request):
     if request.method == 'POST':
-        form = MatchForm(request.POST)
+        form = MatchForm(request.POST, request=request)
         if form.is_valid():
-            temp_player1 = TemporaryPlayer.objects.create(name=f'Player {TemporaryPlayer.objects.count() + 1}')
-            temp_player2 = TemporaryPlayer.objects.create(name=f'Player {TemporaryPlayer.objects.count() + 2}')
-            match = form.save(commit=False)
-            match.temp_player1 = temp_player1
-            match.temp_player2 = temp_player2
-            match.is_temporary = True
-            match.save()
+            match = form.save(commit=True)
+
             return redirect('match_detail', pk=match.pk)
     else:
         form = MatchForm()
@@ -496,14 +510,112 @@ def add_players_to_competition(request, pk):
         })
 
 
-# =======================================================
-# =======================================================
-# =======================================================
-# =======================================================
-
 def achievement_list(request):
     achievements = Achievement.objects.all()
     context = {
         'achievements': achievements
     }
     return render(request, 'achievement_list.html', context)
+
+
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+
+@csrf_exempt
+@require_POST
+def gpt_analysis(request):
+    api_key = os.getenv('OPENAI_API_KEY')
+    print(f"OPENAI API KEY in view: {'SET' if api_key else 'NOT SET'}", file=sys.stderr)
+
+    if not api_key:
+        print("No OpenAI API key found.", file=sys.stderr)
+        return JsonResponse({'error': 'No OpenAI API key found.'}, status=500)
+
+    try:
+        print("Attempting to create ChatCompletion", file=sys.stderr)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system",
+                 "content": "You are a snooker expert. Analyze recent results and provide a short analysis."},
+                {"role": "user", "content": "Give a brief analysis of recent snooker results."}
+            ]
+        )
+        analysis = response.choices[0].message.content
+        print("ChatCompletion successful", file=sys.stderr)
+        return JsonResponse({'analysis': analysis})
+    except Exception as e:
+        print(f"Error in gpt_analysis: {str(e)}", file=sys.stderr)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_POST
+def update_game_data(request):
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        match_id = data.get('match_id')
+        player_id = data.get('player_id')
+        points = data.get('points')
+        ball_color = data.get('ball_color')
+
+        if match_id is None or player_id is None or points is None or ball_color is None:
+            return JsonResponse({'status': 'error', 'message': 'Missing data fileds'})
+
+        match_player = MatchPlayer.objects.filter(match_id=match_id, player_id=player_id).first()
+
+        if not match_player:
+            return JsonResponse({'status': 'error', 'message': 'Match or player not found'})
+
+        frame = Frame.objects.filter(match_player=match_player).latest('frame_number')
+
+        if player_id == 1:
+            frame.points_scored_player1 = (frame.points_scored_player1 or 0) + points
+        else:
+            frame.points_scored_player2 = (frame.points_scored_player2 or 0) + points
+
+        if player_id == 1:
+            frame.break_points_player1.append(points)
+        else:
+            frame.break_points_player2.append(points)
+
+        frame.save()
+
+        return JsonResponse({'status': 'success'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})
+
+
+@csrf_exempt
+@require_POST
+def set_active_player(request):
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        match_id = data.get('match_id')
+        frame_id = data.get('frame_id')
+        player_id = data.get('player_id')
+
+        if frame_id is None or player_id is None:
+            return JsonResponse({'status': 'error', 'message': 'Invalid frame or player ID'})
+
+        frame = Frame.objects.get(id=frame_id)
+        player = Player.objects.get(id=player_id)
+        frame.active_player = player
+        frame.save()
+
+        if match_id is None or player_id in None:
+            return JsonResponse({'status': 'error', 'message': 'Missing match_id or plauer_id'})
+
+        match_player = MatchPlayer.objects.filter(match_id=match_id, player_id=player_id).first()
+
+        if not match_player:
+            return JsonResponse({'status': 'error', 'message': 'Match of player not found'})
+
+        match_player.is_active = True
+        match_player.save()
+
+        MatchPlayer.objects.filter(match_id=match_id).exclude(player_id=player_id).update(is_active=False)
+
+        return JsonResponse({'status': 'success', 'active_player': player_id})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})

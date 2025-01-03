@@ -1,5 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.http import request
 from django.utils import timezone
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
@@ -54,16 +55,26 @@ class VenueForm(forms.ModelForm):
 
 
 class MatchForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+
     players = forms.ModelMultipleChoiceField(
         queryset=Player.objects.all(),
         widget=forms.CheckboxSelectMultiple,
-        required=True,
+        required=False,
     )
 
     referees = forms.ModelMultipleChoiceField(
         queryset=Referee.objects.all(),
         widget=forms.CheckboxSelectMultiple,
         required=False,
+    )
+
+    create_temporary_players = forms.BooleanField(
+        label='Create temporary players',
+        required=False,
+        initial=False,
     )
 
     class Meta:
@@ -82,11 +93,21 @@ class MatchForm(forms.ModelForm):
             raise ValidationError("The date cannot be in the past.")
         return date
 
-    def clean_players(self):
-        players = self.cleaned_data.get('players')
-        if players.count() < 2:
-            raise ValidationError("A match must have at least two players.")
-        return players
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        create_temp_players = self.cleaned_data.get('create_temporary_players', False)
+
+        if commit:
+            instance.save()
+            self.save_m2m()
+
+            if create_temp_players:
+                prefix = "Temporary Player" if not self.request.user.is_authenticated else "Player"
+                temp_player1 = Player.objects.create(first_name=f'{prefix} {Player.objects.count() + 1}', is_temporary=True)
+                temp_player2 = Player.objects.create(first_name=f'{prefix} {Player.objects.count() + 2}', is_temporary=True)
+                instance.players.add(temp_player1, temp_player2)
+
+        return instance
 
 
 class CompetitionForm(forms.ModelForm):
