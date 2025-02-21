@@ -40,13 +40,41 @@
     <div class="row mt-4">
         <div class="col-md-12 text-center">
             <div class="btn-group" role="group">
-                <button class="btn btn-danger rounded-circle m-1" onclick="updateScore(1)" style="width: 60px; height: 60px;" aria-label="Red"></button>
-                <button class="btn rounded-circle m-1" onclick="updateScore(2)" style="width: 60px; height: 60px; background-color: #FFFF00; color: black;" aria-label="Yellow"></button>
-                <button class="btn btn-success rounded-circle m-1" onclick="updateScore(3)" style="width: 60px; height: 60px;" aria-label="Green"></button>
-                <button class="btn rounded-circle m-1" onclick="updateScore(4)" style="width: 60px; height: 60px; background-color: #8B4513; color: white;" aria-label="Brown"></button>
-                <button class="btn btn-primary rounded-circle m-1" onclick="updateScore(5)" style="width: 60px; height: 60px;" aria-label="Blue"></button>
-                <button class="btn rounded-circle m-1" onclick="updateScore(6)" style="width: 60px; height: 60px; background-color: #FFC0CB;" aria-label="Pink"></button>
-                <button class="btn btn-dark rounded-circle m-1" onclick="updateScore(7)" style="width: 60px; height: 60px;" aria-label="Black"></button>
+                <button class="btn btn-danger rounded-circle m-1"
+                        onclick="updateScore(1, 'red')"
+                        style="width: 60px; height: 60px;"
+                        aria-label="Red"
+                        data-type = "red"></button>
+                <button class="btn rounded-circle color-ball m-1"
+                        onclick="updateScore(2, 'color')"
+                        style="width: 60px; height: 60px; background-color: #FFFF00; color: black;"
+                        aria-label="Yellow"
+                        data-type="yellow"></button>
+                <button class="btn btn-success rounded-circle color-ball m-1"
+                        onclick="updateScore(3, 'color')"
+                        style="width: 60px; height: 60px;"
+                        aria-label="Green"
+                        data-type="green"></button>
+                <button class="btn rounded-circle color-ball m-1"
+                        onclick="updateScore(4, 'color')"
+                        style="width: 60px; height: 60px; background-color: #8B4513; color: white;"
+                        aria-label="Brown"
+                        data-type="brown"></button>
+                <button class="btn btn-primary rounded-circle color-ball m-1"
+                        onclick="updateScore(5, 'color')"
+                        style="width: 60px; height: 60px;"
+                        aria-label="Blue"
+                        data-type="blue"></button>
+                <button class="btn rounded-circle color-ball m-1"
+                        onclick="updateScore(6, 'color')"
+                        style="width: 60px; height: 60px; background-color: #FFC0CB;"
+                        aria-label="Pink"
+                        data-type="pink"></button>
+                <button class="btn btn-dark rounded-circle color-ball m-1"
+                        onclick="updateScore(7, 'color')"
+                        style="width: 60px; height: 60px;"
+                        aria-label="Black"
+                        data-type="black"></button>
             </div>
         </div>
     </div>
@@ -54,10 +82,21 @@
     <div class="row mt-2">
         <div class="col-md-12 text-center">
             <div class="btn-group" role="group">
-                <button class="btn btn-danger" onclick="miss()">Miss</button>
-                <button class="btn btn-success" onclick="safetyShot()">Safety</button>
-                <button class="btn btn-warning" onclick="showFoulModal()">Foul</button>
-                <button class="btn btn-secondary" id="reverseButton">Reverse</button>
+                <button class="btn btn-outline-danger me-2" onclick="miss()" title="Miss shot">
+                    <i class="bi bi-x-circle"></i> Miss
+                </button>
+                <button class="btn btn-outline-success me-2" onclick="safetyShot()" title="Safety shot">
+                    <i class="bi bi-shield"></i> Safety
+                </button>
+                <button class="btn btn-outline-warning me-2" onclick="showFoulModal()" title="Call a foul">
+                    <i class="bi bi-exclamation-triangle"></i> Foul
+                </button>
+                <button class="btn btn-outline-secondary me-2" id="undoButton" title="Undo last action">
+                    <i class="bi bi-arrow-counterclockwise"></i> Undo
+                </button>
+                <button class="btn btn-outline-primary" id="redoButton" title="Redo last action">
+                    <i class="bi bi-arrow-clockwise"></i> Redo
+                </button>
             </div>
         </div>
     </div>
@@ -68,14 +107,34 @@
             <div class="mt-4 d-flex justify-content-center align-items-center" style="gap: 10px;">
                 <div class="d-flex align-items-center" style="gap: 5px;">
                     <div class="rounded-circle" style="width: 25px; height: 25px; background-color: red;">
-                        <span class="red-ball-count">15</span>
+                        <span id="red-ball-count" class="red-ball-count">15</span>
                     </div>
-                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: yellow;"></div>
-                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: green;"></div>
-                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: brown;"></div>
-                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: blue;"></div>
-                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: pink;"></div>
-                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: black;"></div>
+                    <div class="d-flex align-items-center" style="gap: 5px;">
+                        <div class="rounded-circle color-ball-marker"
+                             style="width: 25px; height: 25px; background-color: yellow;"
+                             aria-label="Yellow"
+                             data-type="yellow"></div>
+                        <div class="rounded-circle color-ball-marker"
+                             style="width: 25px; height: 25px; background-color: green;"
+                             aria-label="Green"
+                             data-type="green"></div>
+                        <div class="rounded-circle color-ball-marker"
+                             style="width: 25px; height: 25px; background-color: brown;"
+                             aria-label="Brown"
+                             data-type="brown"></div>
+                        <div class="rounded-circle color-ball-marker"
+                             style="width: 25px; height: 25px; background-color: blue;"
+                             aria-label="Blue"
+                             data-type="blue"></div>
+                        <div class="rounded-circle color-ball-marker"
+                             style="width: 25px; height: 25px; background-color: pink;"
+                             aria-label="Pink"
+                             data-type="pink"></div>
+                        <div class="rounded-circle color-ball-marker"
+                             style="width: 25px; height: 25px; background-color: black;"
+                             aria-label="Black"
+                             data-type="black"></div>
+                    </div>
                 </div>
             </div>
             <div class="mt-4"></div>
@@ -122,7 +181,17 @@
                     <button class="btn btn-outline-primary next-player" data-player="1">Player 1</button>
                     <button class="btn btn-outline-primary next-player" data-player="2">Player 2</button>
                 </div>
-                <button class="btn btn-success" id="confirmFoul">OK</button>
+                <p class="mt-3">Manually adjust red balls:</p>
+                <div class="input-group">
+                    <input type="number" id="redBallAdjustment" class="form-control" min="0" max="15" placeholder="0">
+                    <div class="input-group-append">
+                        <button class="btn btn-outline-secondary" id="decreaseRedBalls">-</button>
+                        <button class="btn btn-outline-secondary" id="increaseRedBalls">+</button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-success" id="confirmFoul">OK</button>
+                </div>
             </div>
         </div>
     </div>
