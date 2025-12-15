@@ -16,7 +16,7 @@ mixer==7.2.2
 openai
 packaging==24.1
 pluggy==1.5.0
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.11
 pydantic==2.8.2
 pydantic_core==2.20.1
 pytest==8.2.2

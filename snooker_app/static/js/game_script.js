@@ -13,6 +13,9 @@ let gameState = {
     lastPottedRed: false,
     redBallsPottedThisTurn: 0
 };
+let currentBreak = 0;
+let isFreeBall = false;
+let lastShotWasFreeBall = false;
 
 
 function recordAction(action) {
@@ -36,6 +39,19 @@ function undo() {
     const lastAction = undoStack.pop();
     console.log("Undoing action:", lastAction);
     redoStack.push(lastAction);
+
+    if (lastAction.type === "updateScore") {
+        currentBreak = lastAction.previousBreak;
+        updateBreakDisplay();
+
+        if (lastAction.wasFreeBall) {
+            isFreeBall = true;
+        }
+
+        if (lastAction.previousLastShotWasFreeBall !== undefined) {
+            lastShotWasFreeBall = lastAction.previousLastShotWasFreeBall;
+        }
+    }
 
     switch (lastAction.type) {
         case "updateActivePlayer":
@@ -131,6 +147,14 @@ function undo() {
             if (lastAction.ballsVisibility) {
                 restoreBallsVisibilityState(lastAction.ballsVisibility);
             }
+
+            isFreeBall = false;
+
+            if (lastAction.previousBreak !== undefined) {
+                currentBreak = lastAction.previousBreak;
+                updateBreakDisplay();
+            }
+
             break;
     }
 }
@@ -141,6 +165,15 @@ function redo() {
     const lastUndone = redoStack.pop();
     console.log("Redoing action:", lastUndone);
     undoStack.push(lastUndone);
+
+    if (lastUndone.type === "updateScore") {
+        currentBreak = lastUndone.newBreak;
+        updateBreakDisplay();
+
+        if (lastUndone.wasFreeBall) {
+            isFreeBall = false;
+        }
+    }
 
     switch (lastUndone.type) {
         case "updateActivePlayer":
@@ -233,6 +266,10 @@ function redo() {
             if (lastUndone.ballsVisibility) {
                 restoreBallsVisibilityState(lastUndone.ballsVisibility);
             }
+
+            if (lastUndone.setFreeBall) {
+                isFreeBall = true;
+            }
             break;
     }
 }
@@ -278,22 +315,34 @@ function pauseTimer() {
 }
 
 function stopTimer() {
-    pauseTimer();
+    $('#endFrameModal').modal('show');
 }
 
-    function resetGame() {
+function endFrame() {
+    pauseTimer();
+    $('#endFrameModal').modal('hide');
+}
+
+function resetGame() {
     pauseTimer();
     elapsedSeconds = 0;
     document.getElementById("match-timer").textContent = formatTime(elapsedSeconds);
 
     resetScores();
     activePlayer = null;
+    isFreeBall = false;
+    lastShowWasFreeBall = false;
+
+    document.querySelectorAll("h4").forEach(header => {
+        header.innerHTML = header.innerHTML.replace(" 🔴", "");
+    });
     document.querySelectorAll(".set-active-player").forEach(button => {
         button.classList.remove("active");
     });
 
     resetRedBalls();
     resetPointsOnTable();
+    resetBreak();
 
     document.querySelectorAll('.btn, .rounded-circle').forEach(element => {
         element.style.display = "inline-block";
@@ -342,15 +391,43 @@ function updateScore(points, ballType) {
         return;
     }
 
-    const playerScoreInput = document.querySelector(
-        `.set-active-player[data-player="${activePlayer}"]`
-    ).closest('.d-flex').querySelector('.player-score');
+    // --- 1. LOGIKA FREE BALL ---
+    let actualPoints = points;
+    let effectiveBallType = ballType;
+    let wasFreeBallShot = false;
+
+    if (isFreeBall && ballType === 'color') {
+        actualPoints = 1;
+        effectiveBallType = 'red';
+        wasFreeBallShot = true;
+    }
+
+    // --- 2. BEZPIECZNE POBIERANIE INPUTA WYNIKU (POPRAWKA) ---
+    // Zamiast closest(), używamy konkretnego selektora, który na 100% zadziała
+    const playerScoreInput = document.querySelector(`.player-score[data-player="${activePlayer}"]`);
+
+    if (!playerScoreInput) {
+        console.error("Critical Error: Score input not found for player " + activePlayer);
+        return;
+    }
 
     const previousScore = parseInt(playerScoreInput.value, 10) || 0;
-    const newScore = previousScore + points;
+    const newScore = previousScore + actualPoints;
+
+    currentBreak += actualPoints;
+    updateBreakDisplay();
 
     const previousRedBalls = parseInt(document.getElementById("red-ball-count").textContent, 10);
     const previousPointsOnTable = parseInt(document.getElementById("points-on-table").textContent, 10);
+
+    // --- 3. LOGIKA HISTORII (UNDO) ---
+    let pointsToRemoveFromTable = 0;
+    if (effectiveBallType === 'red' && !wasFreeBallShot) {
+        pointsToRemoveFromTable = 8;
+    }
+
+    // Zabezpieczenie na wypadek, gdyby zmienna nie była zdefiniowana
+    const safeLastShotWasFreeBall = (typeof lastShotWasFreeBall !== 'undefined') ? lastShotWasFreeBall : false;
 
     recordAction({
         type: "updateScore",
@@ -358,53 +435,113 @@ function updateScore(points, ballType) {
         previousScore: previousScore,
         newScore: newScore,
         ballType: ballType,
-        redBallsChange: ballType === 'red',
+        redBallsChange: (effectiveBallType === 'red' && !wasFreeBallShot),
         previousRedBalls: previousRedBalls,
         previousPointsOnTable: previousPointsOnTable,
-        newPointsOnTable: previousPointsOnTable - points - (ballType === 'red' ? 7 : 0)
+        newPointsOnTable: previousPointsOnTable - pointsToRemoveFromTable,
+        previousBreak: currentBreak - actualPoints,
+        newBreak: currentBreak,
+        wasFreeBall: wasFreeBallShot,
+        previousLastShotWasFreeBall: safeLastShotWasFreeBall
     });
 
+    // --- 4. AKTUALIZACJA UI ---
     playerScoreInput.value = newScore;
-    const pointsOnTable = parseInt(document.getElementById("points-on-table").textContent, 10);
-    hideColorBallBasedOnPoints(pointsOnTable);
 
-    if (ballType === 'red') {
-        for (let i = 0; i < points; i++) {
+    // --- 5. LOGIKA STOŁU I CZERWONYCH ---
+    if (effectiveBallType === 'red') {
+        for (let i = 0; i < actualPoints; i++) {
             redBallsPottedThisTurn++;
-            updateRedBalls(1);
-            updatePointsOnTable(1);
-            if (redBallsPottedThisTurn > 1) {
+
+            // Jeśli to zwykła czerwona (nie free ball) -> Zdejmujemy ze stołu
+            if (!wasFreeBallShot) {
+                updateRedBalls(1);
+                updatePointsOnTable(1);
+            }
+
+            if (redBallsPottedThisTurn > 1 && !wasFreeBallShot) {
                 updatePointsOnTable(7);
             }
         }
         lastPottedRed = true;
+
+        // Ustawiamy flagę globalną
+        lastShotWasFreeBall = wasFreeBallShot;
+
     } else if (ballType === 'color') {
         if (lastPottedRed) {
-            updatePointsOnTable(7);
+            // Jeśli to kolor po czerwonej (i poprzedni to nie był Free Ball), zdejmujemy 7 pkt
+            if (!safeLastShotWasFreeBall) {
+                updatePointsOnTable(7);
+            }
+            lastShotWasFreeBall = false;
         } else {
+            // Koniec gry na kolorach
             updatePointsOnTable(points);
         }
         lastPottedRed = false;
         redBallsPottedThisTurn = 0;
     }
 
-    if (pointsOnTable <= 27) {
+    // --- 6. UKRYWANIE BIL ---
+    const currentPointsOnTable = parseInt(document.getElementById("points-on-table").textContent, 10);
+    hideColorBallBasedOnPoints(currentPointsOnTable);
+
+    if (currentPointsOnTable <= 27) {
         showColorBalls();
+        hideColorBallBasedOnPoints(currentPointsOnTable);
+    }
+
+    // --- 7. RESET TRYBU FREE BALL ---
+    if (isFreeBall) {
+        isFreeBall = false;
+    }
+}
+
+function resetBreak() {
+    currentBreak = 0;
+
+    document.querySelectorAll(".break-container").forEach(container => {
+        container.style.display = "none";
+    });
+    document.querySelectorAll(".player-break").forEach(span => span.textContent = "0");
+}
+
+function updateBreakDisplay() {
+
+    document.querySelectorAll(".break-container").forEach(container => {
+        const player = parseInt(container.getAttribute("data-player"), 10);
+
+        if (player === activePlayer && currentBreak > 0) {
+            container.style.display = "inline";
+        } else {
+            container.style.display = "none";
+        }
+    });
+
+    const breakSpan = document.querySelector(`.player-break[data-player="${activePlayer}"]`);
+    if (breakSpan) {
+        breakSpan.textContent = currentBreak;
     }
 }
 
 function hideColorBallBasedOnPoints(pointsOnTable) {
-    if (pointsOnTable === 27) {
+    if (pointsOnTable <= 25) {
         hideColorBall('yellow');
-    } else if (pointsOnTable === 25) {
+    }
+    if (pointsOnTable <= 22) {
         hideColorBall('green');
-    } else if (pointsOnTable === 22) {
+    }
+    if (pointsOnTable <= 18) {
         hideColorBall('brown');
-    } else if (pointsOnTable === 18) {
+    }
+    if (pointsOnTable <= 13) {
         hideColorBall('blue');
-    } else if (pointsOnTable === 13) {
+    }
+    if (pointsOnTable <= 7) {
         hideColorBall('pink');
-    } else if (pointsOnTable === 7) {
+    }
+    if (pointsOnTable === 0) {
         hideColorBall('black');
     }
 
@@ -412,17 +549,22 @@ function hideColorBallBasedOnPoints(pointsOnTable) {
 }
 
 function hideBallIconBasedOnPoints(pointsOnTable) {
-    if (pointsOnTable === 27) {
+    if (pointsOnTable <= 25) {
         hideBallIcon('yellow');
-    } else if (pointsOnTable === 25) {
+    }
+    if (pointsOnTable <= 22) {
         hideBallIcon('green');
-    } else if (pointsOnTable === 22) {
+    }
+    if (pointsOnTable <= 18) {
         hideBallIcon('brown');
-    } else if (pointsOnTable === 18) {
+    }
+    if (pointsOnTable <= 13) {
         hideBallIcon('blue');
-    } else if (pointsOnTable === 13) {
+    }
+    if (pointsOnTable <= 7) {
         hideBallIcon('pink');
-    } else if (pointsOnTable === 7) {
+    }
+    if (pointsOnTable === 0) {
         hideBallIcon('black');
     }
 }
@@ -550,6 +692,8 @@ function switchActivePlayer() {
 
     lastPottedRed = false;
     redBallsPottedThisTurn = 0;
+    lastShowWasFreeBall = false;
+    resetBreak();
 
     activePlayer = activePlayer === 1 ? 2 : 1;
     updateActivePlayerUI(activePlayer);
@@ -561,6 +705,8 @@ function showFoulModal() {
     foulPoints = 0;
     nextPlayerId = null;
     redBallAdjustment = 0;
+
+    document.getElementById('freeBallCheckbox').checked = false;
 
     document.querySelectorAll('.foul-points').forEach(button => button.classList.remove('active'));
     document.querySelectorAll('.next-player').forEach(button => button.classList.remove('active'));
@@ -608,6 +754,12 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
         const previousRedBalls = parseInt(document.getElementById("red-ball-count").textContent, 10);
         const previousPointsOnTable = parseInt(document.getElementById("points-on-table").textContent, 10);
 
+        // Pobieramy stan checkboxa
+        const isFreeBallSelected = document.getElementById('freeBallCheckbox').checked;
+
+        // Zapisujemy obecny break ZANIM go wyzerujemy
+        const breakBeforeFoul = currentBreak;
+
         recordAction({
             type: "foul",
             opponentId: opponentId,
@@ -617,7 +769,9 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
             previousRedBalls: previousRedBalls,
             newRedBalls: previousRedBalls - redBallAdjustment,
             previousPointsOnTable: previousPointsOnTable,
-            newPointsOnTable: previousPointsOnTable - (redBallAdjustment * 8)
+            newPointsOnTable: previousPointsOnTable - (redBallAdjustment * 8),
+            setFreeBall: isFreeBallSelected,   // <--- Ważne: tu musi być przecinek
+            previousBreak: breakBeforeFoul     // <--- To jest ta nowa linijka
         });
 
         opponentScoreElement.value = previousOpponentScore + foulPoints;
@@ -634,6 +788,14 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
 
         redBallsPottedThisTurn = 0;
         lastPottedRed = false;
+
+        // Ustawiamy flagę
+        isFreeBall = isFreeBallSelected;
+
+        // Zerujemy breaka (bo zmiana gracza)
+        currentBreak = 0;
+        updateBreakDisplay();
+
         setActivePlayer(nextPlayerId);
 
         $('#foulModal').modal('hide');
@@ -717,3 +879,5 @@ document.getElementById('undoButton').addEventListener('click', () => {
 document.getElementById('redoButton').addEventListener('click', () => {
     redo();
 });
+
+resetBreak();

@@ -11,6 +11,7 @@
             <h4>{{ players.0.player }}</h4>
             <div class="mt-2">
                 <input type="text" class="form-control mx-1 text-center player-score" data-player="1" value="0" readonly style="width: 80px;">
+                <span class="break-container" data-player="1">Break: <span class="player-break" data-player="1">0</span></span>
             </div>
             <button class="btn btn-outline-primary mt-2 set-active-player" data-player="1">Set as Active Player</button>
             </div>
@@ -31,6 +32,7 @@
             <h4>{{ players.1.player }}</h4>
             <div class="mt-2">
                 <input type="text" class="form-control mx-1 text-center player-score" data-player="2" value="0" readonly style="width: 80px;">
+                <span class="break-container" data-player="2">Break: <span class="player-break" data-player="2">0</span></span>
             </div>
             <button class="btn btn-outline-primary mt-2 set-active-player" data-player="2">Set as Active Player</button>
             </div>
@@ -97,6 +99,9 @@
                 <button class="btn btn-outline-primary" id="redoButton" title="Redo last action">
                     <i class="bi bi-arrow-clockwise"></i> Redo
                 </button>
+                <button class="btn btn-outline-info" onclick="freeBall()" title="Declare Free Ball">
+                    <i class="bi bi-circle"></i> Free Ball
+                </button>
             </div>
         </div>
     </div>
@@ -148,10 +153,38 @@
             <div id="match-timer">00:00:00</div>
             <div class="mt-2">
                 <div class="btn-group" role="group">
-                    <button class="btn btn-success" onclick="startTimer()">Start</button>
-                    <button class="btn btn-warning" onclick="pauseTimer()">Pause</button>
-                    <button class="btn btn-danger" onclick="stopTimer()">Stop</button>
-                    <button class="btn btn-secondary" onclick="resetGame()">Reset Game</button>
+                    <button class="btn btn-outline-success me-2" onclick="startTimer()">
+                        <i class="bi bi-play-circle"></i> Start
+                    </button>
+                    <button class="btn btn-outline-warning me-2" onclick="pauseTimer()">
+                        <i class="bi bi-pause-circle"></i> Pause
+                    </button>
+                    <button class="btn btn-outline-danger me-2" onclick="stopTimer()">
+                        <i class="bi bi-stop-circle"></i> End Frame
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="resetGame()">
+                        <i class="bi bi-arrow-repeat"></i> Reset Game
+                    </button>
+                </div>
+
+                <div id="endFrameModal" class="modal fade" tabindex="-1" role ="dialog">
+                    <div class="modal-dialog" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">End frame?</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Are you sure you want to end this frame?</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-primary" onclick="endFrame()">Ok</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -176,11 +209,18 @@
                     <button class="btn btn-primary foul-points" data-points="6">6 points</button>
                     <button class="btn btn-primary foul-points" data-points="7">7 points</button>
                 </div>
+
                 <div class="mb-3">
                     <h6>Choose Next Player:</h6>
                     <button class="btn btn-outline-primary next-player" data-player="1">Player 1</button>
                     <button class="btn btn-outline-primary next-player" data-player="2">Player 2</button>
                 </div>
+
+                <div class="mb-3 form-check ml-1">
+                    <input type="checkbox" class="form-check-input" id="freeBallCheckbox">
+                    <label class="form-check-label font-weight-bold" for="freeBallCheckbox">Free Ball?</label>
+                </div>
+
                 <p class="mt-3">Manually adjust red balls:</p>
                 <div class="input-group">
                     <input type="number" id="redBallAdjustment" class="form-control" min="0" max="15" placeholder="0">
@@ -189,6 +229,7 @@
                         <button class="btn btn-outline-secondary" id="increaseRedBalls">+</button>
                     </div>
                 </div>
+
                 <div class="modal-footer">
                     <button class="btn btn-success" id="confirmFoul">OK</button>
                 </div>
@@ -196,6 +237,7 @@
         </div>
     </div>
 </div>
+
 
 <script src="{% static 'js/game_script.js' %}"></script>
 {% endblock %}
