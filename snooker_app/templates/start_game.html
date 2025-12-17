@@ -20,9 +20,11 @@
         <div class="col-md-4">
             <div class="d-flex flex-column align-items-center">
                 <div class="mt-5 d-flex justify-content-center">
-                    <input type="text" class="form-control mx-1 text-center" value="{{ players.0.frames_won }}" readonly style="width: 80px;">
-                    <input type="text" class="form-control mx-1 text-center" value="( {{ number_of_frames }} )" readonly style="width: 80px;">
-                    <input type="text" class="form-control mx-1 text-center" value="{{ players.1.frames_won }}" readonly style="width: 80px;">
+                    <input type="text" id="player1-frames" class="form-control mx-1 text-center" value="{{ players.0.frames_won }}" readonly style="width: 80px;">
+
+                    <input type="text" id="total-frames" class="form-control mx-1 text-center" value="( {{ number_of_frames }} )" readonly style="width: 80px;">
+
+                    <input type="text" id="player2-frames" class="form-control mx-1 text-center" value="{{ players.1.frames_won }}" readonly style="width: 80px;">
                 </div>
             </div>
         </div>
@@ -159,7 +161,7 @@
                     <button class="btn btn-outline-warning me-2" onclick="pauseTimer()">
                         <i class="bi bi-pause-circle"></i> Pause
                     </button>
-                    <button class="btn btn-outline-danger me-2" onclick="stopTimer()">
+                    <button class="btn btn-outline-danger me-2" onclick="endFrame()">
                         <i class="bi bi-stop-circle"></i> End Frame
                     </button>
                     <button class="btn btn-outline-secondary" onclick="resetGame()">
@@ -167,25 +169,53 @@
                     </button>
                 </div>
 
-                <div id="endFrameModal" class="modal fade" tabindex="-1" role ="dialog">
+                <div class="modal fade" id="endFrameModal" tabindex="-1" role="dialog" aria-labelledby="endFrameLabel" aria-hidden="true">
                     <div class="modal-dialog" role="document">
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h5 class="modal-title">End frame?</h5>
+                                <h5 class="modal-title" id="endFrameLabel">End Frame Decision</h5>
                                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                     <span aria-hidden="true">&times;</span>
                                 </button>
                             </div>
-                            <div class="modal-body">
-                                <p>Are you sure you want to end this frame?</p>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                                <button type="button" class="btn btn-primary" onclick="endFrame()">Ok</button>
+                            <div class="modal-body text-center">
+                                <p>Confirm ending this frame. Who won?</p>
+                                <div class="d-flex justify-content-around mt-4">
+                                    <button class="btn btn-outline-secondary btn-lg p-4" id="btn-win-p1" onclick="confirmFrameWinner(1)">
+                                        Player 1 Wins
+                                    </button>
+
+                                    <button class="btn btn-outline-secondary btn-lg p-4" id="btn-win-p2" onclick="confirmFrameWinner(2)">
+                                        Player 2 Wins
+                                    </button>
+                                </div>
+                                <small class="text-muted mt-3 d-block">The button for the player with the highest score is highlighted.</small>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                <div class="modal fade" id="confirmWinnerModal" tabindex="-1" role="dialog" aria-labelledby="confirmWinnerLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-sm" role="document"> <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Confirm Decision</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <p>Are you sure that <strong id="confirmation-player-name">Player X</strong> won this frame?</p>
+                                <p class="text-danger small">This action cannot be undone!</p>
+                            </div>
+                            <div class="modal-footer justify-content-center">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+
+                                <button type="button" class="btn btn-danger" onclick="finalizeFrameEnd()">Yes, Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>

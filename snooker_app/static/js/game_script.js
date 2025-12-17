@@ -16,6 +16,7 @@ let gameState = {
 let currentBreak = 0;
 let isFreeBall = false;
 let lastShotWasFreeBall = false;
+let pendingWinnerId = null; // Tymczasowa zmienna do przechowywania wybranego zwycięzcy
 
 
 function recordAction(action) {
@@ -319,8 +320,41 @@ function stopTimer() {
 }
 
 function endFrame() {
+    // 1. Zatrzymujemy czas (tak jak miałeś)
     pauseTimer();
-    $('#endFrameModal').modal('hide');
+
+    // 2. Pobieramy aktualne punkty graczy
+    // Używamy bezpiecznego selektora, żeby na pewno znaleźć inputy
+    const p1ScoreInput = document.querySelector(`.player-score[data-player="1"]`);
+    const p2ScoreInput = document.querySelector(`.player-score[data-player="2"]`);
+
+    // Zamieniamy wartość na liczbę (lub 0 jeśli puste)
+    const p1Score = parseInt(p1ScoreInput ? p1ScoreInput.value : 0, 10);
+    const p2Score = parseInt(p2ScoreInput ? p2ScoreInput.value : 0, 10);
+
+    // 3. Pobieramy przyciski z modala (te nowe, które dodałeś w HTML w Kroku 2)
+    const btnP1 = document.getElementById('btn-win-p1');
+    const btnP2 = document.getElementById('btn-win-p2');
+
+    // Upewniamy się, że przyciski istnieją (zabezpieczenie)
+    if (btnP1 && btnP2) {
+        // Resetujemy kolory przycisków do szarego (startowego)
+        btnP1.className = 'btn btn-outline-secondary btn-lg p-4';
+        btnP2.className = 'btn btn-outline-secondary btn-lg p-4';
+
+        // Logika sugestii: Podświetlamy tego, kto ma więcej punktów
+        if (p1Score > p2Score) {
+            btnP1.classList.remove('btn-outline-secondary');
+            btnP1.classList.add('btn-success'); // Zielony dla P1
+        } else if (p2Score > p1Score) {
+            btnP2.classList.remove('btn-outline-secondary');
+            btnP2.classList.add('btn-success'); // Zielony dla P2
+        }
+        // Jeśli jest remis (0-0 lub po równo), oba zostają szare
+    }
+
+    // 4. POKAZUJEMY modal (ważne: 'show', bo chcemy go zobaczyć)
+    $('#endFrameModal').modal('show');
 }
 
 function resetGame() {
@@ -331,7 +365,7 @@ function resetGame() {
     resetScores();
     activePlayer = null;
     isFreeBall = false;
-    lastShowWasFreeBall = false;
+    lastShotWasFreeBall = false;
 
     document.querySelectorAll("h4").forEach(header => {
         header.innerHTML = header.innerHTML.replace(" 🔴", "");
@@ -862,6 +896,88 @@ function resetPointsOnTable() {
     const pointsOnTableElement = document.getElementById("points-on-table");
     if (pointsOnTableElement) {
         pointsOnTableElement.textContent = 147;
+    }
+}
+
+// KROK 1: Wybieramy zwycięzcę, ale jeszcze nie zatwierdzamy
+function confirmFrameWinner(winnerId) {
+    // Zapisujemy ID zwycięzcy "na później"
+    pendingWinnerId = winnerId;
+
+    // 1. Zamykamy pierwszy modal (Wybór)
+    $('#endFrameModal').modal('hide');
+
+    // 2. Ustawiamy tekst w drugim modalu (Potwierdzenie)
+    const playerNameSpan = document.getElementById('confirmation-player-name');
+    if (playerNameSpan) {
+        // Tu możesz w przyszłości pobierać prawdziwe imiona, na razie "Player X"
+        playerNameSpan.textContent = `Player ${winnerId}`;
+    }
+
+    // 3. Otwieramy drugi modal (Are you sure?)
+    $('#confirmWinnerModal').modal('show');
+}
+
+// KROK 2: Ostateczne zatwierdzenie (podpięte pod "Yes" w drugim modalu)
+function finalizeFrameEnd() {
+    // Zamykamy modal potwierdzenia
+    $('#confirmWinnerModal').modal('hide');
+
+    // Sprawdzamy, czy mamy zapisanego zwycięzcę
+    if (pendingWinnerId === null) return;
+
+    const winnerId = pendingWinnerId;
+
+    // --- TUTAJ DZIEJE SIĘ PRAWIDZIWA MAGIA (To co było wcześniej) ---
+
+    // 1. Czyścimy historię Undo/Redo (BO TO NOWA PARTIA)
+    undoStack = [];
+    redoStack = [];
+
+    // 2. Aktualizujemy wynik framów w HTML
+    const winnerFrameInput = document.getElementById(`player${winnerId}-frames`);
+
+    if (winnerFrameInput) {
+        let currentFrames = parseInt(winnerFrameInput.value, 10);
+        if (isNaN(currentFrames)) currentFrames = 0;
+
+        currentFrames++;
+        winnerFrameInput.value = currentFrames;
+
+        checkMatchWinner(winnerId, currentFrames);
+    }
+
+    // 3. Resetujemy stół do nowej partii
+    resetGame();
+
+    // 4. Zerujemy czas
+    elapsedSeconds = 0;
+    const timerDisplay = document.getElementById("match-timer");
+    if (timerDisplay) {
+        timerDisplay.textContent = (typeof formatTime === 'function') ? formatTime(elapsedSeconds) : "00:00:00";
+    }
+
+    // Resetujemy zmienną tymczasową
+    pendingWinnerId = null;
+}
+
+function checkMatchWinner(winnerId, currentFrames) {
+    const totalFramesInput = document.getElementById('total-frames');
+    if (!totalFramesInput) return;
+
+    // Czyścimy tekst z nawiasów i spacji "( 7 )" -> "7"
+    let totalFramesText = totalFramesInput.value.replace('(', '').replace(')', '').trim();
+    const totalFrames = parseInt(totalFramesText, 10);
+
+    if (!isNaN(totalFrames)) {
+        // Obliczamy ile trzeba wygrać (Best of X)
+        const framesNeededToWin = Math.ceil(totalFrames / 2);
+
+        if (currentFrames >= framesNeededToWin) {
+            setTimeout(() => {
+                alert(`MATCH OVER! Player ${winnerId} wins the match! 🏆`);
+            }, 300);
+        }
     }
 }
 
