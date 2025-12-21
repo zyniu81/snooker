@@ -918,66 +918,87 @@ function confirmFrameWinner(winnerId) {
     $('#confirmWinnerModal').modal('show');
 }
 
-// KROK 2: Ostateczne zatwierdzenie (podpięte pod "Yes" w drugim modalu)
 function finalizeFrameEnd() {
-    // Zamykamy modal potwierdzenia
     $('#confirmWinnerModal').modal('hide');
 
-    // Sprawdzamy, czy mamy zapisanego zwycięzcę
     if (pendingWinnerId === null) return;
 
-    const winnerId = pendingWinnerId;
+    const winnerPosition = pendingWinnerId; // To jest 1 lub 2 (pozycja przy stole)
 
-    // --- TUTAJ DZIEJE SIĘ PRAWIDZIWA MAGIA (To co było wcześniej) ---
+    // Pobieramy punkty
+    const p1ScoreInput = document.querySelector(`.player-score[data-player="1"]`);
+    const p2ScoreInput = document.querySelector(`.player-score[data-player="2"]`);
+    const p1Score = parseInt(p1ScoreInput ? p1ScoreInput.value : 0, 10);
+    const p2Score = parseInt(p2ScoreInput ? p2ScoreInput.value : 0, 10);
 
-    // 1. Czyścimy historię Undo/Redo (BO TO NOWA PARTIA)
+    // --- NOWOŚĆ: Pobieramy czas ze stopera ---
+    // Zmienna elapsedSeconds powinna być dostępna globalnie w Twoim skrypcie
+    const duration = (typeof elapsedSeconds !== 'undefined') ? elapsedSeconds : 0;
+    // -----------------------------------------
+
+    // --- WYSYŁANIE DO BAZY ---
+    fetch('/save_frame_result/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            // Jeśli będzie błąd CSRF, odkomentuj poniższą linię i dodaj funkcję getCookie (standard Django)
+            // 'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            match_id: matchId,
+            // KLUCZOWE: Zamieniamy pozycję (1/2) na prawdziwe ID gracza z bazy
+            winner_id: (winnerPosition == 1) ? player1Id : player2Id,
+            p1_score: p1Score,
+            p2_score: p2Score,
+            duration: duration
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            console.log("Frame saved successfully!");
+
+            // 1. Aktualizujemy wynik framów w HTML (wizualnie)
+            // Tutaj używamy winnerPosition (1 lub 2), bo HTML opiera się na pozycjach
+            updateVisualsAndReset(winnerPosition);
+
+            // 2. Sprawdzamy co odpowiedział serwer - czy to koniec meczu?
+            if (data.match_over) {
+                setTimeout(() => {
+                    alert(`MATCH OVER! Winner: ${data.match_winner} 🏆`);
+                    // Tutaj w przyszłości zrobisz przekierowanie:
+                    // window.location.href = `/match/${matchId}/summary/`;
+                }, 500);
+            }
+        } else {
+            alert("Error saving frame: " + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert("Server communication error. Check console.");
+    });
+
+    // Czyścimy zmienną
+    pendingWinnerId = null;
+}
+
+// Funkcja pomocnicza do czyszczenia stołu (stary kod przeniesiony tutaj)
+function updateVisualsAndReset(winnerPosition) {
     undoStack = [];
     redoStack = [];
 
-    // 2. Aktualizujemy wynik framów w HTML
-    const winnerFrameInput = document.getElementById(`player${winnerId}-frames`);
-
+    const winnerFrameInput = document.getElementById(`player${winnerPosition}-frames`);
     if (winnerFrameInput) {
-        let currentFrames = parseInt(winnerFrameInput.value, 10);
-        if (isNaN(currentFrames)) currentFrames = 0;
-
-        currentFrames++;
-        winnerFrameInput.value = currentFrames;
-
-        checkMatchWinner(winnerId, currentFrames);
+        let currentFrames = parseInt(winnerFrameInput.value, 10) || 0;
+        winnerFrameInput.value = currentFrames + 1;
     }
 
-    // 3. Resetujemy stół do nowej partii
     resetGame();
-
-    // 4. Zerujemy czas
     elapsedSeconds = 0;
     const timerDisplay = document.getElementById("match-timer");
     if (timerDisplay) {
         timerDisplay.textContent = (typeof formatTime === 'function') ? formatTime(elapsedSeconds) : "00:00:00";
-    }
-
-    // Resetujemy zmienną tymczasową
-    pendingWinnerId = null;
-}
-
-function checkMatchWinner(winnerId, currentFrames) {
-    const totalFramesInput = document.getElementById('total-frames');
-    if (!totalFramesInput) return;
-
-    // Czyścimy tekst z nawiasów i spacji "( 7 )" -> "7"
-    let totalFramesText = totalFramesInput.value.replace('(', '').replace(')', '').trim();
-    const totalFrames = parseInt(totalFramesText, 10);
-
-    if (!isNaN(totalFrames)) {
-        // Obliczamy ile trzeba wygrać (Best of X)
-        const framesNeededToWin = Math.ceil(totalFrames / 2);
-
-        if (currentFrames >= framesNeededToWin) {
-            setTimeout(() => {
-                alert(`MATCH OVER! Player ${winnerId} wins the match! 🏆`);
-            }, 300);
-        }
     }
 }
 

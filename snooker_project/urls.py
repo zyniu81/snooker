@@ -66,4 +66,5 @@ urlpatterns = [
     path('matches/temporary/create/', views.create_temporary_match, name='create_temporary_match'),
     path('update_game/', views.update_game_data, name='update-game-data'),
     path('set_active_player/', views.set_active_player, name='set_active_player'),
+    path('save_frame_result/', views.save_frame_result, name='save_frame_result'),
 ]

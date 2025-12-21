@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
+from datetime import timedelta
 
 import os
 from openai import OpenAI
@@ -219,13 +220,38 @@ class MatchDeleteView(DeleteView):
 
 def start_game(request, pk):
     match = get_object_or_404(Match, pk=pk)
-    players = match.players.all()
 
-    frame_results = Frame.objects.filter(match_player__match=match).values('winner').annotate(frames_won=Count('winner'))
+    # 1. Pobieramy graczy (To co naprawiliśmy wcześniej)
+    match_players = MatchPlayer.objects.filter(match=match).order_by('position')
+
+    players_list = [mp.player for mp in match_players]
+    if not players_list:
+        players_list = match.players.all()
+
+    # --- NOWOŚĆ: AUTO-CREATE FRAME 1 ---
+    # Sprawdzamy, czy ten mecz ma już jakieś framy
+    # Używamy filter na match_players, bo Frame jest podpięty pod MatchPlayer
+    existing_frames = Frame.objects.filter(match_player__in=match_players)
+
+    if not existing_frames.exists() and match_players.exists():
+        # Jeśli nie ma framów, tworzymy Frame nr 1
+        Frame.objects.create(
+            match_player=match_players.first(),  # Przypisujemy do pierwszego gracza (techniczny wymóg bazy)
+            frame_number=1,
+            points_scored_player1=0,
+            points_scored_player2=0,
+            active_player=players_list[0] if players_list else None
+        )
+        print(f"Utworzono Frame 1 dla meczu {match.id}")
+    # -----------------------------------
+
+    # 2. Reszta kodu bez zmian (liczenie statystyk)
+    frame_results = Frame.objects.filter(match_player__match=match).values('winner').annotate(
+        frames_won=Count('winner'))
     frames_won = {result['winner']: result['frames_won'] for result in frame_results if result['winner']}
 
     player_results = []
-    for player in players:
+    for player in players_list:
         player_results.append({
             'player': player,
             'frames_won': frames_won.get(player.id, 0)
@@ -236,6 +262,8 @@ def start_game(request, pk):
         'players': player_results,
         'pk': pk,
         'number_of_frames': match.number_of_frames,
+        # Możemy przekazać ID obecnego frama, jeśli potrzebne
+        'current_frame': existing_frames.last() if existing_frames.exists() else None
     }
 
     return render(request, 'start_game.html', context)
@@ -619,3 +647,118 @@ def set_active_player(request):
         return JsonResponse({'status': 'success', 'active_player': player_id})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
+
+
+@csrf_exempt
+@require_POST
+def save_frame_result(request):
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        match_id = data.get('match_id')
+        winner_id = data.get('winner_id')
+        p1_score = data.get('p1_score')
+        p2_score = data.get('p2_score')
+        # Pobieramy czas (w sekundach), domyślnie 0
+        duration_seconds = data.get('duration', 0)
+
+        if not all([match_id, winner_id, p1_score is not None, p2_score is not None]):
+            return JsonResponse({'status': 'error', 'message': 'Missing data fields'})
+
+        match = get_object_or_404(Match, pk=match_id)
+        winner = get_object_or_404(Player, pk=winner_id)
+
+        # 1. Próbujemy pobrać graczy z tabeli łączącej
+        match_players = MatchPlayer.objects.filter(match=match).order_by('position')
+
+        # --- SEKCJA AUTO-NAPRAWY BRAKUJĄCYCH GRACZY (Dla Meczów Tymczasowych) ---
+        if not match_players.exists():
+            print(f"Brak MatchPlayer dla meczu {match.id}. Próba naprawy z pól temp...")
+
+            p1_temp = match.temp_player1
+            p2_temp = match.temp_player2
+
+            if not p1_temp and match.players.exists():
+                all_players = list(match.players.all())
+                if len(all_players) >= 2:
+                    p1_temp = all_players[0]
+                    p2_temp = all_players[1]
+
+            if p1_temp and p2_temp:
+                MatchPlayer.objects.create(match=match, player=p1_temp, position=1)
+                MatchPlayer.objects.create(match=match, player=p2_temp, position=2)
+                match_players = MatchPlayer.objects.filter(match=match).order_by('position')
+                print("Naprawiono! Utworzono obiekty MatchPlayer.")
+            else:
+                return JsonResponse({'status': 'error',
+                                     'message': 'CRITICAL: No players found in MatchPlayer table or Match temp fields!'})
+        # -------------------------------------------------------------------------
+
+        # 2. Szukamy ostatniego frama
+        last_frame = Frame.objects.filter(match_player__in=match_players).order_by('-frame_number').first()
+
+        # --- SEKCJA RATUNKOWA FRAMA: Jeśli nie ma frama, tworzymy go TERAZ ---
+        if not last_frame:
+            print("Brak aktywnego frama - tworzenie awaryjne Frame 1")
+            last_frame = Frame.objects.create(
+                match_player=match_players.first(),
+                frame_number=1,
+                points_scored_player1=0,
+                points_scored_player2=0,
+                active_player=match_players.first().player
+            )
+        # ---------------------------------------------------------------
+
+        # 3. Zapisz wyniki
+        last_frame.points_scored_player1 = p1_score
+        last_frame.points_scored_player2 = p2_score
+        last_frame.winner = winner
+
+        # --- ZAPIS CZASU GRY ---
+        if duration_seconds > 0:
+            last_frame.time_duration = timedelta(seconds=duration_seconds)
+        # -----------------------
+
+        if last_frame.break_points_player1:
+            last_frame.max_break_player1 = max(last_frame.break_points_player1)
+        if last_frame.break_points_player2:
+            last_frame.max_break_player2 = max(last_frame.break_points_player2)
+
+        last_frame.save()
+
+        # 4. Sprawdź czy mecz się skończył
+        frames_needed = (match.number_of_frames // 2) + 1
+
+        p1_mp = match_players.filter(position=1).first()
+        if not p1_mp: p1_mp = match_players.first()
+        p1_obj = p1_mp.player
+
+        p1_wins = Frame.objects.filter(match_player__in=match_players, winner=p1_obj).count()
+        total_frames_played = Frame.objects.filter(match_player__in=match_players, winner__isnull=False).count()
+        p2_wins = total_frames_played - p1_wins
+
+        match_over = False
+        winner_name = str(winner)
+
+        if p1_wins >= frames_needed or p2_wins >= frames_needed:
+            match_over = True
+        else:
+            # TWORZYMY NOWY FRAME
+            new_frame_number = last_frame.frame_number + 1
+            Frame.objects.create(
+                match_player=match_players.first(),
+                frame_number=new_frame_number,
+                points_scored_player1=0,
+                points_scored_player2=0
+            )
+
+        return JsonResponse({
+            'status': 'success',
+            'match_over': match_over,
+            'match_winner': winner_name if match_over else None
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
