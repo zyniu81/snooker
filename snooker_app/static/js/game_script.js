@@ -17,6 +17,33 @@ let currentBreak = 0;
 let isFreeBall = false;
 let lastShotWasFreeBall = false;
 let pendingWinnerId = null; // Tymczasowa zmienna do przechowywania wybranego zwycięzcy
+// --- ZMIENNE DO STATYSTYK ---
+let p1Fouls = 0;        // Liczba fauli gracza 1
+let p2Fouls = 0;        // Liczba fauli gracza 2
+let p1FoulPoints = 0;   // Punkty oddane przez gracza 1
+let p2FoulPoints = 0;   // Punkty oddane przez gracza 2
+
+let p1Shots = 0;   // Ile razy podszedł do uderzenia (Total Shots)
+let p1Misses = 0;  // Ile razy spudłował
+let p1Pots = 0;    // Ile bil wbił
+
+let p2Shots = 0;
+let p2Misses = 0;
+let p2Pots = 0;
+
+let p1Safeties = 0;         // Wszystkie próby odstawnych
+let p1SuccessfulSafeties = 0; // Tylko te skuteczne (gdy przeciwnik nie wbił)
+
+let p2Safeties = 0;
+let p2SuccessfulSafeties = 0;
+
+// PAMIĘĆ (State)
+let pendingSafetyCheck = false; // Czy czekamy na ocenę odstawnej?
+let safetyPlayerId = null;      // Kto zagrał tę odstawną (1 lub 2)?
+
+// HISTORIA BREAKÓW (Tablice)
+let p1BreaksHistory = [];
+let p2BreaksHistory = [];
 
 
 function recordAction(action) {
@@ -26,20 +53,34 @@ function recordAction(action) {
         pointsOnTable: parseInt(document.getElementById("points-on-table").textContent, 10),
         redBallCount: parseInt(document.getElementById("red-ball-count").textContent, 10),
         lastPottedRed: gameState.lastPottedRed,
-        redBallsPottedThisTurn: gameState.redBallsPottedThisTurn
+        redBallsPottedThisTurn: gameState.redBallsPottedThisTurn,
+
+        //--- ZAPISUJEMY STATYSTYKI ---
+        statsSnapshot: getStatsSnapshot()
     };
 
     console.log(actionWithState);
     undoStack.push(actionWithState);
     redoStack = [];
+
+    updateActionLogUI();
 }
 
 function undo() {
     if (undoStack.length === 0) return;
 
     const lastAction = undoStack.pop();
+
+    // --- Przygotowanie danych dla REDO ---
+    lastAction.redoStatsSnapshot = getStatsSnapshot();
+
     console.log("Undoing action:", lastAction);
     redoStack.push(lastAction);
+
+    // --- Przywracanie statystyk ---
+    if (lastAction.statsSnapshot) {
+        restoreStatsSnapshot(lastAction.statsSnapshot);
+    }
 
     if (lastAction.type === "updateScore") {
         currentBreak = lastAction.previousBreak;
@@ -158,6 +199,8 @@ function undo() {
 
             break;
     }
+
+    updateActionLogUI();
 }
 
 function redo() {
@@ -166,6 +209,11 @@ function redo() {
     const lastUndone = redoStack.pop();
     console.log("Redoing action:", lastUndone);
     undoStack.push(lastUndone);
+
+    // --- Przywracanie statystyk dla REDO ---
+    if (lastUndone.redoStatsSnapshot) {
+        restoreStatsSnapshot(lastUndone.redoStatsSnapshot);
+    }
 
     if (lastUndone.type === "updateScore") {
         currentBreak = lastUndone.newBreak;
@@ -273,6 +321,94 @@ function redo() {
             }
             break;
     }
+
+    updateActionLogUI();
+}
+
+// --- ACTION LOG FUNCTIONS (HISTORY UI) ---
+function getActionDescription(action) {
+    let playerPrefix = "";
+    // Check which player performed the action
+    if (action.playerId) {
+        playerPrefix = `<span class="badge bg-${action.playerId === 1 ? 'primary' : 'warning'} me-2">P${action.playerId}</span>`;
+    } else if (action.type === 'switchActivePlayer' && action.previousPlayerId) {
+        // Info badge for player switch
+        playerPrefix = `<span class="badge bg-secondary me-2">Info</span>`;
+    }
+
+    switch (action.type) {
+        case 'updateScore':
+            const points = action.newScore - action.previousScore;
+            let ballName = "Ball";
+
+            // Ustawiamy styl kółka (wielkość 0.9em dopasuje się do czcionki)
+            // margin-right: 5px robi mały odstęp od nazwy
+            const ballStyle = 'width: 0.9em; height: 0.9em; display: inline-block; vertical-align: middle; border: 1px solid rgba(0,0,0,0.2); margin-right: 5px;';
+
+            // Funkcja pomocnicza do tworzenia HTML-a kółka (tylko tutaj lokalnie)
+            const dot = (color) => `<span class="rounded-circle" style="background-color: ${color}; ${ballStyle}"></span>`;
+
+            // Przypisywanie bil
+            if (points === 1) ballName = dot('#dc3545') + " Red";      // Czerwona
+            else if (points === 2) ballName = dot('#ffc107') + " Yellow"; // Żółta
+            else if (points === 3) ballName = dot('#198754') + " Green";  // Zielona
+            else if (points === 4) ballName = dot('#795548') + " Brown";  // Brązowa
+            else if (points === 5) ballName = dot('#0d6efd') + " Blue";   // Niebieska
+            else if (points === 6) ballName = dot('#ff69b4') + " Pink";   // Różowa (HotPink)
+            else if (points === 7) ballName = dot('#212529') + " Black";  // Czarna
+
+            // Special case for Free Ball
+            if (action.wasFreeBall) ballName += " (Free Ball)";
+
+            return `${playerPrefix} <strong>${ballName}</strong> (+${points})`;
+
+        case 'foul':
+            const foulPts = action.newOpponentScore - action.previousOpponentScore;
+            // opponentId is the one receiving points, so the other one fouled
+            const foulerId = (action.opponentId === 1) ? 2 : 1;
+            const foulerBadge = `<span class="badge bg-${foulerId === 1 ? 'primary' : 'warning'} me-2">P${foulerId}</span>`;
+            return `${foulerBadge} ⚠️ <strong>FOUL</strong> (Gave ${foulPts} pts)`;
+
+        case 'updateActivePlayer':
+            return `${playerPrefix} 🔄 Switch Player`;
+
+        default:
+            // Attempt to detect Safety/Miss using stats snapshots (if available)
+            if (action.statsSnapshot && action.redoStatsSnapshot) {
+                if (action.redoStatsSnapshot.p1Misses > action.statsSnapshot.p1Misses ||
+                    action.redoStatsSnapshot.p2Misses > action.statsSnapshot.p2Misses) {
+                    return `${playerPrefix} ❌ Miss`;
+                }
+                if (action.redoStatsSnapshot.p1Safeties > action.statsSnapshot.p1Safeties ||
+                    action.redoStatsSnapshot.p2Safeties > action.statsSnapshot.p2Safeties) {
+                    return `${playerPrefix} 🛡️ Safety`;
+                }
+            }
+            return `${playerPrefix} Other action`;
+    }
+}
+
+function updateActionLogUI() {
+    const listElement = document.getElementById('actionLogList');
+    if (!listElement) return;
+
+    listElement.innerHTML = ''; // Czyścimy listę
+
+    // Bierzemy kopię undoStack
+    // slice(-10) bierze 10 ostatnich, reverse() odwraca kolejność (najnowsze na górze)
+    const recentActions = undoStack.slice(-10).reverse();
+
+    if (recentActions.length === 0) {
+        listElement.innerHTML = '<li class="list-group-item text-muted">Brak akcji w historii.</li>';
+        return;
+    }
+
+    recentActions.forEach(action => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex align-items-center';
+        li.innerHTML = getActionDescription(action);
+        listElement.appendChild(li);
+    });
 }
 
 function updateRedBallsUI(redBalls) {
@@ -362,6 +498,30 @@ function resetGame() {
     elapsedSeconds = 0;
     document.getElementById("match-timer").textContent = formatTime(elapsedSeconds);
 
+    // --- START NEW CODE ---
+    // Reset foul statistics for the new frame
+    p1Fouls = 0;
+    p2Fouls = 0;
+    p1FoulPoints = 0;
+    p2FoulPoints = 0;
+
+    p1Shots = 0;
+    p1Misses = 0;
+    p1Pots = 0;
+    p2Shots = 0;
+    p2Misses = 0;
+    p2Pots = 0;
+
+    p1Safeties = 0;
+    p1SuccessfulSafeties = 0;
+    p2Safeties = 0;
+    p2SuccessfulSafeties = 0;
+    pendingSafetyCheck = false;
+    safetyPlayerId = null;
+
+    p1BreaksHistory = [];
+    p2BreaksHistory = [];
+
     resetScores();
     activePlayer = null;
     isFreeBall = false;
@@ -381,6 +541,7 @@ function resetGame() {
     document.querySelectorAll('.btn, .rounded-circle').forEach(element => {
         element.style.display = "inline-block";
     });
+    updateActionLogUI();
 }
 
 function setActivePlayer(playerId) {
@@ -423,6 +584,21 @@ function updateScore(points, ballType) {
     if (activePlayer === null) {
         alert("Please select an active player first!");
         return;
+    }
+
+    // --- SPRAWDZAMY POPRZEDNIĄ ODSTAWNĄ ---
+    // Przekazujemy true, bo nastąpiło wbicie (czyli safety nieudane)
+    resolvePendingSafety(true);
+    // --------------------------------------
+
+    // --- START NEW CODE (Liczenie Wbić) ---
+    // Każde wywołanie updateScore to udane wbicie
+    if (activePlayer === 1) {
+        p1Shots++; // Oddał strzał
+        p1Pots++;  // I trafił
+    } else {
+        p2Shots++;
+        p2Pots++;
     }
 
     // --- 1. LOGIKA FREE BALL ---
@@ -529,6 +705,30 @@ function updateScore(points, ballType) {
     // --- 7. RESET TRYBU FREE BALL ---
     if (isFreeBall) {
         isFreeBall = false;
+    }
+}
+
+function resolvePendingSafety(opponentPottedBall) {
+    if (pendingSafetyCheck && safetyPlayerId !== null) {
+
+        // Logika: Jeśli przeciwnik NIE wbił bili (opponentPottedBall == false),
+        // to znaczy, że odstawna była SUKCESEM.
+
+        if (!opponentPottedBall) {
+            if (safetyPlayerId === 1) {
+                p1SuccessfulSafeties++;
+                console.log("Safety Resolution: Player 1 -> SUCCESS");
+            } else {
+                p2SuccessfulSafeties++;
+                console.log("Safety Resolution: Player 2 -> SUCCESS");
+            }
+        } else {
+            console.log("Safety Resolution: Player " + safetyPlayerId + " -> FAILED (Opponent potted)");
+        }
+
+        // Resetujemy pamięć
+        pendingSafetyCheck = false;
+        safetyPlayerId = null;
     }
 }
 
@@ -694,6 +894,20 @@ function miss() {
         return;
     }
 
+    // --- SPRAWDZAMY POPRZEDNIĄ ODSTAWNĄ ---
+    // Przekazujemy false, bo nie wbito bili (czyli safety udane)
+    resolvePendingSafety(false);
+    // --------------------------------------
+
+    // Liczenie Pudeł
+    if (activePlayer === 1) {
+        p1Shots++;  // Oddał strzał
+        p1Misses++; // Ale spudłował
+    } else {
+        p2Shots++;
+        p2Misses++;
+    }
+
     if (lastPottedRed) {
         updatePointsOnTable(7);
     }
@@ -709,6 +923,25 @@ function safetyShot() {
         return;
     }
 
+    // 1. Jeśli poprzednik robił safety, a ja też robię safety,
+    // to jego safety było DOBRE (bo nie dał mi wbić).
+    resolvePendingSafety(false);
+
+    // 2. Aktualizacja statystyk ogólnych
+    if (activePlayer === 1) {
+        p1Shots++;
+        p1Safeties++;
+    } else {
+        p2Shots++;
+        p2Safeties++;
+    }
+
+    // 3. USTAWIAMY FLAGĘ NA PRZYSZŁOŚĆ
+    // Teraz to moja odstawna będzie oceniana w następnym ruchu
+    pendingSafetyCheck = true;
+    safetyPlayerId = activePlayer;
+    console.log("Safety set by Player " + activePlayer + ". Waiting for opponent...");
+
     if (lastPottedRed) {
         updatePointsOnTable(7);
     }
@@ -723,6 +956,18 @@ function switchActivePlayer() {
         alert("No active player to switch!");
         return;
     }
+
+    // --- START NEW CODE (Zapis Breaka) ---
+    // Jeśli break był znaczący (>= 10), zapisujemy go do historii gracza
+    if (currentBreak >= 10) {
+        if (activePlayer === 1) {
+            p1BreaksHistory.push(currentBreak);
+        } else {
+            p2BreaksHistory.push(currentBreak);
+        }
+        console.log(`Break saved for Player ${activePlayer}: ${currentBreak}`);
+    }
+    // --- END NEW CODE ---
 
     lastPottedRed = false;
     redBallsPottedThisTurn = 0;
@@ -782,6 +1027,23 @@ document.getElementById('increaseRedBalls').addEventListener('click', () => {
 
 document.getElementById('confirmFoul').addEventListener('click', () => {
     if (foulPoints > 0 && nextPlayerId !== null) {
+
+        // --- SPRAWDZAMY POPRZEDNIĄ ODSTAWNĄ ---
+        // Faul przeciwnika to sukces odstawnej (wymuszenie błędu)
+        resolvePendingSafety(false);
+        // --------------------------------------
+
+        // --- START NEW CODE ---
+        // Update Foul Statistics
+        if (activePlayer === 1) {
+            p1Fouls++;
+            p1FoulPoints += foulPoints;
+        } else {
+            p2Fouls++;
+            p2FoulPoints += foulPoints;
+        }
+        // --- END NEW CODE ---
+
         const opponentId = activePlayer === 1 ? 2 : 1;
         const opponentScoreElement = document.querySelector(`.player-score[data-player="${opponentId}"]`);
         const previousOpponentScore = parseInt(opponentScoreElement.value || '0', 10);
@@ -936,6 +1198,17 @@ function finalizeFrameEnd() {
     const duration = (typeof elapsedSeconds !== 'undefined') ? elapsedSeconds : 0;
     // -----------------------------------------
 
+    // --- START NEW CODE (Dopisz ostatni break) ---
+    // Jeśli gra się kończy, a ktoś ma nabity break na liczniku, też go zapiszmy!
+    if (currentBreak >= 10 && activePlayer !== null) {
+        if (activePlayer === 1) {
+            p1BreaksHistory.push(currentBreak);
+        } else if (activePlayer === 2) {
+            p2BreaksHistory.push(currentBreak);
+        }
+    }
+    // --- END NEW CODE ---
+
     // --- WYSYŁANIE DO BAZY ---
     fetch('/save_frame_result/', {
         method: 'POST',
@@ -950,7 +1223,31 @@ function finalizeFrameEnd() {
             winner_id: (winnerPosition == 1) ? player1Id : player2Id,
             p1_score: p1Score,
             p2_score: p2Score,
-            duration: duration
+            duration: duration,
+            // --- START NEW CODE ---
+            p1_fouls: p1Fouls,
+            p2_fouls: p2Fouls,
+            p1_foul_pts: p1FoulPoints,
+            p2_foul_pts: p2FoulPoints,
+
+            p1_shots: p1Shots,
+            p1_misses: p1Misses,
+            p1_pots: p1Pots, // Potrzebne do wyliczenia %
+
+            p2_shots: p2Shots,
+            p2_misses: p2Misses,
+            p2_pots: p2Pots,
+
+            p1_safeties: p1Safeties,
+            p2_safeties: p2Safeties,
+
+            p1_safe_success_count: p1SuccessfulSafeties,
+            p2_safe_success_count: p2SuccessfulSafeties,
+
+            // --- NOWE: LISTY BREAKÓW ---
+            p1_breaks: p1BreaksHistory,
+            p2_breaks: p2BreaksHistory
+            // --- END NEW CODE ---
         })
     })
     .then(response => response.json())
@@ -1002,6 +1299,48 @@ function updateVisualsAndReset(winnerPosition) {
     }
 }
 
+// --- FUNKCJE POMOCNICZE DO UNDO/REDO STATYSTYK ---
+
+function getStatsSnapshot() {
+    return {
+        // Podstawowe liczniki
+        p1Fouls: p1Fouls, p2Fouls: p2Fouls,
+        p1FoulPoints: p1FoulPoints, p2FoulPoints: p2FoulPoints,
+        p1Shots: p1Shots, p2Shots: p2Shots,
+        p1Misses: p1Misses, p2Misses: p2Misses,
+        p1Pots: p1Pots, p2Pots: p2Pots,
+
+        // Safety
+        p1Safeties: p1Safeties, p2Safeties: p2Safeties,
+        p1SuccessfulSafeties: p1SuccessfulSafeties, p2SuccessfulSafeties: p2SuccessfulSafeties,
+        pendingSafetyCheck: pendingSafetyCheck,
+        safetyPlayerId: safetyPlayerId,
+
+        // Tablice breaków (ważne: robimy kopię przez [...])
+        p1BreaksHistory: [...p1BreaksHistory],
+        p2BreaksHistory: [...p2BreaksHistory]
+    };
+}
+
+function restoreStatsSnapshot(snapshot) {
+    if (!snapshot) return;
+
+    p1Fouls = snapshot.p1Fouls; p2Fouls = snapshot.p2Fouls;
+    p1FoulPoints = snapshot.p1FoulPoints; p2FoulPoints = snapshot.p2FoulPoints;
+    p1Shots = snapshot.p1Shots; p2Shots = snapshot.p2Shots;
+    p1Misses = snapshot.p1Misses; p2Misses = snapshot.p2Misses;
+    p1Pots = snapshot.p1Pots; p2Pots = snapshot.p2Pots;
+
+    p1Safeties = snapshot.p1Safeties; p2Safeties = snapshot.p2Safeties;
+    p1SuccessfulSafeties = snapshot.p1SuccessfulSafeties; p2SuccessfulSafeties = snapshot.p2SuccessfulSafeties;
+    pendingSafetyCheck = snapshot.pendingSafetyCheck;
+    safetyPlayerId = snapshot.safetyPlayerId;
+
+    // Przywracamy tablice
+    p1BreaksHistory = snapshot.p1BreaksHistory;
+    p2BreaksHistory = snapshot.p2BreaksHistory;
+}
+
 document.querySelectorAll('.set-active-player').forEach(button => {
     button.addEventListener('click', () => {
         const playerId = parseInt(button.dataset.player, 10);
@@ -1015,6 +1354,48 @@ document.getElementById('undoButton').addEventListener('click', () => {
 
 document.getElementById('redoButton').addEventListener('click', () => {
     redo();
+});
+
+/* =========================================
+   SIDEBAR HISTORY LOGIC (Dla Bootstrap 4)
+   ========================================= */
+document.addEventListener('DOMContentLoaded', () => {
+    const historyBtn = document.getElementById('history-btn');
+    const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+    const sidebar = document.getElementById('historySidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+
+    // Funkcja przełączająca widoczność
+    function toggleSidebar() {
+        if (sidebar && backdrop) {
+            sidebar.classList.toggle('active');
+            backdrop.classList.toggle('active');
+        }
+    }
+
+    // Otwieranie (kliknięcie w przycisk History w panelu)
+    if (historyBtn) {
+        historyBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleSidebar();
+        });
+    }
+
+    // Zamykanie (kliknięcie w przycisk Zamknij w panelu)
+    if (closeSidebarBtn) {
+        closeSidebarBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleSidebar();
+        });
+    }
+
+    // Zamykanie (kliknięcie w ciemne tło poza panelem)
+    if (backdrop) {
+        backdrop.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleSidebar();
+        });
+    }
 });
 
 resetBreak();

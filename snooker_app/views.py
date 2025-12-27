@@ -661,6 +661,30 @@ def save_frame_result(request):
         # Pobieramy czas (w sekundach), domyślnie 0
         duration_seconds = data.get('duration', 0)
 
+        p1_fouls = data.get('p1_fouls', 0)
+        p2_fouls = data.get('p2_fouls', 0)
+        p1_foul_pts = data.get('p1_foul_pts', 0)
+        p2_foul_pts = data.get('p2_foul_pts', 0)
+
+        p1_shots = data.get('p1_shots', 0)
+        p1_misses = data.get('p1_misses', 0)
+        p1_pots = data.get('p1_pots', 0)
+
+        p2_shots = data.get('p2_shots', 0)
+        p2_misses = data.get('p2_misses', 0)
+        p2_pots = data.get('p2_pots', 0)
+
+        # Odbieramy ilość prób odstawnych
+        p1_safeties = data.get('p1_safeties', 0)
+        p2_safeties = data.get('p2_safeties', 0)
+
+        # Odbieramy ilość UDANYCH odstawnych
+        p1_safe_succ = data.get('p1_safe_success_count', 0)
+        p2_safe_succ = data.get('p2_safe_success_count', 0)
+
+        p1_breaks_list = data.get('p1_breaks', [])
+        p2_breaks_list = data.get('p2_breaks', [])
+
         if not all([match_id, winner_id, p1_score is not None, p2_score is not None]):
             return JsonResponse({'status': 'error', 'message': 'Missing data fields'})
 
@@ -708,10 +732,49 @@ def save_frame_result(request):
             )
         # ---------------------------------------------------------------
 
+        # --- OBLICZANIE SKUTECZNOŚCI (Pot Success) ---
+        # Wzór: Wbite / (Wbite + Pudła). Ignorujemy Safety!
+
+        p1_attempts = p1_pots + p1_misses
+        p1_success_rate = 0.0
+        if p1_attempts > 0:
+            p1_success_rate = round((p1_pots / p1_attempts) * 100, 2)
+
+        p2_attempts = p2_pots + p2_misses
+        p2_success_rate = 0.0
+        if p2_attempts > 0:
+            p2_success_rate = round((p2_pots / p2_attempts) * 100, 2)
+        # ---------------------------------------------
+
         # 3. Zapisz wyniki
         last_frame.points_scored_player1 = p1_score
         last_frame.points_scored_player2 = p2_score
         last_frame.winner = winner
+
+        last_frame.player1_fouls = p1_fouls
+        last_frame.player2_fouls = p2_fouls
+        last_frame.foul_points_player1 = p1_foul_pts
+        last_frame.foul_points_player2 = p2_foul_pts
+
+        # --- ZAPIS SKUTECZNOŚCI I STRZAŁÓW ---
+        # Total shots = (Pots + Misses + Safety) -> Tak to wyliczył JS
+        last_frame.total_shots_player1 = p1_shots
+        last_frame.total_shots_player2 = p2_shots
+
+        last_frame.misses_player1 = p1_misses
+        last_frame.misses_player2 = p2_misses
+
+        last_frame.pot_success_percentage_player1 = p1_success_rate
+        last_frame.pot_success_percentage_player2 = p2_success_rate
+
+        # --- ZAPIS ODSTAWNYCH (SAFETY) ---
+        # Tu przypisujemy to, co odebraliśmy w punkcie 1
+        last_frame.safety_shot_player1 = p1_safeties
+        last_frame.safety_shot_player2 = p2_safeties
+
+        last_frame.successful_safety_shots_player1 = p1_safe_succ
+        last_frame.successful_safety_shots_player2 = p2_safe_succ
+        # ---------------------------------
 
         # --- ZAPIS CZASU GRY ---
         if duration_seconds > 0:
@@ -722,6 +785,19 @@ def save_frame_result(request):
             last_frame.max_break_player1 = max(last_frame.break_points_player1)
         if last_frame.break_points_player2:
             last_frame.max_break_player2 = max(last_frame.break_points_player2)
+
+        last_frame.break_points_player1 = p1_breaks_list
+        last_frame.break_points_player2 = p2_breaks_list
+
+        if p1_breaks_list:
+            last_frame.max_break_player1 = max(p1_breaks_list)
+        else:
+            last_frame.max_break_player1 = 0
+
+        if p2_breaks_list:
+            last_frame.max_break_player2 = max(p2_breaks_list)
+        else:
+            last_frame.max_break_player2 = 0
 
         last_frame.save()
 

@@ -1,6 +1,52 @@
 {% extends 'base.html' %}
 
 {% block content %}
+
+<style>
+    /* Pasek boczny (History Sidebar) */
+    .sidebar-panel {
+        position: fixed;
+        top: 0;
+        right: -320px; /* Domyślnie schowany poza ekranem */
+        width: 300px;
+        height: 100vh; /* Pełna wysokość ekranu */
+        background-color: #fff; /* Białe tło */
+        box-shadow: -2px 0 5px rgba(0,0,0,0.5); /* Cień rzucany w lewo */
+        z-index: 9999; /* Zawsze na samym wierzchu */
+        transition: right 0.3s ease-in-out; /* Płynna animacja wysuwania */
+        overflow-y: auto; /* Pasek przewijania, jak historia będzie długa */
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Klasa, która sprawia, że pasek wjeżdża na ekran */
+    .sidebar-panel.active {
+        right: 0;
+    }
+
+    /* Przyciemnione tło pod spodem (Backdrop) */
+    .sidebar-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.5); /* Półprzezroczysty czarny */
+        z-index: 9998; /* Pod panelem bocznym, ale nad resztą strony */
+        display: none; /* Domyślnie ukryte */
+    }
+
+    /* Pokazanie tła, gdy aktywne */
+    .sidebar-backdrop.active {
+        display: block;
+    }
+
+    /* Mały odstęp dla listy wewnątrz panelu */
+    .history-content {
+        padding: 15px;
+    }
+</style>
+
 {% load static %}
 
 <div class="container">
@@ -101,8 +147,8 @@
                 <button class="btn btn-outline-primary" id="redoButton" title="Redo last action">
                     <i class="bi bi-arrow-clockwise"></i> Redo
                 </button>
-                <button class="btn btn-outline-info" onclick="freeBall()" title="Declare Free Ball">
-                    <i class="bi bi-circle"></i> Free Ball
+                <button id="history-btn" class="btn btn-outline-secondary" title="Show Match History">
+                    <i class="bi bi-list-ul"></i> History
                 </button>
             </div>
         </div>
@@ -265,6 +311,25 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+<div id="historySidebar" class="sidebar-panel">
+    <div class="bg-dark text-white p-3 d-flex justify-content-between align-items-center">
+        <h5 class="m-0">Match History</h5>
+        <button id="closeSidebarBtn" class="btn btn-sm btn-outline-light">Close</button>
+    </div>
+
+    <div class="history-content">
+        <div class="alert alert-info small">
+            Last 10 actions (Newest on top).
+        </div>
+
+        <ul class="list-group list-group-flush" id="actionLogList">
+             <li class="list-group-item text-muted">No actions yet...</li>
+        </ul>
     </div>
 </div>
 
