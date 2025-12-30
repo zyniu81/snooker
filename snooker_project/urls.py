@@ -67,4 +67,5 @@ urlpatterns = [
     path('update_game/', views.update_game_data, name='update-game-data'),
     path('set_active_player/', views.set_active_player, name='set_active_player'),
     path('save_frame_result/', views.save_frame_result, name='save_frame_result'),
+    path('update_player_stats/', views.update_player_stats, name='update_player_stats'),
 ]

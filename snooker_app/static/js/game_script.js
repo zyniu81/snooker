@@ -45,8 +45,18 @@ let safetyPlayerId = null;      // Kto zagrał tę odstawną (1 lub 2)?
 let p1BreaksHistory = [];
 let p2BreaksHistory = [];
 
+// --- AST TRACKING ---
+let turnStartTime = Date.now();
+let currentTurnShots = 0; // Counts shots ONLY for the current visit to the table
+
 
 function recordAction(action) {
+
+    // --- AST LOGIC: COUNT SHOTS ---
+    if (action.type !== 'switchActivePlayer' && action.type !== 'undo' && action.type !== 'redo') {
+        currentTurnShots++;
+    }
+
     const actionWithState = {
         ...action,
         ballsVisibility: getBallsVisibilityState(),
@@ -957,7 +967,49 @@ function switchActivePlayer() {
         return;
     }
 
-    // --- START NEW CODE (Zapis Breaka) ---
+    // --- 1. AST LOGIC: CALCULATE & SEND DATA ---
+    const now = Date.now();
+    const timeSpentSeconds = (now - turnStartTime) / 1000;
+
+    // Zapamiętujemy, KTO schodzi ze stołu (to jego statystyki zapisujemy)
+    const playerLeaving = activePlayer;
+
+    // Wysyłamy do bazy tylko, jeśli faktycznie coś grał (czas > 1s lub oddał strzał)
+    if (timeSpentSeconds > 1 || currentTurnShots > 0) {
+
+        // Pobieramy ID frame'a z HTML (upewnij się, że masz to w HTML-u, jak ustalaliśmy wcześniej)
+        const frameContainer = document.querySelector('.container[data-frame-id]');
+
+        if (frameContainer) {
+            const frameId = frameContainer.dataset.frameId;
+
+            fetch('/update_player_stats/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    frame_id: frameId,
+                    player_id: playerLeaving,
+                    added_shots: currentTurnShots,
+                    added_time_seconds: timeSpentSeconds
+                })
+            })
+            .then(response => response.json())
+            .then(data => console.log('AST Stats saved:', data))
+            .catch(error => console.error('Error saving stats:', error));
+        } else {
+            console.warn("Frame ID not found via data-frame-id attribute");
+        }
+    }
+
+    // --- 2. AST LOGIC: RESET FOR NEXT PLAYER ---
+    turnStartTime = Date.now(); // Resetujemy stoper dla nowego gracza
+    currentTurnShots = 0;       // Resetujemy licznik uderzeń dla nowego gracza
+
+
+    // --- 3. EXISTING LOGIC (BREAKS HISTORY) ---
     // Jeśli break był znaczący (>= 10), zapisujemy go do historii gracza
     if (currentBreak >= 10) {
         if (activePlayer === 1) {
@@ -967,13 +1019,14 @@ function switchActivePlayer() {
         }
         console.log(`Break saved for Player ${activePlayer}: ${currentBreak}`);
     }
-    // --- END NEW CODE ---
 
+    // --- 4. EXISTING LOGIC (RESET TURN FLAGS) ---
     lastPottedRed = false;
     redBallsPottedThisTurn = 0;
     lastShowWasFreeBall = false;
     resetBreak();
 
+    // --- 5. SWITCH PLAYER ---
     activePlayer = activePlayer === 1 ? 2 : 1;
     updateActivePlayerUI(activePlayer);
 }
@@ -990,6 +1043,22 @@ function showFoulModal() {
     document.querySelectorAll('.foul-points').forEach(button => button.classList.remove('active'));
     document.querySelectorAll('.next-player').forEach(button => button.classList.remove('active'));
     document.getElementById('redBallAdjustment').value = 0;
+}
+
+// Helper function for CSRF token (if you don't have it already)
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
 }
 
 document.querySelectorAll('.foul-points').forEach(button => {

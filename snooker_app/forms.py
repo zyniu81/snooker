@@ -48,12 +48,6 @@ class VenueForm(forms.ModelForm):
         fields = ['name', 'address', 'capacity']
 
 
-# =======================================================
-# =======================================================
-# =======================================================
-# =======================================================
-
-
 class MatchForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         self.request = kwargs.pop('request', None)
@@ -92,6 +86,24 @@ class MatchForm(forms.ModelForm):
         if date < timezone.now().date():
             raise ValidationError("The date cannot be in the past.")
         return date
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        # Pobieramy wartości z formularza
+        players = cleaned_data.get('players')
+        create_temp = cleaned_data.get('create_temporary_players')
+
+        # LOGIKA WALIDACJI:
+        # Jeśli NIE zaznaczono "Create temporary players"...
+        if not create_temp:
+            # ...i lista graczy jest pusta LUB wybrano mniej niż 2 graczy
+            if not players or players.count() < 2:
+                raise ValidationError(
+                    "You must select at least two players OR check 'Create temporary players'."
+                )
+
+        return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)

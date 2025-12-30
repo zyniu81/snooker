@@ -221,31 +221,51 @@ class MatchDeleteView(DeleteView):
 def start_game(request, pk):
     match = get_object_or_404(Match, pk=pk)
 
-    # 1. Pobieramy graczy (To co naprawiliśmy wcześniej)
+    # 1. Pobieramy graczy (MatchPlayer)
     match_players = MatchPlayer.objects.filter(match=match).order_by('position')
 
-    players_list = [mp.player for mp in match_players]
-    if not players_list:
-        players_list = match.players.all()
+    # --- AUTO-NAPRAWA (Jeśli brakuje MatchPlayer w bazie) ---
+    # To jest kluczowy fragment, który naprawi Twój błąd
+    if not match_players.exists() and match.players.exists():
+        print(f"⚠️ Wykryto brak obiektów MatchPlayer dla meczu {pk}. Tworzę je automatycznie...")
 
-    # --- NOWOŚĆ: AUTO-CREATE FRAME 1 ---
-    # Sprawdzamy, czy ten mecz ma już jakieś framy
-    # Używamy filter na match_players, bo Frame jest podpięty pod MatchPlayer
+        for index, player in enumerate(match.players.all()):
+            # Tworzymy brakujący obiekt MatchPlayer
+            MatchPlayer.objects.create(
+                match=match,
+                player=player,
+                position=index + 1  # Pozycja 1, 2...
+            )
+
+        # Pobieramy ich ponownie po utworzeniu, żeby lista nie była pusta
+        match_players = MatchPlayer.objects.filter(match=match).order_by('position')
+        print(f"✅ Naprawiono. Utworzono {match_players.count()} wpisów MatchPlayer.")
+    # -------------------------------------------------------
+
+    players_list = [mp.player for mp in match_players]
+
+    # --- LOGIKA FRAMÓW ---
     existing_frames = Frame.objects.filter(match_player__in=match_players)
 
+    # Inicjalizacja zmiennej
+    active_frame_object = None
+
     if not existing_frames.exists() and match_players.exists():
-        # Jeśli nie ma framów, tworzymy Frame nr 1
-        Frame.objects.create(
-            match_player=match_players.first(),  # Przypisujemy do pierwszego gracza (techniczny wymóg bazy)
+        # SCENARIUSZ A: Tworzymy nowy frame (Teraz zadziała, bo match_players na pewno są!)
+        active_frame_object = Frame.objects.create(
+            match_player=match_players.first(),
             frame_number=1,
             points_scored_player1=0,
             points_scored_player2=0,
             active_player=players_list[0] if players_list else None
         )
         print(f"Utworzono Frame 1 dla meczu {match.id}")
-    # -----------------------------------
+    else:
+        # SCENARIUSZ B: Frame już istnieje, bierzemy ostatni
+        active_frame_object = existing_frames.last()
 
-    # 2. Reszta kodu bez zmian (liczenie statystyk)
+    # -------------------------------------------------------
+    # 2. Statystyki wygranych (bez zmian)
     frame_results = Frame.objects.filter(match_player__match=match).values('winner').annotate(
         frames_won=Count('winner'))
     frames_won = {result['winner']: result['frames_won'] for result in frame_results if result['winner']}
@@ -262,8 +282,8 @@ def start_game(request, pk):
         'players': player_results,
         'pk': pk,
         'number_of_frames': match.number_of_frames,
-        # Możemy przekazać ID obecnego frama, jeśli potrzebne
-        'current_frame': existing_frames.last() if existing_frames.exists() else None
+        # Przekazujemy naprawiony obiekt frame do HTML
+        'frame': active_frame_object
     }
 
     return render(request, 'start_game.html', context)
@@ -837,4 +857,50 @@ def save_frame_result(request):
         import traceback
         traceback.print_exc()
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@require_POST
+def update_player_stats(request):
+    """
+    Updates player statistics (shots count and time spent) when they leave the table.
+    Expects JSON data: { frame_id, player_id, added_shots, added_time_seconds }
+    """
+    try:
+        data = json.loads(request.body)
+        frame_id = data.get('frame_id')
+        player_id = data.get('player_id')
+        added_shots = int(data.get('added_shots', 0))
+        added_time = float(data.get('added_time_seconds', 0.0))
+
+        frame = get_object_or_404(Frame, id=frame_id)
+
+        # Create a timedelta object from the seconds received
+        time_delta = timedelta(seconds=added_time)
+
+        if player_id == 1:
+            # Update Shots
+            frame.total_shots_player1 += added_shots
+
+            # Update Time (Handle None case for the first update)
+            if frame.time_shots_player1 is None:
+                frame.time_shots_player1 = time_delta
+            else:
+                frame.time_shots_player1 += time_delta
+
+        elif player_id == 2:
+            # Update Shots
+            frame.total_shots_player2 += added_shots
+
+            # Update Time
+            if frame.time_shots_player2 is None:
+                frame.time_shots_player2 = time_delta
+            else:
+                frame.time_shots_player2 += time_delta
+
+        frame.save()
+
+        return JsonResponse({'status': 'success', 'message': 'Stats updated'})
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 

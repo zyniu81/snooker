@@ -1,11 +1,23 @@
 {% extends 'base.html' %}
-{% block content%}
-<div class="container">
+
+{% block content %}
+<div class="container mt-4">
     <h2>Create Temporary Match</h2>
+
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger shadow-sm" role="alert">
+            <h4 class="alert-heading"><i class="fas fa-exclamation-triangle"></i>Action Required</h4>
+            {% for error in form.non_field_errors %}
+                <p class="mb-0 font-weight-bold">{{ error }}</p>
+            {% endfor %}
+        </div>
+    {% endif %}
     <form method="post">
         {% csrf_token %}
+
         {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Create Temporary Match</button>
+
+        <button type="submit" class="btn btn-primary mt-2">Create Temporary Match</button>
     </form>
 </div>
 {% endblock %}

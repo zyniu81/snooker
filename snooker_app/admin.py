@@ -5,7 +5,6 @@ from .models import (
     GroupStage, KnockoutStage, Achievement
 )
 
-# Rejestrujemy modele, żeby były widoczne w panelu
 admin.site.register(Player)
 admin.site.register(Match)
 admin.site.register(Frame)
