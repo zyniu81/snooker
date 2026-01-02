@@ -1,9 +1,9 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from django.http import request
 from django.utils import timezone
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
+from django.db.models import Q  # <--- Potrzebne do filtrowania (Moje LUB Publiczne)
 
 from .models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage
 
@@ -12,28 +12,24 @@ class PlayerForm(forms.ModelForm):
     class Meta:
         model = Player
         fields = ['first_name', 'last_name', 'nickname']
+        # Usunęliśmy 'owner' i 'is_public', ustawimy je w widoku
 
-        def clean(self):
-            cleaned_data = super().clean()
-            first_name = cleaned_data.get('first_name')
-            last_name = cleaned_data.get('last_name')
-            nickname = cleaned_data.get('nickname')
+    def clean(self):
+        cleaned_data = super().clean()
+        first_name = cleaned_data.get('first_name')
+        last_name = cleaned_data.get('last_name')
+        nickname = cleaned_data.get('nickname')
 
-            if not (first_name or last_name or nickname):
-                pass
-
-            return cleaned_data
+        # Logika walidacji (opcjonalna, pusta w Twoim kodzie, ale zostawiam)
+        if not (first_name or last_name or nickname):
+            pass
+        return cleaned_data
 
 
 class PlayerEditForm(forms.ModelForm):
     class Meta:
         model = Player
         fields = ['first_name', 'last_name', 'nickname']
-
-    def clean(self):
-        cleaned_data = super().clean()
-
-        return cleaned_data
 
 
 class RefereeForm(forms.ModelForm):
@@ -49,20 +45,23 @@ class VenueForm(forms.ModelForm):
 
 
 class MatchForm(forms.ModelForm):
-    def __init__(self, *args, **kwargs):
-        self.request = kwargs.pop('request', None)
-        super().__init__(*args, **kwargs)
-
+    # Pola definiujemy tutaj, żeby móc dynamicznie zmieniać QuerySet w __init__
     players = forms.ModelMultipleChoiceField(
-        queryset=Player.objects.all(),
+        queryset=Player.objects.none(),  # Domyślnie puste, wypełnimy w __init__
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
 
     referees = forms.ModelMultipleChoiceField(
-        queryset=Referee.objects.all(),
+        queryset=Referee.objects.none(),
         widget=forms.CheckboxSelectMultiple,
         required=False,
+    )
+
+    venue = forms.ModelChoiceField(
+        queryset=Venue.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-control'})
     )
 
     create_temporary_players = forms.BooleanField(
@@ -77,9 +76,25 @@ class MatchForm(forms.ModelForm):
         widgets = {
             'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
-            'venue': forms.Select(attrs={'class': 'form-control'}),
             'number_of_frames': forms.NumberInput(attrs={'min': 1}),
         }
+
+    def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+
+        # FILTROWANIE LIST ROZWIJANYCH:
+        # Jeśli mamy użytkownika w request, pokazujemy tylko jego obiekty + publiczne
+        if self.request and self.request.user.is_authenticated:
+            user = self.request.user
+            self.fields['players'].queryset = Player.objects.filter(Q(owner=user) | Q(is_public=True))
+            self.fields['referees'].queryset = Referee.objects.filter(Q(owner=user) | Q(is_public=True))
+            self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
+        else:
+            # Fallback dla testów lub niezalogowanych (choć widok to zablokuje)
+            self.fields['players'].queryset = Player.objects.filter(is_public=True)
+            self.fields['referees'].queryset = Referee.objects.filter(is_public=True)
+            self.fields['venue'].queryset = Venue.objects.filter(is_public=True)
 
     def clean_date(self):
         date = self.cleaned_data['date']
@@ -89,20 +104,14 @@ class MatchForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-
-        # Pobieramy wartości z formularza
         players = cleaned_data.get('players')
         create_temp = cleaned_data.get('create_temporary_players')
 
-        # LOGIKA WALIDACJI:
-        # Jeśli NIE zaznaczono "Create temporary players"...
         if not create_temp:
-            # ...i lista graczy jest pusta LUB wybrano mniej niż 2 graczy
             if not players or players.count() < 2:
                 raise ValidationError(
                     "You must select at least two players OR check 'Create temporary players'."
                 )
-
         return cleaned_data
 
     def save(self, commit=True):
@@ -114,37 +123,73 @@ class MatchForm(forms.ModelForm):
             self.save_m2m()
 
             if create_temp_players:
-                prefix = "Temporary Player" if not self.request.user.is_authenticated else "Player"
-                temp_player1 = Player.objects.create(first_name=f'{prefix} {Player.objects.count() + 1}', is_temporary=True)
-                temp_player2 = Player.objects.create(first_name=f'{prefix} {Player.objects.count() + 2}', is_temporary=True)
+                owner = instance.owner  # Może być None
+
+                # Zliczanie graczy dla nazwy
+                count_base = 0
+                if owner:
+                    count_base = Player.objects.filter(owner=owner).count()
+
+                prefix = "Temporary Player"
+
+                # Tworzymy z owner=None (jeśli instance.owner jest None)
+                temp_player1 = Player.objects.create(
+                    first_name=f'{prefix} {count_base + 1}',
+                    is_temporary=True,
+                    owner=owner
+                )
+                temp_player2 = Player.objects.create(
+                    first_name=f'{prefix} {count_base + 2}',
+                    is_temporary=True,
+                    owner=owner
+                )
                 instance.players.add(temp_player1, temp_player2)
 
         return instance
 
 
 class CompetitionForm(forms.ModelForm):
+    venue = forms.ModelChoiceField(
+        queryset=Venue.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+
+    matches = forms.ModelMultipleChoiceField(
+        queryset=Match.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple
+    )
+
     class Meta:
         model = Competition
-        fields = ['name', 'start_date', 'end_date', 'venue', 'competition_type', 'is_group_stage', 'is_knockout', 'matches']
+        fields = ['name', 'start_date', 'end_date', 'venue', 'competition_type', 'is_group_stage', 'is_knockout',
+                  'matches']
         widgets = {
             'start_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'end_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'venue': forms.Select(attrs={'class': 'form-control'}),
             'competition_type': forms.Select(attrs={'class': 'form-control'}),
-            'matches': forms.CheckboxSelectMultiple(),
         }
 
     def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop('request', None)  # Pobieramy request
         super().__init__(*args, **kwargs)
-        self.fields['matches'].queryset = Match.objects.all()
-        self.fields['matches'].required = False
+
+        if self.request and self.request.user.is_authenticated:
+            user = self.request.user
+            self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
+            # W zawodach chcemy wybierać raczej tylko SWOJE mecze
+            self.fields['matches'].queryset = Match.objects.filter(owner=user)
+        else:
+            self.fields['venue'].queryset = Venue.objects.none()
+            self.fields['matches'].queryset = Match.objects.none()
 
     def clean(self):
         cleaned_data = super().clean()
         start_date = cleaned_data.get('start_date')
         end_date = cleaned_data.get('end_date')
 
-        if end_date < start_date:
+        if start_date and end_date and end_date < start_date:
             raise forms.ValidationError('End date cannot be earlier than start date.')
 
         return cleaned_data
@@ -152,16 +197,19 @@ class CompetitionForm(forms.ModelForm):
 
 class AddMatchesToCompetitionForm(forms.Form):
     matches = forms.ModelMultipleChoiceField(
-        queryset=Match.objects.all(),
+        queryset=Match.objects.none(),  # Puste na start
         widget=forms.CheckboxSelectMultiple,
         required=False
     )
 
     def __init__(self, *args, **kwargs):
         competition = kwargs.pop('competition', None)
+        self.user = kwargs.pop('user', None)  # Przekazujemy usera
         super().__init__(*args, **kwargs)
-        if competition:
-            self.fields['matches'].queryset = Match.objects.exclude(competitions=competition)
+
+        if competition and self.user:
+            # Pokazujemy mecze użytkownika, które nie są jeszcze w tym turnieju
+            self.fields['matches'].queryset = Match.objects.filter(owner=self.user).exclude(competitions=competition)
 
 
 class GroupStageForm(forms.ModelForm):
@@ -173,13 +221,8 @@ class GroupStageForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        num_groups = cleaned_data.get('num_groups')
-        players_per_group = cleaned_data.get('players_per_group')
-
-        total_players = num_groups * players_per_group
-        if total_players > Player.objects.count():
-            raise ValidationError(f"Not enough players. Need {total_players}, but only {Player.objects.count()} available.")
-
+        # Tutaj walidacja ilości graczy jest trudna w Form, bo nie mamy dostępu do Competition.
+        # Przeniesiemy walidację logiczną do views lub zostawimy prostą.
         return cleaned_data
 
 

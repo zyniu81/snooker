@@ -3,15 +3,20 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.auth.models import User
 
 from datetime import timedelta
-
 import random
+
 
 # Create your models here.
 
-
 class Player(models.Model):
+    # --- NOWE POLA WŁASNOŚCI ---
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='players', null=True, blank=True)
+    is_public = models.BooleanField(default=False)
+    # ---------------------------
+
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
     nickname = models.CharField(max_length=30, blank=True, null=True)
@@ -43,11 +48,17 @@ class Player(models.Model):
             return f'Player {self.id}'
 
     def save(self, *args, **kwargs):
-        if not self.first_name and not self.last_name and not self.nickname:
-            if not self.id:
-                super().save(*args, **kwargs)
-                self.first_name = f'Player {self.id}'
+        # Sprawdzamy czy to nowy obiekt przed zapisem
+        is_new = self.pk is None
+
+        # Jeśli nie ma imienia/nazwiska/ksywki, ustawiamy domyślne "Player X" po zapisie
+        # Ale musimy najpierw zapisać, żeby dostać ID
         super().save(*args, **kwargs)
+
+        if is_new and not (self.first_name or self.last_name or self.nickname):
+            self.first_name = f'Player {self.id}'
+            # Zapisujemy tylko pole first_name, żeby nie zapętlić
+            super().save(update_fields=['first_name'])
 
     def formatted_avg_shot_time(self):
         if self.avg_shot_time:
@@ -57,7 +68,51 @@ class Player(models.Model):
         return "N/A"
 
 
+class Venue(models.Model):
+    # --- NOWE POLA WŁASNOŚCI ---
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='venues')
+    is_public = models.BooleanField(default=False)
+    # ---------------------------
+
+    name = models.CharField(max_length=100)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    capacity = models.PositiveIntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
+
+    def __str__(self):
+        return self.name
+
+
+class Referee(models.Model):
+    # --- NOWE POLA WŁASNOŚCI ---
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='referees')
+    is_public = models.BooleanField(default=False)
+    # ---------------------------
+
+    first_name = models.CharField(max_length=30, blank=True)
+    last_name = models.CharField(max_length=30, blank=True)
+    license_number = models.CharField(max_length=20, blank=True)
+
+    matches = models.ManyToManyField('Match', blank=True)
+
+    def __str__(self):
+        if self.first_name and self.last_name:
+            return f'{self.first_name} {self.last_name}'
+        elif self.first_name:
+            return self.first_name
+        elif self.last_name:
+            return self.last_name
+        elif self.license_number:
+            return f'Referee (License: {self.license_number})'
+        else:
+            return f'Referee {self.id}'
+
+
 class Match(models.Model):
+    # --- NOWE POLA WŁASNOŚCI ---
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='matches', null=True, blank=True)
+    is_public = models.BooleanField(default=False)
+    # ---------------------------
+
     date = models.DateField()
     time = models.TimeField()
     venue = models.ForeignKey('Venue', on_delete=models.SET_NULL, blank=True, null=True)
@@ -70,10 +125,14 @@ class Match(models.Model):
     referee_ids = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    group_stage = models.ForeignKey('GroupStage', on_delete=models.SET_NULL, null=True, blank=True, related_name='matches')
-    knockout_stage = models.ForeignKey('KnockoutStage', on_delete=models.SET_NULL, null=True, blank=True, related_name='matches')
-    temp_player1 = models.ForeignKey('Player', null=True, blank=True, related_name='temp_player1_matches', on_delete=models.CASCADE)
-    temp_player2 = models.ForeignKey('Player', null=True, blank=True, related_name='temp_player2_matches', on_delete=models.CASCADE)
+    group_stage = models.ForeignKey('GroupStage', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='matches')
+    knockout_stage = models.ForeignKey('KnockoutStage', on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='matches')
+    temp_player1 = models.ForeignKey('Player', null=True, blank=True, related_name='temp_player1_matches',
+                                     on_delete=models.CASCADE)
+    temp_player2 = models.ForeignKey('Player', null=True, blank=True, related_name='temp_player2_matches',
+                                     on_delete=models.CASCADE)
     is_temporary = models.BooleanField(default=False)
     group_name = models.CharField(max_length=1, blank=True, null=True)
     knockout_name = models.CharField(max_length=100, blank=True, null=True)
@@ -155,7 +214,8 @@ class MatchPlayer(models.Model):
 
     def calculate_points_scored(self):
         opponent_foul_points = \
-        self.match.matchplayer_set.exclude(player=self.player).aggregate(models.Sum('foul_points'))['foul_points__sum'] or 0
+            self.match.matchplayer_set.exclude(player=self.player).aggregate(models.Sum('foul_points'))[
+                'foul_points__sum'] or 0
         self.points_scored += opponent_foul_points
 
     def save(self, *args, **kwargs):
@@ -235,36 +295,12 @@ class Frame(models.Model):
         unique_together = ('match_player', 'frame_number')
 
 
-class Referee(models.Model):
-    first_name = models.CharField(max_length=30, blank=True)
-    last_name = models.CharField(max_length=30, blank=True)
-    license_number = models.CharField(max_length=20, blank=True)
-
-    matches = models.ManyToManyField('Match', blank=True)
-
-    def __str__(self):
-        if self.first_name and self.last_name:
-            return f'{self.first_name} {self.last_name}'
-        elif self.first_name:
-            return self.first_name
-        elif self.last_name:
-            return self.last_name
-        elif self.license_number:
-            return f'Referee (License: {self.license_number})'
-        else:
-            return f'Referee {self.id}'
-
-
-class Venue(models.Model):
-    name = models.CharField(max_length=100)
-    address = models.CharField(max_length=255, blank=True, null=True)
-    capacity = models.PositiveIntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
-
-    def __str__(self):
-        return self.name
-
-
 class Competition(models.Model):
+    # --- NOWE POLA WŁASNOŚCI ---
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='competitions')
+    is_public = models.BooleanField(default=False)
+    # ---------------------------
+
     players = models.ManyToManyField('Player', related_name='competitions', blank=True)
     matches = models.ManyToManyField('Match', related_name='competitions', blank=True)
     group_stages = models.ManyToManyField('GroupStage', related_name='competitions', blank=True)
@@ -309,12 +345,14 @@ class GroupStage(Stage):
         players = list(self.competition.players.all())
         random.shuffle(players)
 
+        comp_owner = self.competition.owner  # Pobieramy właściciela turnieju
+
         for i in range(self.num_groups):
             group_name = chr(65 + i)
-            group_players = players[i*self.players_per_group:(i+1)*self.players_per_group]
+            group_players = players[i * self.players_per_group:(i + 1) * self.players_per_group]
 
             for j, player1 in enumerate(group_players):
-                for player2 in group_players[j+1:]:
+                for player2 in group_players[j + 1:]:
                     for _ in range(self.matches_per_pair):
                         match = Match.objects.create(
                             date=self.competition.start_date,
@@ -326,7 +364,9 @@ class GroupStage(Stage):
                             player_ids=f"{player1.id},{player2.id}",
                             referee_names="",
                             referee_ids="",
-                            group_name=group_name
+                            group_name=group_name,
+                            owner=comp_owner,  # <--- PRZYPISANIE
+                            is_public=self.competition.is_public  # <--- DZIEDZICZENIE
                         )
                         match.players.add(player1, player2)
                         match.save()
@@ -341,14 +381,16 @@ class KnockoutStage(Stage):
         random.shuffle(players)
         num_matches = 2 ** (self.num_rounds - 1)
 
+        comp_owner = self.competition.owner  # Pobieramy właściciela turnieju
+
         for round_num in range(self.num_rounds):
             round_name = f'Round {round_num + 1}'
             matches_in_round = num_matches // (2 ** round_num)
 
             for i in range(matches_in_round):
                 if round_num == 0:
-                    player1 = players[2*i] if 2*i < len(players) else None
-                    player2 = players[2*i+1] if 2*i+1 < len(players) else None
+                    player1 = players[2 * i] if 2 * i < len(players) else None
+                    player2 = players[2 * i + 1] if 2 * i + 1 < len(players) else None
                 else:
                     player1 = player2 = None
 
@@ -362,7 +404,9 @@ class KnockoutStage(Stage):
                     player_ids="" if not player1 and not player2 else f"{player1.id},{player2.id}" if player1 and player2 else "",
                     referee_names="",
                     referee_ids="",
-                    knockout_name=round_name
+                    knockout_name=round_name,
+                    owner=comp_owner,  # <--- PRZYPISANIE
+                    is_public=self.competition.is_public  # <--- DZIEDZICZENIE
                 )
                 if player1:
                     match.players.add(player1)
