@@ -625,10 +625,46 @@ def register(request):
         if form.is_valid():
             user = form.save()
             login(request, user)
+
+            # --- PRZEJMOWANIE MECZU TYMCZASOWEGO ---
+            temp_match_id = request.session.get('temp_match_id')
+
+            if temp_match_id:
+                try:
+                    # Szukamy meczu po ID z sesji
+                    match = Match.objects.get(pk=temp_match_id)
+
+                    # Jeśli mecz nie ma właściciela (jest sierotą), to go przejmujemy
+                    if match.owner is None:
+                        match.owner = user
+                        match.is_temporary = False  # To już nie jest tymczasowy mecz
+                        match.is_public = False  # Staje się prywatny
+                        match.save()
+
+                        # Przejmujemy też graczy z tego meczu (jeśli też są sierotami)
+                        for player in match.players.all():
+                            if player.owner is None:
+                                player.owner = user
+                                player.is_temporary = False
+                                player.save()
+
+                        messages.success(request, "Registration successful! Your temporary match has been saved to your account.")
+
+                        # Czyścimy sesję, żeby nie przypisywać tego meczu w nieskończoność
+                        del request.session['temp_match_id']
+
+                        # Przekierowujemy od razu do tego meczu, żeby gracz mógł grać dalej
+                        return redirect('match_detail', pk=match.pk)
+
+                except Match.DoesNotExist:
+                    # Mecz mógł zostać usunięty w międzyczasie, ignorujemy to
+                    pass
+            # ---------------------------------------
+
             messages.success(request, "Registration successful.")
             return redirect('home')
         else:
-            messages.error(request, "Registration failed.")
+            messages.error(request, "Registration failed. Check for errors below.")
     else:
         form = SignUpForm()
     return render(request, 'register.html', {'form': form})

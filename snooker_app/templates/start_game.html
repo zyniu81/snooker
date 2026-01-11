@@ -49,6 +49,20 @@
 
 {% load static %}
 
+{% if not user.is_authenticated and not match.owner %}
+<div class="alert alert-warning alert-dismissible fade show text-center shadow-sm" role="alert">
+    <strong>You are playing as a Guest.</strong>
+    <span class="d-none d-md-inline"> Don't lose your progress! </span>
+    <a href="{% url 'register' %}" class="btn btn-primary btn-sm ml-2">
+        <i class="bi bi-person-plus-fill"></i> Create Account to Save Match
+    </a>
+
+    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+        <span aria-hidden="true">&times;</span>
+    </button>
+</div>
+{% endif %}
+
 <div class="container">
     <div class="container" data-frame-id="{{ frame.id }}" data-match-id="{{ match.id }}">
     <div class="row">

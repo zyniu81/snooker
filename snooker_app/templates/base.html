@@ -71,7 +71,15 @@
 
                         {% else %}
                             <a class="nav-item nav-link ml-3" href="{% url 'login' %}">Login</a>
-                            <a class="nav-item nav-link btn btn-outline-primary btn-sm ml-2" href="{% url 'register' %}">Register</a>
+
+                            {% if request.session.temp_match_id %}
+                                <a class="nav-item nav-link btn btn-success text-white btn-sm ml-2 shadow-sm font-weight-bold" href="{% url 'register' %}">
+                                    <i class="bi bi-save-fill"></i> Save Match
+                                </a>
+                            {% else %}
+                                <a class="nav-item nav-link btn btn-outline-primary btn-sm ml-2" href="{% url 'register' %}">Register</a>
+                            {% endif %}
+
                         {% endif %}
                     </div>
                 </div>
