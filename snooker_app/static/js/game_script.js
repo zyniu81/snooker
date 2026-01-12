@@ -1331,9 +1331,13 @@ function finalizeFrameEnd() {
             // 2. Sprawdzamy co odpowiedział serwer - czy to koniec meczu?
             if (data.match_over) {
                 setTimeout(() => {
+                    // Wyświetlamy komunikat o zwycięstwie
                     alert(`MATCH OVER! Winner: ${data.match_winner} 🏆`);
-                    // Tutaj w przyszłości zrobisz przekierowanie:
-                    // window.location.href = `/match/${matchId}/summary/`;
+
+                    // PO KLIKNIĘCIU "OK" - PRZEKIEROWANIE
+                    // Przenosimy użytkownika do widoku detali (tam gdzie są statystyki)
+                    window.location.href = `/match/${matchId}/`;
+
                 }, 500);
             }
         } else {

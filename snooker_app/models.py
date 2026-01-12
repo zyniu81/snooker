@@ -108,10 +108,8 @@ class Referee(models.Model):
 
 
 class Match(models.Model):
-    # --- NOWE POLA WŁASNOŚCI ---
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='matches', null=True, blank=True)
     is_public = models.BooleanField(default=False)
-    # ---------------------------
 
     date = models.DateField()
     time = models.TimeField()
@@ -144,6 +142,37 @@ class Match(models.Model):
 
     def __str__(self):
         return f'Match on {self.date} at {self.time}'
+
+    def get_game_status(self):
+
+        frames_won_query = self.matchplayer_set.filter(frame__winner__isnull=False).values('player').annotate(
+            wins=models.Count('frame__winner'))
+
+        wins_map = {item['player']: item['wins'] for item in frames_won_query}
+
+        threshold = (self.number_of_frames // 2) + 1
+        total_played = sum(wins_map.values())
+
+        winner = None
+        is_finished = False
+
+        # Sprawdzamy czy ktoś osiągnął próg zwycięstwa
+        for player_id, wins in wins_map.items():
+            if wins >= threshold:
+                is_finished = True
+                # Pobieramy obiekt gracza (można zoptymalizować, ale przy 2 graczach to bez znaczenia)
+                winner = self.players.get(pk=player_id)
+                break
+
+        # Sprawdzamy czy rozegrano już wszystkie możliwe partie (np. remis w lidze)
+        if not is_finished and total_played >= self.number_of_frames:
+            is_finished = True
+            # Wtedy winner zostaje None (remis) lub można dodać logikę punktów
+
+        return {'is_finished': is_finished, 'winner': winner}
+
+    def is_match_finished(self):
+        return self.get_game_status()['is_finished']
 
     def clean(self):
         if self.pk:

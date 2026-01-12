@@ -251,13 +251,67 @@ def add_match(request):
     return render(request, 'add_match.html', {'form': form})
 
 
-@login_required
 def match_detail(request, pk):
     match = get_object_or_404(Match, pk=pk)
-    # Sprawdzamy dostęp: Mój, lub publiczny, lub należę do publicznego turnieju
-    if not (match.owner == request.user or match.is_public):
-        raise PermissionDenied
-    return render(request, 'match_detail.html', {'match': match})
+
+    # --- LOGIKA DOSTĘPU ---
+    has_access = False
+    if match.owner is None:
+        has_access = True
+    elif match.is_public:
+        has_access = True
+    elif request.user.is_authenticated and match.owner == request.user:
+        has_access = True
+
+    if not has_access:
+        if request.user.is_authenticated:
+            raise PermissionDenied
+        else:
+            return redirect(f'{reverse("login")}?next={request.path}')
+    # ----------------------
+
+    game_status = match.get_game_status()
+
+    # Pobieramy graczy i framy
+    match_players = MatchPlayer.objects.filter(match=match).order_by('position')
+    frames = Frame.objects.filter(match_player__match=match).order_by('frame_number')
+
+    # Inicjalizacja zmiennych
+    p1_data = None
+    p2_data = None
+    p1_wins = 0
+    p2_wins = 0
+
+    if match_players.count() >= 2:
+        p1_mp = match_players[0]  # Obiekt MatchPlayer dla gracza 1
+        p2_mp = match_players[1]  # Obiekt MatchPlayer dla gracza 2
+
+        p1_wins = frames.filter(winner=p1_mp.player).count()
+        p2_wins = frames.filter(winner=p2_mp.player).count()
+
+        # Przygotowujemy dane do wyświetlenia w podsumowaniu meczu
+        # (Model MatchPlayer ma już wiele z tych pól, ale safety musimy policzyć jeśli nie ma w modelu)
+        # Zakładam, że AST (avg_shot_time) masz w modelu jako DurationField
+
+        p1_data = {
+            'name': str(p1_mp.player),
+            'obj': p1_mp,
+            'wins': p1_wins
+        }
+        p2_data = {
+            'name': str(p2_mp.player),
+            'obj': p2_mp,
+            'wins': p2_wins
+        }
+
+    return render(request, 'match_detail.html', {
+        'match': match,
+        'is_finished': game_status['is_finished'],
+        'winner': game_status['winner'],
+        'frames': frames,
+        'p1': p1_data,  # Przekazujemy słowniki z danymi
+        'p2': p2_data,
+    })
 
 
 @login_required
@@ -313,6 +367,11 @@ def start_game(request, pk):
             # Niezalogowany próbuje wejść na prywatny mecz -> Logowanie
             return redirect(f'{reverse("login")}?next={request.path}')
     # ----------------------
+
+    status = match.get_game_status()
+    if status['is_finished']:
+        messages.warning(request, "Ten mecz jest już zakończony!")
+        return redirect('match_detail', pk=pk)
 
     match_players = MatchPlayer.objects.filter(match=match).order_by('position')
 
