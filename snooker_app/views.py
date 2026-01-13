@@ -931,12 +931,40 @@ def set_active_player(request):
         return JsonResponse({'status': 'error', 'message': str(e)})
 
 
-@csrf_exempt
 @require_POST
 def save_frame_result(request):
     try:
         data = json.loads(request.body.decode('utf-8'))
         match_id = data.get('match_id')
+
+        # --- ZABEZPIECZENIE API ---
+        # 1. Sprawdzamy czy mecz istnieje
+        match = get_object_or_404(Match, pk=match_id)
+
+        # 2. Sprawdzamy uprawnienia użytkownika (taka sama logika jak w start_game)
+        has_access = False
+
+        # A) Mecz tymczasowy (owner=None) -> Każdy może zapisać (zazwyczaj z tej samej sesji)
+        if match.owner is None:
+            has_access = True
+        # B) Mecz publiczny -> Każdy może
+        elif match.is_public:
+            has_access = True
+        # C) Mecz prywatny -> Tylko właściciel
+        elif request.user.is_authenticated and match.owner == request.user:
+            has_access = True
+
+        if not has_access:
+            return JsonResponse({'status': 'error', 'message': 'Permission Denied: You cannot modify this match.'},
+                                status=403)
+
+        # 3. Sprawdzamy czy mecz nie jest już zakończony
+        # Pobieramy status z modelu
+        game_status = match.get_game_status()
+        if game_status['is_finished']:
+            return JsonResponse({'status': 'error', 'message': 'Match is already finished!'}, status=400)
+        # ---------------------------
+
         winner_id = data.get('winner_id')
         p1_score = data.get('p1_score')
         p2_score = data.get('p2_score')
@@ -970,7 +998,6 @@ def save_frame_result(request):
         if not all([match_id, winner_id, p1_score is not None, p2_score is not None]):
             return JsonResponse({'status': 'error', 'message': 'Missing data fields'})
 
-        match = get_object_or_404(Match, pk=match_id)
         winner = get_object_or_404(Player, pk=winner_id)
 
         # 1. Próbujemy pobrać graczy z tabeli łączącej

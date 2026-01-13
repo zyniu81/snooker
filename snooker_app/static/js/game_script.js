@@ -1283,8 +1283,7 @@ function finalizeFrameEnd() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            // Jeśli będzie błąd CSRF, odkomentuj poniższą linię i dodaj funkcję getCookie (standard Django)
-            // 'X-CSRFToken': getCookie('csrftoken')
+            'X-CSRFToken': getCookie('csrftoken')
         },
         body: JSON.stringify({
             match_id: matchId,

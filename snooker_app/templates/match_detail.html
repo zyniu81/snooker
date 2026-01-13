@@ -106,6 +106,9 @@
                     </a>
                     <div class="d-block">
                         <a href="{% url 'edit_match' match.pk %}" class="btn btn-sm btn-primary">Edit Settings</a>
+                        {% if user == match.owner or not match.owner %}
+                            <a href="{% url 'delete_match' match.pk %}" class="btn btn-sm btn-danger">Delete</a>
+                        {% endif %}
                         <a href="{% url 'match_list' %}" class="btn btn-sm btn-secondary">Back to List</a>
                     </div>
                 {% endif %}
