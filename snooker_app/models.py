@@ -134,6 +134,7 @@ class Match(models.Model):
     is_temporary = models.BooleanField(default=False)
     group_name = models.CharField(max_length=1, blank=True, null=True)
     knockout_name = models.CharField(max_length=100, blank=True, null=True)
+    allow_draws = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -144,30 +145,54 @@ class Match(models.Model):
         return f'Match on {self.date} at {self.time}'
 
     def get_game_status(self):
+        # Pobieramy listę graczy w tym meczu
+        players = list(self.players.all())
 
-        frames_won_query = self.matchplayer_set.filter(frame__winner__isnull=False).values('player').annotate(
-            wins=models.Count('frame__winner'))
+        # Zabezpieczenie: jeśli nie ma 2 graczy, nie ma gry
+        if len(players) < 2:
+            return {'is_finished': False, 'winner': None}
 
-        wins_map = {item['player']: item['wins'] for item in frames_won_query}
+        p1 = players[0]
+        p2 = players[1]
 
-        threshold = (self.number_of_frames // 2) + 1
-        total_played = sum(wins_map.values())
+        # 1. LICZYMY ZWYCIĘSTWA WPROST Z TABELI FRAME (To naprawia błędy zliczania)
+        # Pytamy bazę: Ile framów w tym meczu wygrał konkretnie p1, a ile p2?
+        p1_wins = Frame.objects.filter(match_player__match=self, winner=p1).count()
+        p2_wins = Frame.objects.filter(match_player__match=self, winner=p2).count()
 
-        winner = None
+        total_played = p1_wins + p2_wins
+
         is_finished = False
+        winner = None
 
-        # Sprawdzamy czy ktoś osiągnął próg zwycięstwa
-        for player_id, wins in wins_map.items():
-            if wins >= threshold:
+        # --- SCENARIUSZ A: REMISY DOZWOLONE (Allow Draws = True) ---
+        if self.allow_draws:
+            # Kończymy TYLKO gdy rozegrano wszystkie zaplanowane partie
+            if total_played >= self.number_of_frames:
                 is_finished = True
-                # Pobieramy obiekt gracza (można zoptymalizować, ale przy 2 graczach to bez znaczenia)
-                winner = self.players.get(pk=player_id)
-                break
 
-        # Sprawdzamy czy rozegrano już wszystkie możliwe partie (np. remis w lidze)
-        if not is_finished and total_played >= self.number_of_frames:
-            is_finished = True
-            # Wtedy winner zostaje None (remis) lub można dodać logikę punktów
+                if p1_wins > p2_wins:
+                    winner = p1
+                elif p2_wins > p1_wins:
+                    winner = p2
+                else:
+                    winner = None  # REMIS (Draw)
+
+        # --- SCENARIUSZ B: STANDARDOWY (Musi być zwycięzca) ---
+        else:
+            threshold = (self.number_of_frames // 2) + 1
+
+            if p1_wins >= threshold:
+                is_finished = True
+                winner = p1
+            elif p2_wins >= threshold:
+                is_finished = True
+                winner = p2
+
+            # Zabezpieczenie: Wszystkie partie rozegrane, a brak zwycięzcy (np. 2:2 przy braku zgody na remis)
+            if not is_finished and total_played >= self.number_of_frames:
+                is_finished = True
+                winner = None
 
         return {'is_finished': is_finished, 'winner': winner}
 

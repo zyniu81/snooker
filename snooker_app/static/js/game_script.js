@@ -49,6 +49,8 @@ let p2BreaksHistory = [];
 let turnStartTime = Date.now();
 let currentTurnShots = 0; // Counts shots ONLY for the current visit to the table
 
+let isUnsafeToLeave = true;
+
 
 function recordAction(action) {
 
@@ -1333,6 +1335,8 @@ function finalizeFrameEnd() {
                     // Wyświetlamy komunikat o zwycięstwie
                     alert(`MATCH OVER! Winner: ${data.match_winner} 🏆`);
 
+                    isUnsafeToLeave = false;
+
                     // PO KLIKNIĘCIU "OK" - PRZEKIEROWANIE
                     // Przenosimy użytkownika do widoku detali (tam gdzie są statystyki)
                     window.location.href = `/match/${matchId}/`;
@@ -1467,6 +1471,14 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             toggleSidebar();
         });
+    }
+});
+
+// --- WARNING BEFORE LEAVING ---
+window.addEventListener('beforeunload', function (e) {
+    if (isUnsafeToLeave) {
+        e.preventDefault();
+        e.returnValue = '';
     }
 });
 

@@ -1110,30 +1110,28 @@ def save_frame_result(request):
 
         last_frame.save()
 
-        # 4. Sprawdź czy mecz się skończył
-        frames_needed = (match.number_of_frames // 2) + 1
+        # 4. Sprawdź czy mecz się skończył (korzystając z nowej logiki w modelu)
+        game_status = match.get_game_status()
+        match_over = game_status['is_finished']
+        match_winner_obj = game_status['winner']
 
-        p1_mp = match_players.filter(position=1).first()
-        if not p1_mp: p1_mp = match_players.first()
-        p1_obj = p1_mp.player
+        # Ustal co wyświetlić w alercie (Imię zwycięzcy lub Remis)
+        winner_name = "Unknown"
+        if match_over:
+            if match_winner_obj:
+                winner_name = str(match_winner_obj)
+            else:
+                winner_name = "Draw"  # To wyświetli się w alercie: "Winner: Draw"
 
-        p1_wins = Frame.objects.filter(match_player__in=match_players, winner=p1_obj).count()
-        total_frames_played = Frame.objects.filter(match_player__in=match_players, winner__isnull=False).count()
-        p2_wins = total_frames_played - p1_wins
-
-        match_over = False
-        winner_name = str(winner)
-
-        if p1_wins >= frames_needed or p2_wins >= frames_needed:
-            match_over = True
-        else:
-            # TWORZYMY NOWY FRAME
+        # Jeśli mecz się NIE skończył, tworzymy nowy frame
+        if not match_over:
             new_frame_number = last_frame.frame_number + 1
             Frame.objects.create(
                 match_player=match_players.first(),
                 frame_number=new_frame_number,
                 points_scored_player1=0,
-                points_scored_player2=0
+                points_scored_player2=0,
+                active_player=match_players.first().player
             )
 
         return JsonResponse({
