@@ -21,7 +21,7 @@ from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueFor
                                MatchForm, CompetitionForm, AddMatchesToCompetitionForm,
                                GroupStageForm, SignUpForm, KnockoutStageForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
-                                MatchPlayer, Achievement, Frame)
+                                MatchPlayer, Frame)
 
 
 # --- FUNKCJE POMOCNICZE ---
@@ -790,10 +790,13 @@ def add_players_to_competition(request, pk):
 
 @login_required
 def achievement_list(request):
-    # Osiągnięcia tylko dla moich graczy + publicznych
-    players = Player.objects.filter(Q(owner=request.user) | Q(is_public=True))
-    achievements = Achievement.objects.filter(player__in=players)
-    return render(request, 'achievement_list.html', {'achievements': achievements})
+    # Sortujemy np. po najwyższym breaku malejąco
+    players = Player.objects.filter(
+        Q(owner=request.user) | Q(is_public=True)
+    ).order_by('-highest_break')
+
+    # Przekazujemy listę graczy do szablonu (zamiast achievements)
+    return render(request, 'achievement_list.html', {'players': players})
 
 
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))

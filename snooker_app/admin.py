@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Player, Match, Frame, MatchPlayer,
     Referee, Venue, Competition,
-    GroupStage, KnockoutStage, Achievement
+    GroupStage, KnockoutStage
 )
 
 admin.site.register(Player)
@@ -14,4 +14,3 @@ admin.site.register(Venue)
 admin.site.register(Competition)
 admin.site.register(GroupStage)
 admin.site.register(KnockoutStage)
-admin.site.register(Achievement)

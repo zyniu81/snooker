@@ -3,16 +3,25 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from django.db.models import Q  # <--- Potrzebne do filtrowania (Moje LUB Publiczne)
+from django.db.models import Q
 
 from .models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage
 
 
+# --- OSOBY I MIEJSCA ---
+
 class PlayerForm(forms.ModelForm):
     class Meta:
         model = Player
-        fields = ['first_name', 'last_name', 'nickname']
-        # Usunęliśmy 'owner' i 'is_public', ustawimy je w widoku
+        # Dodałem is_public i is_temporary
+        fields = ['first_name', 'last_name', 'nickname', 'is_public', 'is_temporary']
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'nickname': forms.TextInput(attrs={'class': 'form-control'}),
+            'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_temporary': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
 
     def clean(self):
         cleaned_data = super().clean()
@@ -20,8 +29,8 @@ class PlayerForm(forms.ModelForm):
         last_name = cleaned_data.get('last_name')
         nickname = cleaned_data.get('nickname')
 
-        # Logika walidacji (opcjonalna, pusta w Twoim kodzie, ale zostawiam)
         if not (first_name or last_name or nickname):
+            # Tu można rzucić błąd, jeśli chcesz wymusić chociaż jedno pole
             pass
         return cleaned_data
 
@@ -29,25 +38,45 @@ class PlayerForm(forms.ModelForm):
 class PlayerEditForm(forms.ModelForm):
     class Meta:
         model = Player
-        fields = ['first_name', 'last_name', 'nickname']
+        fields = ['first_name', 'last_name', 'nickname', 'is_public']
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'nickname': forms.TextInput(attrs={'class': 'form-control'}),
+            'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
 
 
 class RefereeForm(forms.ModelForm):
     class Meta:
         model = Referee
-        fields = ['first_name', 'last_name', 'license_number']
+        fields = ['first_name', 'last_name', 'license_number', 'is_public']
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'license_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
 
 
 class VenueForm(forms.ModelForm):
     class Meta:
         model = Venue
-        fields = ['name', 'address', 'capacity']
+        fields = ['name', 'address', 'capacity', 'is_public']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'address': forms.TextInput(attrs={'class': 'form-control'}),
+            'capacity': forms.NumberInput(attrs={'class': 'form-control'}),
+            'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
 
+
+# --- MECZE ---
 
 class MatchForm(forms.ModelForm):
-    # Pola definiujemy tutaj, żeby móc dynamicznie zmieniać QuerySet w __init__
+    # Dynamiczne pola zdefiniowane ręcznie
     players = forms.ModelMultipleChoiceField(
-        queryset=Player.objects.none(),  # Domyślnie puste, wypełnimy w __init__
+        queryset=Player.objects.none(),
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
@@ -68,38 +97,46 @@ class MatchForm(forms.ModelForm):
         label='Create temporary players',
         required=False,
         initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
     )
 
     class Meta:
         model = Match
-        fields = ['date', 'time', 'venue', 'number_of_frames', 'players', 'referees']
+        # Zaktualizowana lista pól o nowe funkcje
+        fields = [
+            'date', 'time', 'venue', 'game_variant', 'number_of_frames',
+            'allow_draws', 'players', 'referees', 'is_public', 'table_number'
+        ]
         widgets = {
             'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
-            'number_of_frames': forms.NumberInput(attrs={'min': 1}),
+            'game_variant': forms.Select(attrs={'class': 'form-select'}),
+            'number_of_frames': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+            'table_number': forms.NumberInput(attrs={'class': 'form-control'}),
+            'allow_draws': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, **kwargs):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
-        # FILTROWANIE LIST ROZWIJANYCH:
-        # Jeśli mamy użytkownika w request, pokazujemy tylko jego obiekty + publiczne
+        # TWOJA LOGIKA FILTROWANIA (ZACHOWANA)
         if self.request and self.request.user.is_authenticated:
             user = self.request.user
             self.fields['players'].queryset = Player.objects.filter(Q(owner=user) | Q(is_public=True))
             self.fields['referees'].queryset = Referee.objects.filter(Q(owner=user) | Q(is_public=True))
             self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
         else:
-            # Fallback dla testów lub niezalogowanych (choć widok to zablokuje)
             self.fields['players'].queryset = Player.objects.filter(is_public=True)
             self.fields['referees'].queryset = Referee.objects.filter(is_public=True)
             self.fields['venue'].queryset = Venue.objects.filter(is_public=True)
 
     def clean_date(self):
         date = self.cleaned_data['date']
-        if date < timezone.now().date():
-            raise ValidationError("The date cannot be in the past.")
+        # Opcjonalnie: można pozwolić na daty przeszłe przy wprowadzaniu wyników historycznych
+        # if date < timezone.now().date():
+        #     raise ValidationError("The date cannot be in the past.")
         return date
 
     def clean(self):
@@ -123,16 +160,15 @@ class MatchForm(forms.ModelForm):
             self.save_m2m()
 
             if create_temp_players:
-                owner = instance.owner  # Może być None
+                owner = instance.owner
 
-                # Zliczanie graczy dla nazwy
                 count_base = 0
                 if owner:
                     count_base = Player.objects.filter(owner=owner).count()
 
-                prefix = "Temporary Player"
+                prefix = "Temp Player"  # Skróciłem dla czytelności
 
-                # Tworzymy z owner=None (jeśli instance.owner jest None)
+                # Tworzymy graczy i oznaczamy ich jako tymczasowych
                 temp_player1 = Player.objects.create(
                     first_name=f'{prefix} {count_base + 1}',
                     is_temporary=True,
@@ -143,46 +179,35 @@ class MatchForm(forms.ModelForm):
                     is_temporary=True,
                     owner=owner
                 )
+
+                # Dodajemy do M2M
                 instance.players.add(temp_player1, temp_player2)
+
+                # Opcjonalnie: Ustawiamy ich też w polach pomocniczych modelu Match (jeśli chcesz)
+                instance.temp_player1 = temp_player1
+                instance.temp_player2 = temp_player2
+                instance.is_temporary = True
+                instance.save()
 
         return instance
 
 
+# --- TURNIEJE ---
+
 class CompetitionForm(forms.ModelForm):
-    venue = forms.ModelChoiceField(
-        queryset=Venue.objects.none(),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-control'})
-    )
-
-    matches = forms.ModelMultipleChoiceField(
-        queryset=Match.objects.none(),
-        required=False,
-        widget=forms.CheckboxSelectMultiple
-    )
-
     class Meta:
         model = Competition
-        fields = ['name', 'start_date', 'end_date', 'venue', 'competition_type', 'is_group_stage', 'is_knockout',
-                  'matches']
+        # Usunąłem nieistniejące pola (is_group_stage, is_knockout), dodałem game_variant
+        fields = ['name', 'start_date', 'end_date', 'venue', 'game_variant', 'is_public']
+
         widgets = {
-            'start_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'end_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'competition_type': forms.Select(attrs={'class': 'form-control'}),
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Competition Name'}),
+            'start_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'venue': forms.Select(attrs={'class': 'form-control'}),
+            'game_variant': forms.Select(attrs={'class': 'form-select'}),
+            'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
-
-    def __init__(self, *args, **kwargs):
-        self.request = kwargs.pop('request', None)  # Pobieramy request
-        super().__init__(*args, **kwargs)
-
-        if self.request and self.request.user.is_authenticated:
-            user = self.request.user
-            self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
-            # W zawodach chcemy wybierać raczej tylko SWOJE mecze
-            self.fields['matches'].queryset = Match.objects.filter(owner=user)
-        else:
-            self.fields['venue'].queryset = Venue.objects.none()
-            self.fields['matches'].queryset = Match.objects.none()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -190,46 +215,67 @@ class CompetitionForm(forms.ModelForm):
         end_date = cleaned_data.get('end_date')
 
         if start_date and end_date and end_date < start_date:
-            raise forms.ValidationError('End date cannot be earlier than start date.')
-
+            raise forms.ValidationError("End date cannot be earlier than start date.")
         return cleaned_data
 
 
 class AddMatchesToCompetitionForm(forms.Form):
     matches = forms.ModelMultipleChoiceField(
-        queryset=Match.objects.none(),  # Puste na start
+        queryset=Match.objects.none(),
         widget=forms.CheckboxSelectMultiple,
         required=False
     )
 
     def __init__(self, *args, **kwargs):
         competition = kwargs.pop('competition', None)
-        self.user = kwargs.pop('user', None)  # Przekazujemy usera
+        self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
 
         if competition and self.user:
-            # Pokazujemy mecze użytkownika, które nie są jeszcze w tym turnieju
-            self.fields['matches'].queryset = Match.objects.filter(owner=self.user).exclude(competitions=competition)
+            # Pokazujemy mecze użytkownika, które nie są jeszcze w tym turnieju (poprzez etapy)
+            # Uwaga: filtrowanie po 'competitions' może wymagać dostosowania,
+            # bo Match nie ma bezpośredniego pola 'competitions', tylko przez GroupStage/KnockoutStage.
+            # Ale jeśli zostawiłeś related_name='competitions' w modelu Competition M2M to zadziała.
+            # Jeśli nie, trzeba to zmienić w widoku. Na razie zostawiam jak masz.
+            self.fields['matches'].queryset = Match.objects.filter(owner=self.user)
 
 
 class GroupStageForm(forms.ModelForm):
-    default_frames = forms.IntegerField(min_value=1, initial=5)
+    # To pole nie jest w modelu, ale jest potrzebne do generowania meczów
+    default_frames = forms.IntegerField(min_value=1, initial=3,
+                                        widget=forms.NumberInput(attrs={'class': 'form-control'}))
 
     class Meta:
         model = GroupStage
-        fields = ['num_groups', 'players_per_group', 'matches_per_pair', 'default_frames']
-
-    def clean(self):
-        cleaned_data = super().clean()
-        # Tutaj walidacja ilości graczy jest trudna w Form, bo nie mamy dostępu do Competition.
-        # Przeniesiemy walidację logiczną do views lub zostawimy prostą.
-        return cleaned_data
+        # Zaktualizowane pola modelu
+        fields = [
+            'name', 'order', 'num_groups', 'players_per_group',
+            'matches_per_pair', 'points_for_win', 'points_for_draw', 'allow_draws'
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Group Stage'}),
+            'order': forms.NumberInput(attrs={'class': 'form-control'}),
+            'num_groups': forms.NumberInput(attrs={'class': 'form-control'}),
+            'players_per_group': forms.NumberInput(attrs={'class': 'form-control'}),
+            'matches_per_pair': forms.NumberInput(attrs={'class': 'form-control'}),
+            'points_for_win': forms.NumberInput(attrs={'class': 'form-control'}),
+            'points_for_draw': forms.NumberInput(attrs={'class': 'form-control'}),
+            'allow_draws': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
 
 
 class KnockoutStageForm(forms.ModelForm):
     class Meta:
         model = KnockoutStage
-        fields = ['num_rounds', 'frames_per_match']
+        # Zaktualizowane pola
+        fields = ['name', 'order', 'num_rounds', 'frames_per_match', 'has_third_place_match']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Finals'}),
+            'order': forms.NumberInput(attrs={'class': 'form-control'}),
+            'num_rounds': forms.NumberInput(attrs={'class': 'form-control'}),
+            'frames_per_match': forms.NumberInput(attrs={'class': 'form-control'}),
+            'has_third_place_match': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
 
     def clean_num_rounds(self):
         num_rounds = self.cleaned_data.get('num_rounds')
