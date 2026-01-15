@@ -586,7 +586,7 @@ def add_matches_to_competition(request, competition_id):
 
 
 def create_temporary_match(request):
-    # Usuwamy stare śmieci z sesji przy tworzeniu nowego meczu
+    # Czyścimy sesję
     if 'temp_match_id' in request.session:
         del request.session['temp_match_id']
 
@@ -595,41 +595,42 @@ def create_temporary_match(request):
         if form.is_valid():
             match = form.save(commit=False)
 
+            # Ustawienia zależne od logowania
             if request.user.is_authenticated:
                 match.owner = request.user
-                match.is_public = False
+                match.is_public = False  # Lub True, wg uznania
             else:
-                # GOŚĆ: Nie ma właściciela (None)
                 match.owner = None
-                match.is_public = True  # Musi być publiczny, żeby widok start_game go puścił
+                match.is_public = True  # Gość musi mieć publiczny
 
             match.is_temporary = True
-            match.save()
+            match.save()  # Zapisujemy, żeby mieć ID
 
-            # --- WAŻNE: Zapamiętujemy ID meczu w sesji ---
-            # Dzięki temu przy rejestracji będziemy wiedzieć, co przypisać
+            # Obsługa sesji dla gościa
             if not request.user.is_authenticated:
                 request.session['temp_match_id'] = match.id
-            # ---------------------------------------------
 
-            # Musimy też stworzyć graczy tymczasowych z owner=None (jeśli wybrano opcję)
+            # --- LOGIKA GRACZY ---
+            # Sprawdzamy co przyszło z formularza
             create_temp = form.cleaned_data.get('create_temporary_players')
-            if create_temp:
-                # UWAGA: Tutaj musimy ręcznie obsłużyć graczy, bo MatchForm.save()
-                # może próbować użyć starej logiki.
-                # Najlepiej w MatchForm.save() też dodać obsługę owner=None,
-                # ale możemy to nadpisać tutaj dla pewności:
 
+            # Dla gościa (is_authenticated=False) zawsze chcemy tymczasowych,
+            # nawet jak formularz tego nie przesłał jawnie (bo pole hidden)
+            if not request.user.is_authenticated or create_temp:
                 prefix = "Temporary Player"
-                # Tworzymy graczy bez właściciela
                 p1 = Player.objects.create(first_name=f"{prefix} 1", is_temporary=True, owner=match.owner)
                 p2 = Player.objects.create(first_name=f"{prefix} 2", is_temporary=True, owner=match.owner)
                 match.players.add(p1, p2)
 
-            # form.save_m2m() # To może być zbędne jeśli ręcznie dodaliśmy graczy wyżej, ale nie zaszkodzi
+                # Wypełniamy pola pomocnicze modelu Match
+                match.temp_player1 = p1
+                match.temp_player2 = p2
+                match.save()
+            else:
+                # Jeśli zalogowany wybrał graczy z listy, musimy ich zapisać
+                form.save_m2m()
 
-            return redirect('start_game', pk=match.pk)  # Od razu do gry, po co do detali?
-            # Lub jeśli wolisz detale: return redirect('match_detail', pk=match.pk)
+            return redirect('start_game', pk=match.pk)
     else:
         form = MatchForm(request=request)
 

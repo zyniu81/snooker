@@ -1,23 +1,65 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>Create Temporary Match</h2>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h3 class="card-title mb-0">Create Match</h3>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
 
-    {% if form.non_field_errors %}
-        <div class="alert alert-danger shadow-sm" role="alert">
-            <h4 class="alert-heading"><i class="fas fa-exclamation-triangle"></i>Action Required</h4>
-            {% for error in form.non_field_errors %}
-                <p class="mb-0 font-weight-bold">{{ error }}</p>
-            {% endfor %}
+                        {# Wyświetlanie błędów ogólnych formularza (np. "Select at least 2 players") #}
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {% for error in form.non_field_errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {# Pętla po wszystkich polach formularza #}
+                        {% for field in form %}
+                            {# Wyświetlamy pole tylko jeśli nie jest ukryte (HiddenInput) #}
+                            {% if not field.is_hidden %}
+                                <div class="mb-3">
+                                    <label for="{{ field.id_for_label }}" class="form-label">
+                                        {{ field.label }}
+                                    </label>
+
+                                    {# Samo pole input #}
+                                    {{ field }}
+
+                                    {# To jest kluczowe: Wyświetlanie błędu dla konkretnego pola #}
+                                    {% if field.errors %}
+                                        <div class="text-danger small mt-1">
+                                            {% for error in field.errors %}
+                                                <strong>{{ error }}</strong>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+
+                                    {% if field.help_text %}
+                                        <div class="form-text text-muted">{{ field.help_text }}</div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                {# Pola ukryte (np. is_public dla gościa) renderujemy, ale ich nie widać #}
+                                {{ field }}
+                            {% endif %}
+                        {% endfor %}
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-success btn-lg">Start Game</button>
+                            <a href="{% url 'home' %}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
-    {% endif %}
-    <form method="post">
-        {% csrf_token %}
-
-        {{ form.as_p }}
-
-        <button type="submit" class="btn btn-primary mt-2">Create Temporary Match</button>
-    </form>
+    </div>
 </div>
 {% endblock %}

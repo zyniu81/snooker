@@ -289,14 +289,16 @@ class Match(models.Model):
         return self.get_game_status()['is_finished']
 
     def clean(self):
-        # Walidacja liczby framów
-        if self.number_of_frames <= 0:
+        # 1. Sprawdzamy liczbę framów TYLKO jeśli została podana (nie jest None)
+        if self.number_of_frames is not None and self.number_of_frames <= 0:
             raise ValidationError('The number of frames must be greater than zero.')
 
-        # Walidacja liczby graczy (tylko dla istniejących obiektów, żeby nie blokować tworzenia w Adminie)
-        if self.pk and self.players.count() < 2:
-            # Można dodać ostrzeżenie, ale w fazie tworzenia czasem dodajemy graczy po zapisie
-            pass
+        # 2. Walidacja liczby graczy (tylko dla istniejących obiektów)
+        if self.pk:
+            if self.players.count() < 2:
+                # Opcjonalnie można rzucić błąd, ale przy tworzeniu (create)
+                # gracze dodawani są PO zapisie, więc tu często bywa pusto.
+                pass
 
     def get_stage(self):
         return self.group_stage or self.knockout_stage

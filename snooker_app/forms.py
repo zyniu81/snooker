@@ -74,7 +74,7 @@ class VenueForm(forms.ModelForm):
 # --- MECZE ---
 
 class MatchForm(forms.ModelForm):
-    # Dynamiczne pola zdefiniowane ręcznie
+    # Dynamiczne pola
     players = forms.ModelMultipleChoiceField(
         queryset=Player.objects.none(),
         widget=forms.CheckboxSelectMultiple,
@@ -93,6 +93,7 @@ class MatchForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-control'})
     )
 
+    # To pole służy tylko do UI dla zalogowanych, dla gościa ustawimy True w tle
     create_temporary_players = forms.BooleanField(
         label='Create temporary players',
         required=False,
@@ -102,7 +103,6 @@ class MatchForm(forms.ModelForm):
 
     class Meta:
         model = Match
-        # Zaktualizowana lista pól o nowe funkcje
         fields = [
             'date', 'time', 'venue', 'game_variant', 'number_of_frames',
             'allow_draws', 'players', 'referees', 'is_public', 'table_number'
@@ -113,6 +113,7 @@ class MatchForm(forms.ModelForm):
             'game_variant': forms.Select(attrs={'class': 'form-select'}),
             'number_of_frames': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
             'table_number': forms.NumberInput(attrs={'class': 'form-control'}),
+            # Ukrywamy te pola domyślnie, żeby nie śmieciły (można je odkryć w __init__ jeśli trzeba)
             'allow_draws': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
@@ -121,71 +122,93 @@ class MatchForm(forms.ModelForm):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
-        # TWOJA LOGIKA FILTROWANIA (ZACHOWANA)
-        if self.request and self.request.user.is_authenticated:
+        is_auth = self.request and self.request.user.is_authenticated
+
+        # --- LOGIKA DLA ZALOGOWANEGO ---
+        if is_auth:
             user = self.request.user
+            # Filtrujemy listy
             self.fields['players'].queryset = Player.objects.filter(Q(owner=user) | Q(is_public=True))
             self.fields['referees'].queryset = Referee.objects.filter(Q(owner=user) | Q(is_public=True))
             self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
-        else:
-            self.fields['players'].queryset = Player.objects.filter(is_public=True)
-            self.fields['referees'].queryset = Referee.objects.filter(is_public=True)
-            self.fields['venue'].queryset = Venue.objects.filter(is_public=True)
 
-    def clean_date(self):
-        date = self.cleaned_data['date']
-        # Opcjonalnie: można pozwolić na daty przeszłe przy wprowadzaniu wyników historycznych
-        # if date < timezone.now().date():
-        #     raise ValidationError("The date cannot be in the past.")
-        return date
+            # Zalogowany może widzieć te pola, ale ustawmy domyślne ukrycie dla estetyki
+            # Jeśli chcesz je widzieć, usuń widget HiddenInput
+            self.fields['is_public'].widget = forms.HiddenInput()
+            self.fields['allow_draws'].widget = forms.HiddenInput()
+            self.fields['is_public'].initial = False  # Domyślnie prywatny
+            self.fields['allow_draws'].initial = False
+
+            # --- LOGIKA DLA GOŚCIA (SZYBKI MECZ) ---
+        else:
+            # Usuwamy zbędne pola z formularza - Gość ich nawet nie zobaczy
+            del self.fields['venue']
+            del self.fields['referees']
+            del self.fields['players']
+            del self.fields['table_number']
+
+            # Ukrywamy i ustawiamy na sztywno
+            self.fields['create_temporary_players'].initial = True
+            self.fields['create_temporary_players'].widget = forms.HiddenInput()
+
+            self.fields['is_public'].initial = True
+            self.fields['is_public'].widget = forms.HiddenInput()
+
+            self.fields['allow_draws'].initial = False
+            self.fields['allow_draws'].widget = forms.HiddenInput()
+
+            # Dla gościa zostają tylko: date, time, game_variant, number_of_frames
+
+    def clean_number_of_frames(self):
+        # Używamy .get(), żeby nie było błędu jeśli pole jest puste/błędne
+        frames = self.cleaned_data.get('number_of_frames')
+
+        # Jeśli frames jest None (np. wpisano tekst zamiast liczby), Django zajmie się tym wcześniej
+        if frames is not None:
+            if frames % 2 == 0:
+                raise ValidationError("The number of frames must be odd (e.g. 1, 3, 5).")
+        return frames
 
     def clean(self):
         cleaned_data = super().clean()
+
+        # Pobieramy pola bezpiecznie (mogą nie istnieć dla Gościa)
         players = cleaned_data.get('players')
         create_temp = cleaned_data.get('create_temporary_players')
 
-        if not create_temp:
-            if not players or players.count() < 2:
-                raise ValidationError(
-                    "You must select at least two players OR check 'Create temporary players'."
-                )
+        # Jeśli jesteśmy gościem, pole 'players' zostało usunięte, więc players jest None.
+        # Wtedy musimy uznać, że create_temp jest True (ustawiliśmy to w __init__),
+        # ale dla pewności w widoku i tak to obsłużymy.
+
+        # Walidacja tylko dla Zalogowanego (który widzi listę graczy)
+        if 'players' in self.fields:
+            if not create_temp and (not players or players.count() < 2):
+                raise ValidationError("Select at least two players OR check 'Create temporary players'.")
+
         return cleaned_data
 
+    # Metodę save() zostawiamy bez zmian - jest dobra,
+    # chociaż przy commit=False w widoku będziemy musieli pomóc ręcznie (co robisz w views).
     def save(self, commit=True):
         instance = super().save(commit=False)
         create_temp_players = self.cleaned_data.get('create_temporary_players', False)
 
         if commit:
             instance.save()
-            self.save_m2m()
+            self.save_m2m()  # Ważne dla relacji ManyToMany
 
+            # Logika tworzenia graczy przy zapisie przez formularz
             if create_temp_players:
                 owner = instance.owner
+                count_base = Player.objects.filter(owner=owner).count() if owner else 0
+                prefix = "Temp Player"
 
-                count_base = 0
-                if owner:
-                    count_base = Player.objects.filter(owner=owner).count()
-
-                prefix = "Temp Player"  # Skróciłem dla czytelności
-
-                # Tworzymy graczy i oznaczamy ich jako tymczasowych
-                temp_player1 = Player.objects.create(
-                    first_name=f'{prefix} {count_base + 1}',
-                    is_temporary=True,
-                    owner=owner
-                )
-                temp_player2 = Player.objects.create(
-                    first_name=f'{prefix} {count_base + 2}',
-                    is_temporary=True,
-                    owner=owner
-                )
-
-                # Dodajemy do M2M
-                instance.players.add(temp_player1, temp_player2)
-
-                # Opcjonalnie: Ustawiamy ich też w polach pomocniczych modelu Match (jeśli chcesz)
-                instance.temp_player1 = temp_player1
-                instance.temp_player2 = temp_player2
+                p1 = Player.objects.create(first_name=f'{prefix} {count_base + 1}', is_temporary=True, owner=owner)
+                p2 = Player.objects.create(first_name=f'{prefix} {count_base + 2}', is_temporary=True, owner=owner)
+                instance.players.add(p1, p2)
+                # Opcjonalne przypisanie do pól pomocniczych
+                instance.temp_player1 = p1
+                instance.temp_player2 = p2
                 instance.is_temporary = True
                 instance.save()
 
