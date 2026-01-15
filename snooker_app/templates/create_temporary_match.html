@@ -23,31 +23,46 @@
 
                         {# Pętla po wszystkich polach formularza #}
                         {% for field in form %}
-                            {# Wyświetlamy pole tylko jeśli nie jest ukryte (HiddenInput) #}
                             {% if not field.is_hidden %}
-                                <div class="mb-3">
-                                    <label for="{{ field.id_for_label }}" class="form-label">
-                                        {{ field.label }}
-                                    </label>
 
-                                    {# Samo pole input #}
-                                    {{ field }}
+                                {# SPECJALNY WYGLĄD DLA CHECKBOXÓW (Naprawia problem nr 1) #}
+                                {% if field.field.widget.input_type == 'checkbox' %}
+                                    <div class="mb-3 form-check">
+                                        {{ field }}
+                                        <label class="form-check-label" for="{{ field.id_for_label }}">
+                                            {{ field.label }}
+                                        </label>
+                                        {% if field.help_text %}
+                                            <div class="form-text text-muted">{{ field.help_text }}</div>
+                                        {% endif %}
+                                        {% if field.errors %}
+                                            <div class="text-danger small">{{ field.errors }}</div>
+                                        {% endif %}
+                                    </div>
 
-                                    {# To jest kluczowe: Wyświetlanie błędu dla konkretnego pola #}
-                                    {% if field.errors %}
-                                        <div class="text-danger small mt-1">
-                                            {% for error in field.errors %}
-                                                <strong>{{ error }}</strong>
-                                            {% endfor %}
-                                        </div>
-                                    {% endif %}
+                                {# STANDARDOWY WYGLĄD DLA INNYCH PÓL (Input, Select) #}
+                                {% else %}
+                                    <div class="mb-3">
+                                        <label for="{{ field.id_for_label }}" class="form-label">
+                                            {{ field.label }}
+                                        </label>
+                                        {{ field }}
 
-                                    {% if field.help_text %}
-                                        <div class="form-text text-muted">{{ field.help_text }}</div>
-                                    {% endif %}
-                                </div>
+                                        {% if field.errors %}
+                                            <div class="text-danger small mt-1">
+                                                {% for error in field.errors %}
+                                                    <strong>{{ error }}</strong>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+
+                                        {% if field.help_text %}
+                                            <div class="form-text text-muted">{{ field.help_text }}</div>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+
                             {% else %}
-                                {# Pola ukryte (np. is_public dla gościa) renderujemy, ale ich nie widać #}
                                 {{ field }}
                             {% endif %}
                         {% endfor %}

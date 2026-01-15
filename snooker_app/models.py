@@ -98,6 +98,12 @@ class Venue(models.Model):
     address = models.CharField(max_length=255, blank=True, null=True)
     capacity = models.PositiveIntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
 
+    tables_count = models.PositiveIntegerField(
+        blank=True, null=True,
+        validators=[MinValueValidator(0)],
+        help_text="Number of tables (optional)"
+    )
+
     def __str__(self):
         return self.name
 
@@ -152,7 +158,7 @@ class Match(models.Model):
     date = models.DateField()
     time = models.TimeField()
     venue = models.ForeignKey('Venue', on_delete=models.SET_NULL, blank=True, null=True)
-    table_number = models.IntegerField(blank=True, null=True, help_text="Numer stołu w klubie")
+    table_number = models.CharField(max_length=10, blank=True, null=True, help_text="e.g. 1, 12, A1, other")
 
     number_of_frames = models.PositiveIntegerField()
     allow_draws = models.BooleanField(default=False)
@@ -338,8 +344,6 @@ class MatchPlayer(models.Model):
 
     # This is the most important field - it tells whether it is Player 1 or Player 2
     position = models.PositiveSmallIntegerField(choices=[(1, 'First'), (2, 'Second')])
-
-
 
     class Meta:
         unique_together = ('match', 'player')

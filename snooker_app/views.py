@@ -50,18 +50,45 @@ def player_list(request):
 @login_required
 def add_player(request):
     if request.method == 'POST':
-        form = PlayerForm(request.POST)
+        # Dodajemy request=request
+        form = PlayerForm(request.POST, request=request)
         if form.is_valid():
             player = form.save(commit=False)
-            player.owner = request.user  # <--- Przypisanie właściciela
+            player.owner = request.user
+            # Tę logikę (admin=public) przenieśliśmy już do formularza (initial),
+            # ale zostawienie jej tutaj dla pewności nie zaszkodzi.
             if request.user.is_superuser:
-                player.is_public = True  # Admin tworzy publiczne
+                player.is_public = True
             player.save()
             return redirect('player_list')
     else:
-        form = PlayerForm()
+        # Tu też request=request
+        form = PlayerForm(request=request)
 
     return render(request, 'add_player.html', {'form': form})
+
+
+@login_required
+def player_edit(request, pk):
+    player = get_object_or_404(Player, pk=pk)
+
+    if not check_ownership(request, player):
+        messages.error(request, "Nie możesz edytować tego gracza.")
+        return redirect('player_list')
+
+    if request.method == 'POST':
+        # PlayerEditForm NIE MA __init__ z requestem w Twoim kodzie.
+        # Musimy go zaktualizować w forms.py (patrz niżej), albo użyć PlayerForm.
+        # Jeśli używasz PlayerEditForm, musisz w nim też dodać __init__.
+        # Zakładam, że zaktualizujemy forms.py.
+        form = PlayerEditForm(request.POST, instance=player, request=request) # <--- Dodajemy request
+        if form.is_valid():
+            form.save()
+            return redirect('player_list')
+    else:
+        form = PlayerEditForm(instance=player, request=request)
+
+    return render(request, 'player_edit.html', {'form': form, 'player': player})
 
 
 @login_required
@@ -71,26 +98,6 @@ def player_detail(request, pk):
     if not (player.is_public or player.owner == request.user):
         raise PermissionDenied("Nie masz dostępu do tego gracza.")
     return render(request, 'player_detail.html', {'player': player})
-
-
-@login_required
-def player_edit(request, pk):
-    player = get_object_or_404(Player, pk=pk)
-
-    # Zabezpieczenie: Tylko właściciel (lub admin dla publicznych) może edytować
-    if not check_ownership(request, player):
-        messages.error(request, "Nie możesz edytować tego gracza (jest publiczny lub nie Twój).")
-        return redirect('player_list')
-
-    if request.method == 'POST':
-        form = PlayerEditForm(request.POST, instance=player)
-        if form.is_valid():
-            form.save()
-            return redirect('player_list')
-    else:
-        form = PlayerEditForm(instance=player)
-
-    return render(request, 'player_edit.html', {'form': form, 'player': player})
 
 
 class PlayerDeleteView(DeleteView):
@@ -113,7 +120,7 @@ def referee_list(request):
 @login_required
 def add_referee(request):
     if request.method == 'POST':
-        form = RefereeForm(request.POST)
+        form = RefereeForm(request.POST, request=request) # <--- ZMIANA
         if form.is_valid():
             referee = form.save(commit=False)
             referee.owner = request.user
@@ -122,7 +129,7 @@ def add_referee(request):
             referee.save()
             return redirect('referee_list')
     else:
-        form = RefereeForm()
+        form = RefereeForm(request=request) # <--- ZMIANA
 
     return render(request, 'add_referee.html', {'form': form})
 
@@ -131,16 +138,16 @@ def add_referee(request):
 def edit_referee(request, pk):
     referee = get_object_or_404(Referee, pk=pk)
     if not check_ownership(request, referee):
-        messages.error(request, "Brak uprawnień do edycji.")
+        messages.error(request, "Brak uprawnień.")
         return redirect('referee_list')
 
     if request.method == 'POST':
-        form = RefereeForm(request.POST, instance=referee)
+        form = RefereeForm(request.POST, instance=referee, request=request) # <--- ZMIANA
         if form.is_valid():
             form.save()
             return redirect('referee_list')
     else:
-        form = RefereeForm(instance=referee)
+        form = RefereeForm(instance=referee, request=request) # <--- ZMIANA
 
     return render(request, 'edit_referee.html', {'form': form, 'referee': referee})
 
@@ -175,7 +182,7 @@ def venue_list(request):
 @login_required
 def add_venue(request):
     if request.method == 'POST':
-        form = VenueForm(request.POST)
+        form = VenueForm(request.POST, request=request) # <--- ZMIANA
         if form.is_valid():
             venue = form.save(commit=False)
             venue.owner = request.user
@@ -184,10 +191,9 @@ def add_venue(request):
             venue.save()
             return redirect('venue_list')
     else:
-        form = VenueForm()
+        form = VenueForm(request=request) # <--- ZMIANA
 
     return render(request, 'add_venue.html', {'form': form})
-
 
 @login_required
 def edit_venue(request, pk):
@@ -196,12 +202,13 @@ def edit_venue(request, pk):
         messages.error(request, "Brak uprawnień.")
         return redirect('venue_list')
 
-    form = VenueForm(request.POST, instance=venue)
-    if form.is_valid():
-        form.save()
-        return redirect('venue_list')
+    if request.method == 'POST':
+        form = VenueForm(request.POST, instance=venue, request=request) # <--- ZMIANA
+        if form.is_valid():
+            form.save()
+            return redirect('venue_list')
     else:
-        form = VenueForm(instance=venue)
+        form = VenueForm(instance=venue, request=request) # <--- ZMIANA
 
     return render(request, 'edit_venue.html', {'form': form, 'venue': venue})
 
