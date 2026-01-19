@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>Bulk Edit Matches: {{ competition.name }}</h3>
+        <a href="{% url 'competition_detail' competition.id %}" class="btn btn-secondary">Back to Tournament</a>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ formset.management_form }}
+
+        <div class="table-responsive shadow-sm border rounded">
+            <table class="table table-hover align-middle mb-0 bg-white">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 20%">Match Info</th>
+                        <th style="width: 15%">Date</th>
+                        <th style="width: 15%">Time</th>
+                        <th style="width: 10%">Table</th>
+                        <th style="width: 25%">Referee(s)</th>
+                        <th style="display:none;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for form in formset %}
+                        <tr>
+                            <td class="small">
+                                {% if form.instance.group_stage %}
+                                    <span class="badge bg-primary mb-1">Group {{ form.instance.group_name }}</span><br>
+                                {% elif form.instance.knockout_stage %}
+                                    <span class="badge bg-success mb-1">{{ form.instance.knockout_name }}</span><br>
+                                {% endif %}
+
+                                <strong>
+                                    {% for player in form.instance.players.all %}
+                                        {{ player.last_name }}
+                                        {% if not forloop.last %} vs {% endif %}
+                                    {% endfor %}
+                                </strong>
+                            </td>
+
+                            <td>
+                                {{ form.date }}
+                                {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {{ form.time }}
+                                {% if form.time.errors %}<div class="text-danger small">{{ form.time.errors }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {{ form.table_number }}
+                            </td>
+                            <td>
+                                {{ form.referees }}
+                                <div class="form-text" style="font-size: 0.7rem;">Hold Ctrl to select multiple</div>
+                            </td>
+
+                            <td style="display:none;">
+                                {{ form.id }}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4 mb-5">
+            <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary me-md-2">Cancel</a>
+            <button type="submit" class="btn btn-primary btn-lg px-5">Save All Changes</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

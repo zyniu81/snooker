@@ -291,6 +291,44 @@ class Match(models.Model):
 
         return {'is_finished': is_finished, 'winner': winner}
 
+    def get_real_score(self):
+        """Zwraca krotkę (wynik_p1, wynik_p2) liczoną z frame'ów"""
+        players = list(self.players.all())
+        if len(players) < 2:
+            return 0, 0
+
+        p1 = players[0]
+        p2 = players[1]
+
+        # Liczymy wygrane framy
+        p1_score = Frame.objects.filter(match_player__match=self, winner=p1).count()
+        p2_score = Frame.objects.filter(match_player__match=self, winner=p2).count()
+
+        return p1_score, p2_score
+
+    def update_status_from_frames(self):
+        """Aktualizuje status meczu i zwycięzcę na podstawie rozegranych frame'ów"""
+        status_data = self.get_game_status()  # Ta metoda już liczy kto wygrał
+
+        # Aktualizujemy pola w bazie
+        self.winner = status_data['winner']
+
+        if status_data['is_finished']:
+            self.status = 'FINISHED'
+        else:
+            self.status = 'IN_PROGRESS'
+
+        # Opcjonalnie: Zapisz też wynik punktowy do pól final_score
+        scores = self.get_real_score()
+        self.final_score_player1 = scores[0]
+        self.final_score_player2 = scores[1]
+
+        self.save()
+
+    @property
+    def is_finished(self):
+        return self.status == 'FINISHED'
+
     def is_match_finished(self):
         return self.get_game_status()['is_finished']
 
@@ -454,8 +492,14 @@ class Competition(models.Model):
     end_date = models.DateField()
     venue = models.ForeignKey('Venue', on_delete=models.SET_NULL, blank=True, null=True)
 
+    # --- NOWE: STATUS TURNIEJU ---
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('FINISHED', 'Finished'),
+    ]
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='ACTIVE')
+
     # --- 3. KONFIGURACJA GRY ---
-    # Turniej narzuca wariant gry wszystkim meczom (np. cały turniej to 6-Red)
     game_variant = models.CharField(
         max_length=20,
         choices=Match.VARIANT_CHOICES,
@@ -465,8 +509,6 @@ class Competition(models.Model):
 
     # --- 4. UCZESTNICY ---
     players = models.ManyToManyField('Player', related_name='competitions', blank=True)
-    # Relacja do meczów jest w drugą stronę (Mecz wskazuje na Stage),
-    # ale możemy dodać helper, żeby łatwo pobrać wszystkie mecze turnieju.
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -475,18 +517,21 @@ class Competition(models.Model):
         return self.name
 
     def is_active(self):
-        return self.start_date <= timezone.now().date() <= self.end_date
+        # Turniej jest aktywny jeśli daty pasują I status nie jest FINISHED
+        return (self.start_date <= timezone.now().date() <= self.end_date) and self.status != 'FINISHED'
+
+    @property
+    def is_finished(self):
+        return self.status == 'FINISHED'
 
     def clean(self):
         if self.end_date < self.start_date:
             raise ValidationError('End date cannot be earlier than start date.')
 
     def get_stages(self):
-        """Zwraca wszystkie etapy turnieju w kolejności (Grupy, potem Puchar itd.)"""
         stages = []
         stages.extend(list(self.group_stages.all()))
         stages.extend(list(self.knockout_stages.all()))
-        # Sortujemy po polu 'order'
         return sorted(stages, key=lambda x: x.order)
 
 
@@ -511,62 +556,50 @@ class GroupStage(Stage):
     players_per_group = models.IntegerField(validators=[MinValueValidator(2)])
     matches_per_pair = models.IntegerField(default=1, validators=[MinValueValidator(1)])
 
-    # --- ZASADY PUNKTACJI (TABELA) ---
+    # --- ZASADY PUNKTACJI ---
     points_for_win = models.IntegerField(default=3)
     points_for_draw = models.IntegerField(default=1)
     points_for_loss = models.IntegerField(default=0)
-
-    # Czy w grupie można remisować? (Zazwyczaj TAK)
     allow_draws = models.BooleanField(default=True)
 
-    def create_groups_and_matches(self, default_frames):
-        """Generuje mecze systemem każdy z każdym w grupach"""
-        players = list(self.competition.players.all())
+    def create_groups_and_matches(self, default_frames, selected_players=None):
+        """Generuje mecze systemem każdy z każdym w grupach dla WYBRANYCH graczy"""
+
+        # 1. Sprawdzamy czy wybrano konkretnych graczy
+        if selected_players:
+            players = list(selected_players)
+        else:
+            players = list(self.competition.players.all())
+
         random.shuffle(players)
-
         comp_owner = self.competition.owner
-
-        # Obliczamy ile osób weszło
         total_players = len(players)
 
-        # Proste dzielenie na grupy (można ulepszyć, jeśli liczba nie jest podzielna)
         for i in range(self.num_groups):
-            group_letter = chr(65 + i)  # A, B, C...
-
-            # Wyciągamy wycinek listy graczy dla tej grupy
+            group_letter = chr(65 + i)
             start_idx = i * self.players_per_group
             end_idx = start_idx + self.players_per_group
-            # Zabezpieczenie przed wyjściem poza listę
             group_players = players[start_idx:end_idx] if start_idx < total_players else []
 
             if len(group_players) < 2:
-                continue  # Pomijamy puste grupy lub z 1 graczem
+                continue
 
-            # Algorytm każdy z każdym (Round Robin)
             for j, player1 in enumerate(group_players):
                 for player2 in group_players[j + 1:]:
                     for _ in range(self.matches_per_pair):
                         match = Match.objects.create(
                             owner=comp_owner,
                             is_public=self.competition.is_public,
-
-                            # Czas i Miejsce
                             date=self.competition.start_date,
-                            time=timezone.now().time(),  # Domyślnie teraz, do edycji później
+                            time=timezone.now().time(),
                             venue=self.competition.venue,
-
-                            # Zasady
                             number_of_frames=default_frames,
-                            game_variant=self.competition.game_variant,  # Dziedziczy z turnieju
-                            allow_draws=self.allow_draws,  # Z konfiguracji etapu
-
-                            # Powiązanie z Etapem
+                            game_variant=self.competition.game_variant,
+                            allow_draws=self.allow_draws,
                             group_stage=self,
                             group_name=group_letter,
-
                             status='SCHEDULED'
                         )
-                        # Dodajemy graczy (nazwy uzupełnią się same w match.save())
                         match.players.add(player1, player2)
                         match.save()
 
@@ -580,53 +613,61 @@ class KnockoutStage(Stage):
     # Opcjonalnie: Mecz o 3 miejsce?
     has_third_place_match = models.BooleanField(default=False)
 
-    def create_knockout_matches(self):
-        """Tworzy pustą drabinkę turniejową"""
-        players = list(self.competition.players.all())
-        # Tutaj można dodać logikę rozstawienia (seeding), na razie losowo
-        random.shuffle(players)
+    def create_knockout_matches(self, selected_players=None):
+        """Tworzy drabinkę BAZUJĄC NA LICZBIE GRACZY, a nie tylko na liczbie rund."""
 
+        # 1. Pobieramy graczy
+        if selected_players:
+            players = list(selected_players)
+        else:
+            players = list(self.competition.players.all())
+
+        # Mieszamy ich
+        random.shuffle(players)
         comp_owner = self.competition.owner
 
-        # Liczba meczów w pierwszej rundzie: 2^(n-1)
-        # Np. dla 3 rund (ćwierćfinał): 2^2 = 4 mecze
-        initial_matches_count = 2 ** (self.num_rounds - 1)
+        # 2. Obliczamy startową liczbę meczów na podstawie liczby graczy
+        # Np. 8 graczy = 4 mecze. 5 graczy = 2 mecze (jeden ma wolny los).
+        current_round_matches = len(players) // 2
 
+        if current_round_matches < 1:
+            return  # Zabezpieczenie: za mało graczy na cokolwiek
+
+        # 3. Pętla po rundach, o które prosił użytkownik
         for round_num in range(self.num_rounds):
-            round_name = self._get_round_name(round_num, self.num_rounds)
 
-            # W każdej kolejnej rundzie jest połowa meczów z poprzedniej
-            matches_in_current_round = initial_matches_count // (2 ** round_num)
+            # Jeśli w wyniku dzielenia zeszliśmy do 0 meczów, przerywamy (np. użytkownik chciał 5 rund dla 4 graczy)
+            if current_round_matches < 1:
+                break
 
-            for i in range(matches_in_current_round):
-                # Tylko w pierwszej rundzie od razu obsadzamy graczy (jeśli są dostępni)
+            # Ustalamy nazwę rundy
+            # Przekazujemy aktualną liczbę meczów, żeby funkcja wiedziała czy to Finał (1 mecz) czy Ćwierćfinał (4 mecze)
+            round_name = self._get_round_name(current_round_matches)
+
+            for i in range(current_round_matches):
                 p1 = None
                 p2 = None
 
+                # Tylko w pierwszej rundzie (round_num == 0) obsadzamy graczy
                 if round_num == 0:
+                    # Wyciągamy parę graczy z listy
                     idx1 = 2 * i
                     idx2 = 2 * i + 1
+                    # Sprawdzamy czy nie wyszliśmy poza listę (safety check)
                     if idx1 < len(players): p1 = players[idx1]
                     if idx2 < len(players): p2 = players[idx2]
 
                 match = Match.objects.create(
                     owner=comp_owner,
                     is_public=self.competition.is_public,
-
-                    # Daty przesuwamy o liczbę rund (np. 1 runda w poniedziałek, 2 we wtorek)
                     date=self.competition.start_date + timedelta(days=round_num),
                     time=timezone.now().time(),
                     venue=self.competition.venue,
-
-                    # Zasady
                     number_of_frames=self.frames_per_match,
                     game_variant=self.competition.game_variant,
-                    allow_draws=False,  # W pucharze NIE MA remisów
-
-                    # Powiązanie
+                    allow_draws=False,
                     knockout_stage=self,
                     knockout_name=round_name,
-
                     status='SCHEDULED'
                 )
 
@@ -634,13 +675,45 @@ class KnockoutStage(Stage):
                 if p2: match.players.add(p2)
                 match.save()
 
-    def _get_round_name(self, round_index, total_rounds):
-        """Pomocnicza nazwa rundy (np. Półfinał)"""
-        diff = total_rounds - 1 - round_index
-        if diff == 0: return "Final"
-        if diff == 1: return "Semi-Final"
-        if diff == 2: return "Quarter-Final"
-        return f"Round {round_index + 1}"
+            # --- PRZYGOTOWANIE DO KOLEJNEJ RUNDY ---
+            # W następnej rundzie będzie połowa meczów (zwycięzcy par)
+            current_round_matches = current_round_matches // 2
+
+        # --- Mecz o 3. miejsce (opcjonalny) ---
+        if self.has_third_place_match and self.num_rounds > 1:
+            # Tworzymy go tylko, jeśli turniej ma sensowną długość
+            match_3rd = Match.objects.create(
+                owner=comp_owner,
+                is_public=self.competition.is_public,
+                date=self.competition.start_date + timedelta(days=self.num_rounds - 1),
+                time=timezone.now().time(),
+                venue=self.competition.venue,
+                number_of_frames=self.frames_per_match,
+                game_variant=self.competition.game_variant,
+                allow_draws=False,
+                knockout_stage=self,
+                knockout_name="3rd Place Match",
+                status='SCHEDULED'
+            )
+            match_3rd.save()
+
+    def _get_round_name(self, matches_count):
+        """
+        Zwraca nazwę rundy na podstawie liczby meczów w tej rundzie.
+        4 mecze -> Ćwierćfinał
+        2 mecze -> Półfinał
+        1 mecz  -> Finał
+        """
+        if matches_count == 1:
+            return "Final"
+        elif matches_count == 2:
+            return "Semi-Final"
+        elif matches_count == 4:
+            return "Quarter-Final"
+        elif matches_count == 8:
+            return "Last 16"
+        else:
+            return f"Round of {matches_count * 2}"
 
     def clean(self):
         super().clean()

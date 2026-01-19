@@ -10,6 +10,8 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, HttpResponseForbidden
 from django.core.exceptions import PermissionDenied
+from django.forms import modelformset_factory
+from django.utils import timezone
 from datetime import timedelta
 
 import os
@@ -19,7 +21,7 @@ import json
 
 from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueForm,
                                MatchForm, CompetitionForm, AddMatchesToCompetitionForm,
-                               GroupStageForm, SignUpForm, KnockoutStageForm)
+                               GroupStageForm, SignUpForm, KnockoutStageForm, MassMatchEditForm, ExtraMatchForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
                                 MatchPlayer, Frame)
 
@@ -556,39 +558,57 @@ class CompetitionDeleteView(DeleteView):
 
 @login_required
 def add_matches_to_competition(request, competition_id):
-    competition = get_object_or_404(Competition, id=competition_id)
+    """
+    Tworzy pojedynczy 'Extra Match' (np. sparing, o 3 miejsce) w ramach turnieju.
+    Automatycznie przypisuje go do etapu 'Extras' (KnockoutStage), tworząc go w razie potrzeby.
+    """
+    competition = get_object_or_404(Competition, pk=competition_id)
     if competition.owner != request.user:
         raise PermissionDenied
 
-    group_stages = competition.groupstage_stages.all()
-    knockout_stages = competition.knockoutstage_stages.all()
-
     if request.method == 'POST':
-        form = AddMatchesToCompetitionForm(request.POST, competition=competition, user=request.user)
+        form = ExtraMatchForm(request.POST, competition=competition)
         if form.is_valid():
-            selected_matches = form.cleaned_data['matches']
-            for match in selected_matches:
-                stage_id = request.POST.get(f'stage_{match.id}')
-                if stage_id:
-                    # Tutaj uproszczenie, zakładamy że stage należy do competition
-                    group_stage = group_stages.filter(id=stage_id).first()
-                    knockout_stage = knockout_stages.filter(id=stage_id).first()
-                    if group_stage:
-                        match.group_stage = group_stage
-                    elif knockout_stage:
-                        match.knockout_stage = knockout_stage
-                    match.save()
-            competition.matches.add(*selected_matches)
-            messages.success(request, "Matches successfully added.")
-            return redirect('competition_detail', pk=competition.id)
-    else:
-        form = AddMatchesToCompetitionForm(competition=competition, user=request.user)
+            # 1. Znajdź lub stwórz etap "Extras" (żeby mecz miał właściciela)
+            # Używamy KnockoutStage, bo jest prostszy w strukturze
+            extra_stage, created = KnockoutStage.objects.get_or_create(
+                competition=competition,
+                name="Extras",
+                defaults={
+                    'order': 999, # Zawsze na końcu
+                    'num_rounds': 1,
+                    'frames_per_match': form.cleaned_data['number_of_frames'],
+                    'has_third_place_match': False
+                }
+            )
 
-    stages = list(group_stages) + list(knockout_stages)
+            # 2. Utwórz mecz
+            match = form.save(commit=False)
+            match.owner = request.user
+            # WAŻNE: Podpinamy pod etap Extras
+            match.knockout_stage = extra_stage
+            # Oznaczamy jako knockout (dla porządku w nazwie)
+            match.knockout_name = "Extra Match"
+            match.save()
+
+            # 3. Przypisz graczy
+            p1 = form.cleaned_data['player1']
+            p2 = form.cleaned_data['player2']
+            match.players.add(p1, p2)
+            match.save()
+
+            messages.success(request, "Extra Match created successfully!")
+            return redirect('competition_detail', pk=competition.pk)
+    else:
+        form = ExtraMatchForm(competition=competition, initial={
+            'date': timezone.now().date(),
+            'time': timezone.now().strftime('%H:%M'),
+            'number_of_frames': 3
+        })
+
     return render(request, 'add_matches_to_competition.html', {
         'form': form,
-        'competition': competition,
-        'stages': stages
+        'competition': competition
     })
 
 
@@ -651,19 +671,30 @@ def create_group_stage(request, competition_id):
         raise PermissionDenied
 
     if competition.players.count() == 0:
-        messages.error(request, "Please add players first.")
+        messages.error(request, "Please add players to the competition first.")
         return redirect('add_players_to_competition', pk=competition.id)
 
+    winners, eliminated, others = get_sorted_players_for_stage(competition)
+
     if request.method == 'POST':
-        form = GroupStageForm(request.POST)
-        if form.is_valid():
-            group_stage = form.save(commit=False)
-            group_stage.competition = competition
-            group_stage.save()
-            group_stage.create_groups_and_matches(form.cleaned_data['default_frames'])
-            return redirect('competition_detail', pk=competition.id)
+        # Przekazujemy listy do formularza
+        form = GroupStageForm(
+            request.POST,
+            competition=competition,
+            winners=winners,
+            eliminated=eliminated,
+            others=others
+        )
+        # ... reszta kodu zapisu bez zmian ...
     else:
-        form = GroupStageForm()
+        # GET: Też przekazujemy listy
+        form = GroupStageForm(
+            competition=competition,
+            winners=winners,
+            eliminated=eliminated,
+            others=others
+        )
+
     return render(request, 'create_group_stage.html', {'form': form, 'competition': competition})
 
 
@@ -673,16 +704,49 @@ def create_knockout_stage(request, competition_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
+    # --- SPRAWDZENIE CZY SĄ GRACZE ---
+    if competition.players.count() == 0:
+        messages.error(request, "Please add players to the competition first.")
+        return redirect('add_players_to_competition', pk=competition.id)
+    # -------------------------------------------
+
+    winners, eliminated, others = get_sorted_players_for_stage(competition)
+
     if request.method == 'POST':
-        form = KnockoutStageForm(request.POST)
+        # --- POPRAWKA TUTAJ: Zmieniamy GroupStageForm na KnockoutStageForm ---
+        form = KnockoutStageForm(
+            request.POST,
+            competition=competition,
+            winners=winners,
+            eliminated=eliminated,
+            others=others
+        )
+
+        # Pamiętaj, żeby tutaj też była logika zapisu dla KnockoutStage!
         if form.is_valid():
             knockout_stage = form.save(commit=False)
             knockout_stage.competition = competition
             knockout_stage.save()
-            knockout_stage.create_knockout_matches()
+
+            selected_players = form.cleaned_data.get('players')
+
+            # Tu wywołujemy metodę z modelu KnockoutStage
+            knockout_stage.create_knockout_matches(
+                selected_players=selected_players
+            )
+
+            messages.success(request, f"Knockout Stage '{knockout_stage.name}' created successfully.")
             return redirect('competition_detail', pk=competition.id)
+
     else:
-        form = KnockoutStageForm()
+        # GET: --- POPRAWKA TUTAJ RÓWNIEŻ ---
+        form = KnockoutStageForm(
+            competition=competition,
+            winners=winners,
+            eliminated=eliminated,
+            others=others
+        )
+
     return render(request, 'create_knockout_stage.html', {'form': form, 'competition': competition})
 
 
@@ -1122,6 +1186,7 @@ def save_frame_result(request):
         last_frame.save()
 
         # 4. Sprawdź czy mecz się skończył (korzystając z nowej logiki w modelu)
+        match.update_status_from_frames()
         game_status = match.get_game_status()
         match_over = game_status['is_finished']
         match_winner_obj = game_status['winner']
@@ -1201,3 +1266,148 @@ def update_player_stats(request):
 
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
+@login_required
+def mass_edit_matches(request, competition_id):
+    competition = get_object_or_404(Competition, pk=competition_id)
+
+    # Sprawdzenie uprawnień
+    if competition.owner != request.user:
+        raise PermissionDenied
+
+    # Pobieramy mecze turnieju (zarówno grupowe jak i pucharowe)
+    matches = Match.objects.filter(
+        Q(group_stage__competition=competition) |
+        Q(knockout_stage__competition=competition)
+    ).order_by('date', 'time', 'id')
+
+    # Tworzymy klasę Formsetu
+    MatchFormSet = modelformset_factory(Match, form=MassMatchEditForm, extra=0)
+
+    if request.method == 'POST':
+        formset = MatchFormSet(request.POST, queryset=matches)
+        if formset.is_valid():
+            formset.save()
+            messages.success(request, "Matches updated successfully.")
+            return redirect('competition_detail', pk=competition.id)
+    else:
+        formset = MatchFormSet(queryset=matches)
+
+    # --- FILTROWANIE SĘDZIÓW ---
+    # To jest ważne: Formset domyślnie pokaże wszystkich sędziów z bazy.
+    # Musimy ręcznie przefiltrować pole 'referees' w każdym formularzu,
+    # żeby pokazywało tylko sędziów użytkownika + publicznych.
+
+    my_referees = Referee.objects.filter(Q(owner=request.user) | Q(is_public=True))
+
+    for form in formset:
+        form.fields['referees'].queryset = my_referees
+
+    return render(request, 'mass_edit_matches.html', {
+        'formset': formset,
+        'competition': competition
+    })
+
+
+# --- FUNKCJA POMOCNICZA DO SORTOWANIA GRACZY ---
+def get_sorted_players_for_stage(competition):
+    """
+    Zwraca trzy listy graczy na podstawie ostatniego etapu:
+    1. winners (Zwycięzcy meczów ostatniego etapu)
+    2. eliminated (Przegrani w ostatnim etapie)
+    3. others (Gracze z turnieju, którzy nie grali w ostatnim etapie)
+    """
+
+    # 1. Znajdź wszystkie etapy i posortuj po 'order'
+    # Używamy nazw relacji wygenerowanych przez '%(class)s_stages'
+    # GroupStage -> groupstage_stages
+    # KnockoutStage -> knockoutstage_stages
+
+    group_stages = list(competition.groupstage_stages.all())
+    knockout_stages = list(competition.knockoutstage_stages.all())
+
+    all_stages = sorted(group_stages + knockout_stages, key=lambda x: x.order)
+
+    # Domyślnie wszyscy są "Inni"
+    all_players = set(competition.players.all())
+
+    if not all_stages:
+        # Jeśli nie ma etapów, wszyscy gracze trafiają do 'others'
+        return [], [], list(all_players)
+
+    # 2. Pobierz ostatni etap
+    last_stage = all_stages[-1]
+
+    # 3. Pobierz mecze z tego etapu
+    # Sprawdzamy, czy to obiekt GroupStage czy KnockoutStage, żeby wiedzieć, jakiej relacji użyć
+    # W modelu Match masz pola 'group_stage' i 'knockout_stage'
+    # Relacje zwrotne to zazwyczaj 'matches' (bo related_name='matches' w Twoim modelu Match)
+
+    if hasattr(last_stage, 'matches'):
+        matches = last_stage.matches.filter(status='FINISHED')
+    else:
+        # Fallback (bezpiecznik)
+        matches = []
+
+    # 4. Sortowanie
+    winners = set()
+    participants = set()
+
+    for match in matches:
+        # Dodajemy wszystkich uczestników meczu
+        for p in match.players.all():
+            participants.add(p)
+
+        # Dodajemy zwycięzcę (jeśli jest)
+        if match.winner:
+            winners.add(match.winner)
+
+    # Przegrani to: Uczestnicy MINUS Zwycięzcy
+    eliminated = participants - winners
+
+    # Inni to: Wszyscy z turnieju MINUS Uczestnicy ostatniego etapu
+    others = all_players - participants
+
+    return list(winners), list(eliminated), list(others)
+
+
+# --- ZAMYKANIE ETAPÓW I TURNIEJU ---
+
+@login_required
+def end_group_stage(request, stage_id):
+    stage = get_object_or_404(GroupStage, pk=stage_id)
+    if stage.competition.owner != request.user:
+        raise PermissionDenied
+
+    stage.is_finished = True
+    stage.save()
+    messages.success(request, f"Stage '{stage.name}' has been marked as finished.")
+    return redirect('competition_detail', pk=stage.competition.id)
+
+
+@login_required
+def end_knockout_stage(request, stage_id):
+    stage = get_object_or_404(KnockoutStage, pk=stage_id)
+    if stage.competition.owner != request.user:
+        raise PermissionDenied
+
+    stage.is_finished = True
+    stage.save()
+    messages.success(request, f"Stage '{stage.name}' has been marked as finished.")
+    return redirect('competition_detail', pk=stage.competition.id)
+
+
+@login_required
+def end_competition(request, competition_id):
+    competition = get_object_or_404(Competition, pk=competition_id)
+    if competition.owner != request.user:
+        raise PermissionDenied
+
+    # Ustawiamy status turnieju na FINISHED
+    # (Upewnij się, że masz takie pole w modelu Competition, jeśli nie - dodaj je)
+    competition.status = 'FINISHED'
+    competition.save()
+
+    messages.success(request, f"Tournament '{competition.name}' has been officially closed! 🏆")
+    return redirect('competition_detail', pk=competition.id)

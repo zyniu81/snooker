@@ -53,13 +53,11 @@
 <div class="alert alert-warning alert-dismissible fade show text-center shadow-sm" role="alert">
     <strong>You are playing as a Guest.</strong>
     <span class="d-none d-md-inline"> Don't lose your progress! </span>
-    <a href="{% url 'register' %}" class="btn btn-primary btn-sm ml-2">
+    <a href="{% url 'register' %}" class="btn btn-primary btn-sm ms-2">
         <i class="bi bi-person-plus-fill"></i> Create Account to Save Match
     </a>
 
-    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-        <span aria-hidden="true">&times;</span>
-    </button>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
 </div>
 {% endif %}
 
@@ -234,9 +232,7 @@
                         <div class="modal-content">
                             <div class="modal-header">
                                 <h5 class="modal-title" id="endFrameLabel">End Frame Decision</h5>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body text-center">
                                 <p>Confirm ending this frame. Who won?</p>
@@ -259,7 +255,7 @@
                     <div class="modal-dialog modal-sm" role="document"> <div class="modal-content">
                             <div class="modal-header">
                                 <h5 class="modal-title">Confirm Decision</h5>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                     <span aria-hidden="true">&times;</span>
                                 </button>
                             </div>
@@ -268,7 +264,7 @@
                                 <p class="text-danger small">This action cannot be undone!</p>
                             </div>
                             <div class="modal-footer justify-content-center">
-                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
 
                                 <button type="button" class="btn btn-danger" onclick="finalizeFrameEnd()">Yes, Confirm</button>
                             </div>
@@ -287,9 +283,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="foulModalLabel">Select Foul Points</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="mb-3">
@@ -306,7 +300,7 @@
                     <button class="btn btn-outline-primary next-player" data-player="2">Player 2</button>
                 </div>
 
-                <div class="mb-3 form-check ml-1">
+                <div class="mb-3 form-check ms-1">
                     <input type="checkbox" class="form-check-input" id="freeBallCheckbox">
                     <label class="form-check-label font-weight-bold" for="freeBallCheckbox">Free Ball?</label>
                 </div>

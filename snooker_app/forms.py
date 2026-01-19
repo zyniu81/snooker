@@ -240,7 +240,6 @@ class MatchForm(forms.ModelForm):
 class CompetitionForm(forms.ModelForm):
     class Meta:
         model = Competition
-        # Usunąłem nieistniejące pola (is_group_stage, is_knockout), dodałem game_variant
         fields = ['name', 'start_date', 'end_date', 'venue', 'game_variant', 'is_public']
 
         widgets = {
@@ -251,6 +250,22 @@ class CompetitionForm(forms.ModelForm):
             'game_variant': forms.Select(attrs={'class': 'form-select'}),
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        # 1. Odbieramy 'request' i usuwamy go z argumentów, zanim trafi do super().__init__
+        self.request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+
+        # 2. Logika filtrowania Venue (żeby widzieć tylko swoje + publiczne)
+        if self.request and self.request.user.is_authenticated:
+            user = self.request.user
+            self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
+
+        # 3. Ukrywanie 'is_public' dla zwykłych użytkowników (nie-adminów)
+        if not self.request or not self.request.user.is_superuser:
+            if 'is_public' in self.fields:
+                self.fields['is_public'].widget = forms.HiddenInput()
+                self.fields['is_public'].initial = False
 
     def clean(self):
         cleaned_data = super().clean()
@@ -284,41 +299,95 @@ class AddMatchesToCompetitionForm(forms.Form):
 
 
 class GroupStageForm(forms.ModelForm):
-    # To pole nie jest w modelu, ale jest potrzebne do generowania meczów
-    default_frames = forms.IntegerField(min_value=1, initial=3,
-                                        widget=forms.NumberInput(attrs={'class': 'form-control'}))
+    players = forms.ModelMultipleChoiceField(
+        queryset=Player.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label="Select Players for this Stage"
+    )
+
+    # Pole dodatkowe (nie z modelu Stage, ale potrzebne do tworzenia meczów)
+    default_frames = forms.IntegerField(
+        min_value=1,
+        initial=3,
+        label="Frames per Match",
+        widget=forms.NumberInput(attrs={'class': 'form-control'})  # <-- Widget dla pola spoza modelu
+    )
 
     class Meta:
         model = GroupStage
-        # Zaktualizowane pola modelu
         fields = [
             'name', 'order', 'num_groups', 'players_per_group',
             'matches_per_pair', 'points_for_win', 'points_for_draw', 'allow_draws'
         ]
+
+        # --- WIDGETY DLA PÓL MODELU (Żeby wyglądały ładnie) ---
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Group Stage'}),
             'order': forms.NumberInput(attrs={'class': 'form-control'}),
-            'num_groups': forms.NumberInput(attrs={'class': 'form-control'}),
-            'players_per_group': forms.NumberInput(attrs={'class': 'form-control'}),
-            'matches_per_pair': forms.NumberInput(attrs={'class': 'form-control'}),
+            'num_groups': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+            'players_per_group': forms.NumberInput(attrs={'class': 'form-control', 'min': '2'}),
+            'matches_per_pair': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'value': '1'}),
             'points_for_win': forms.NumberInput(attrs={'class': 'form-control'}),
             'points_for_draw': forms.NumberInput(attrs={'class': 'form-control'}),
             'allow_draws': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        self.competition = kwargs.pop('competition', None)
+        self.winner_list = kwargs.pop('winners', [])
+        self.eliminated_list = kwargs.pop('eliminated', [])
+        self.other_list = kwargs.pop('others', [])
+
+        super().__init__(*args, **kwargs)
+
+        if self.competition:
+            self.fields['players'].queryset = self.competition.players.all()
+
+            if self.winner_list:
+                self.fields['players'].initial = [p.id for p in self.winner_list]
+            else:
+                self.fields['players'].initial = [p.id for p in self.other_list]
+
 
 class KnockoutStageForm(forms.ModelForm):
+    # Lista graczy
+    players = forms.ModelMultipleChoiceField(
+        queryset=Player.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label="Select Players for this Stage"
+    )
+
     class Meta:
         model = KnockoutStage
-        # Zaktualizowane pola
+        # TO JEST KLUCZOWE: Tu muszą być wypisane wszystkie 5 pól
         fields = ['name', 'order', 'num_rounds', 'frames_per_match', 'has_third_place_match']
+
+        # Definicja wyglądu (żeby pola miały ramki i wyglądały ładnie)
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Finals'}),
             'order': forms.NumberInput(attrs={'class': 'form-control'}),
-            'num_rounds': forms.NumberInput(attrs={'class': 'form-control'}),
-            'frames_per_match': forms.NumberInput(attrs={'class': 'form-control'}),
+            'num_rounds': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+            'frames_per_match': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'has_third_place_match': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        self.competition = kwargs.pop('competition', None)
+        self.winner_list = kwargs.pop('winners', [])
+        self.eliminated_list = kwargs.pop('eliminated', [])
+        self.other_list = kwargs.pop('others', [])
+
+        super().__init__(*args, **kwargs)
+
+        if self.competition:
+            self.fields['players'].queryset = self.competition.players.all()
+
+            if self.winner_list:
+                self.fields['players'].initial = [p.id for p in self.winner_list]
+            else:
+                self.fields['players'].initial = [p.id for p in self.other_list]
 
     def clean_num_rounds(self):
         num_rounds = self.cleaned_data.get('num_rounds')
@@ -345,3 +414,49 @@ class SignUpForm(UserCreationForm):
         if commit:
             user.save()
         return user
+
+
+class MassMatchEditForm(forms.ModelForm):
+    class Meta:
+        model = Match
+        fields = ['date', 'time', 'table_number', 'referees']
+        widgets = {
+            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}),
+            'time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control form-control-sm'}),
+            'table_number': forms.TextInput(attrs={'class': 'form-control form-control-sm', 'style': 'width: 80px;'}),
+            # Sędziów zostawiamy jako SelectMultiple, ale w HTML dodamy mu klasę, żeby nie był gigantyczny
+            'referees': forms.SelectMultiple(attrs={'class': 'form-select form-select-sm', 'size': '1'}),
+        }
+
+
+class ExtraMatchForm(forms.ModelForm):
+    # Pola wyboru graczy (ograniczone do uczestników turnieju)
+    player1 = forms.ModelChoiceField(queryset=Player.objects.none(), label="Player 1")
+    player2 = forms.ModelChoiceField(queryset=Player.objects.none(), label="Player 2")
+
+    class Meta:
+        model = Match
+        fields = ['date', 'time', 'table_number', 'game_variant', 'number_of_frames']
+        widgets = {
+            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
+            'table_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'game_variant': forms.Select(attrs={'class': 'form-select'}),
+            'number_of_frames': forms.NumberInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        competition = kwargs.pop('competition', None)
+        super().__init__(*args, **kwargs)
+        if competition:
+            self.fields['player1'].queryset = competition.players.all()
+            self.fields['player2'].queryset = competition.players.all()
+            # Ustaw domyślny wariant z turnieju
+            self.fields['game_variant'].initial = competition.game_variant
+
+    def clean(self):
+        cleaned_data = super().clean()
+        p1 = cleaned_data.get('player1')
+        p2 = cleaned_data.get('player2')
+        if p1 and p2 and p1 == p2:
+            raise forms.ValidationError("Player 1 and Player 2 cannot be the same person.")

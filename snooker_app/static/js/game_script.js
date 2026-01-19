@@ -463,46 +463,34 @@ function pauseTimer() {
     timerInterval = null;
 }
 
-function stopTimer() {
-    $('#endFrameModal').modal('show');
-}
-
 function endFrame() {
-    // 1. Zatrzymujemy czas (tak jak miałeś)
     pauseTimer();
 
-    // 2. Pobieramy aktualne punkty graczy
-    // Używamy bezpiecznego selektora, żeby na pewno znaleźć inputy
     const p1ScoreInput = document.querySelector(`.player-score[data-player="1"]`);
     const p2ScoreInput = document.querySelector(`.player-score[data-player="2"]`);
-
-    // Zamieniamy wartość na liczbę (lub 0 jeśli puste)
     const p1Score = parseInt(p1ScoreInput ? p1ScoreInput.value : 0, 10);
     const p2Score = parseInt(p2ScoreInput ? p2ScoreInput.value : 0, 10);
 
-    // 3. Pobieramy przyciski z modala (te nowe, które dodałeś w HTML w Kroku 2)
     const btnP1 = document.getElementById('btn-win-p1');
     const btnP2 = document.getElementById('btn-win-p2');
 
-    // Upewniamy się, że przyciski istnieją (zabezpieczenie)
     if (btnP1 && btnP2) {
-        // Resetujemy kolory przycisków do szarego (startowego)
         btnP1.className = 'btn btn-outline-secondary btn-lg p-4';
         btnP2.className = 'btn btn-outline-secondary btn-lg p-4';
 
-        // Logika sugestii: Podświetlamy tego, kto ma więcej punktów
         if (p1Score > p2Score) {
             btnP1.classList.remove('btn-outline-secondary');
-            btnP1.classList.add('btn-success'); // Zielony dla P1
+            btnP1.classList.add('btn-success');
         } else if (p2Score > p1Score) {
             btnP2.classList.remove('btn-outline-secondary');
-            btnP2.classList.add('btn-success'); // Zielony dla P2
+            btnP2.classList.add('btn-success');
         }
-        // Jeśli jest remis (0-0 lub po równo), oba zostają szare
     }
 
-    // 4. POKAZUJEMY modal (ważne: 'show', bo chcemy go zobaczyć)
-    $('#endFrameModal').modal('show');
+    // BS5: Otwieranie modala bez jQuery
+    const modalEl = document.getElementById('endFrameModal');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
 }
 
 function resetGame() {
@@ -1034,16 +1022,17 @@ function switchActivePlayer() {
 }
 
 function showFoulModal() {
-    $('#foulModal').modal('show');
+    // BS5: Otwieranie modala faulu
+    const foulModal = new bootstrap.Modal(document.getElementById('foulModal'));
+    foulModal.show();
 
     foulPoints = 0;
     nextPlayerId = null;
     redBallAdjustment = 0;
 
     document.getElementById('freeBallCheckbox').checked = false;
-
-    document.querySelectorAll('.foul-points').forEach(button => button.classList.remove('active'));
-    document.querySelectorAll('.next-player').forEach(button => button.classList.remove('active'));
+    document.querySelectorAll('.foul-points').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.next-player').forEach(btn => btn.classList.remove('active'));
     document.getElementById('redBallAdjustment').value = 0;
 }
 
@@ -1165,7 +1154,10 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
 
         setActivePlayer(nextPlayerId);
 
-        $('#foulModal').modal('hide');
+        const foulModalEl = document.getElementById('foulModal');
+        const foulModal = bootstrap.Modal.getInstance(foulModalEl) || new bootstrap.Modal(foulModalEl);
+        foulModal.hide();
+
     } else {
         alert("Please select foul points and the next player.");
     }
@@ -1232,55 +1224,45 @@ function resetPointsOnTable() {
     }
 }
 
-// KROK 1: Wybieramy zwycięzcę, ale jeszcze nie zatwierdzamy
 function confirmFrameWinner(winnerId) {
-    // Zapisujemy ID zwycięzcy "na później"
     pendingWinnerId = winnerId;
 
-    // 1. Zamykamy pierwszy modal (Wybór)
-    $('#endFrameModal').modal('hide');
+    // BS5: Zamykamy pierwszy modal
+    // Musimy znaleźć istniejącą instancję (lub stworzyć nową, żeby móc wywołać hide)
+    const endModalEl = document.getElementById('endFrameModal');
+    const endModal = bootstrap.Modal.getInstance(endModalEl) || new bootstrap.Modal(endModalEl);
+    endModal.hide();
 
-    // 2. Ustawiamy tekst w drugim modalu (Potwierdzenie)
     const playerNameSpan = document.getElementById('confirmation-player-name');
     if (playerNameSpan) {
-        // Tu możesz w przyszłości pobierać prawdziwe imiona, na razie "Player X"
         playerNameSpan.textContent = `Player ${winnerId}`;
     }
 
-    // 3. Otwieramy drugi modal (Are you sure?)
-    $('#confirmWinnerModal').modal('show');
+    // BS5: Otwieramy drugi modal
+    const confirmModal = new bootstrap.Modal(document.getElementById('confirmWinnerModal'));
+    confirmModal.show();
 }
 
 function finalizeFrameEnd() {
-    $('#confirmWinnerModal').modal('hide');
+    // BS5: Zamykamy modal potwierdzenia
+    const confirmModalEl = document.getElementById('confirmWinnerModal');
+    const confirmModal = bootstrap.Modal.getInstance(confirmModalEl) || new bootstrap.Modal(confirmModalEl);
+    confirmModal.hide();
 
     if (pendingWinnerId === null) return;
 
-    const winnerPosition = pendingWinnerId; // To jest 1 lub 2 (pozycja przy stole)
-
-    // Pobieramy punkty
+    const winnerPosition = pendingWinnerId;
     const p1ScoreInput = document.querySelector(`.player-score[data-player="1"]`);
     const p2ScoreInput = document.querySelector(`.player-score[data-player="2"]`);
     const p1Score = parseInt(p1ScoreInput ? p1ScoreInput.value : 0, 10);
     const p2Score = parseInt(p2ScoreInput ? p2ScoreInput.value : 0, 10);
-
-    // --- NOWOŚĆ: Pobieramy czas ze stopera ---
-    // Zmienna elapsedSeconds powinna być dostępna globalnie w Twoim skrypcie
     const duration = (typeof elapsedSeconds !== 'undefined') ? elapsedSeconds : 0;
-    // -----------------------------------------
 
-    // --- START NEW CODE (Dopisz ostatni break) ---
-    // Jeśli gra się kończy, a ktoś ma nabity break na liczniku, też go zapiszmy!
     if (currentBreak >= 10 && activePlayer !== null) {
-        if (activePlayer === 1) {
-            p1BreaksHistory.push(currentBreak);
-        } else if (activePlayer === 2) {
-            p2BreaksHistory.push(currentBreak);
-        }
+        if (activePlayer === 1) p1BreaksHistory.push(currentBreak);
+        else if (activePlayer === 2) p2BreaksHistory.push(currentBreak);
     }
-    // --- END NEW CODE ---
 
-    // --- WYSYŁANIE DO BAZY ---
     fetch('/save_frame_result/', {
         method: 'POST',
         headers: {
@@ -1289,58 +1271,29 @@ function finalizeFrameEnd() {
         },
         body: JSON.stringify({
             match_id: matchId,
-            // KLUCZOWE: Zamieniamy pozycję (1/2) na prawdziwe ID gracza z bazy
             winner_id: (winnerPosition == 1) ? player1Id : player2Id,
             p1_score: p1Score,
             p2_score: p2Score,
             duration: duration,
-            // --- START NEW CODE ---
-            p1_fouls: p1Fouls,
-            p2_fouls: p2Fouls,
-            p1_foul_pts: p1FoulPoints,
-            p2_foul_pts: p2FoulPoints,
-
-            p1_shots: p1Shots,
-            p1_misses: p1Misses,
-            p1_pots: p1Pots, // Potrzebne do wyliczenia %
-
-            p2_shots: p2Shots,
-            p2_misses: p2Misses,
-            p2_pots: p2Pots,
-
-            p1_safeties: p1Safeties,
-            p2_safeties: p2Safeties,
-
-            p1_safe_success_count: p1SuccessfulSafeties,
-            p2_safe_success_count: p2SuccessfulSafeties,
-
-            // --- NOWE: LISTY BREAKÓW ---
-            p1_breaks: p1BreaksHistory,
-            p2_breaks: p2BreaksHistory
-            // --- END NEW CODE ---
+            p1_fouls: p1Fouls, p2_fouls: p2Fouls,
+            p1_foul_pts: p1FoulPoints, p2_foul_pts: p2FoulPoints,
+            p1_shots: p1Shots, p1_misses: p1Misses, p1_pots: p1Pots,
+            p2_shots: p2Shots, p2_misses: p2Misses, p2_pots: p2Pots,
+            p1_safeties: p1Safeties, p2_safeties: p2Safeties,
+            p1_safe_success_count: p1SuccessfulSafeties, p2_safe_success_count: p2SuccessfulSafeties,
+            p1_breaks: p1BreaksHistory, p2_breaks: p2BreaksHistory
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.status === 'success') {
             console.log("Frame saved successfully!");
-
-            // 1. Aktualizujemy wynik framów w HTML (wizualnie)
-            // Tutaj używamy winnerPosition (1 lub 2), bo HTML opiera się na pozycjach
             updateVisualsAndReset(winnerPosition);
-
-            // 2. Sprawdzamy co odpowiedział serwer - czy to koniec meczu?
             if (data.match_over) {
                 setTimeout(() => {
-                    // Wyświetlamy komunikat o zwycięstwie
                     alert(`MATCH OVER! Winner: ${data.match_winner} 🏆`);
-
                     isUnsafeToLeave = false;
-
-                    // PO KLIKNIĘCIU "OK" - PRZEKIEROWANIE
-                    // Przenosimy użytkownika do widoku detali (tam gdzie są statystyki)
                     window.location.href = `/match/${matchId}/`;
-
                 }, 500);
             }
         } else {
@@ -1349,10 +1302,9 @@ function finalizeFrameEnd() {
     })
     .catch(error => {
         console.error('Error:', error);
-        alert("Server communication error. Check console.");
+        alert("Server communication error.");
     });
 
-    // Czyścimy zmienną
     pendingWinnerId = null;
 }
 

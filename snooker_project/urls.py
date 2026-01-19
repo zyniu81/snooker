@@ -68,4 +68,8 @@ urlpatterns = [
     path('set_active_player/', views.set_active_player, name='set_active_player'),
     path('save_frame_result/', views.save_frame_result, name='save_frame_result'),
     path('update_player_stats/', views.update_player_stats, name='update_player_stats'),
+    path('competitions/<int:competition_id>/mass-edit/', views.mass_edit_matches, name='mass_edit_matches'),
+    path('end-group-stage/<int:stage_id>/', views.end_group_stage, name='end_group_stage'),
+    path('end-knockout-stage/<int:stage_id>/', views.end_knockout_stage, name='end_knockout_stage'),
+    path('end-competition/<int:competition_id>/', views.end_competition, name='end_competition'),
 ]

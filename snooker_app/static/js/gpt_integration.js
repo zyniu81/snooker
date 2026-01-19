@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 'X-CSRFToken': getCookie('csrftoken')
             }
         })
-            .then(gptResponse => response.json())
+            .then(response => response.json())
             .then(data => {
                 if (data.analysis) {
                     gptResponse.textContent = data.analysis;

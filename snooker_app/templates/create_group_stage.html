@@ -1,11 +1,189 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>Create Group Stage for {{ competition.name }}</h2>
+<div class="container mt-4 mb-5">
+    <form method="post">
+        {% csrf_token %}
 
-<form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit" class="btn btn-primary">Create Group Stage</button>
-</form>
+        <div class="row g-4">
+
+            <div class="col-lg-5">
+                <div class="card shadow border-primary h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0"><i class="bi bi-grid-3x3"></i> Stage Settings</h4>
+                    </div>
+                    <div class="card-body">
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+
+                        <div class="row mb-3">
+                            <div class="col-md-8">
+                                <label class="form-label fw-bold">Stage Name</label>
+                                {{ form.name }}
+                                <div class="text-danger small">{{ form.name.errors }}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Order</label>
+                                {{ form.order }}
+                                <div class="text-danger small">{{ form.order.errors }}</div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <h6 class="text-primary fw-bold mb-3"><i class="bi bi-diagram-2"></i> Structure</h6>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Groups count</label>
+                                {{ form.num_groups }}
+                                <div class="text-danger small">{{ form.num_groups.errors }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Players / Group</label>
+                                {{ form.players_per_group }}
+                                <div class="text-danger small">{{ form.players_per_group.errors }}</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Frames per Match</label>
+                            {{ form.default_frames }}
+                            <div class="form-text text-muted">Best of X (e.g. 3)</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Matches against each opponent</label>
+                            {{ form.matches_per_pair }}
+                            <div class="form-text text-muted">Usually 1 (Single round-robin)</div>
+                        </div>
+
+                        <hr>
+
+                        <h6 class="text-primary fw-bold mb-3"><i class="bi bi-calculator"></i> Scoring</h6>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Pts for Win</label>
+                                {{ form.points_for_win }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Pts for Draw</label>
+                                {{ form.points_for_draw }}
+                            </div>
+                        </div>
+
+                        <div class="mb-3 bg-light p-3 rounded border d-flex align-items-center">
+                            <div class="form-check">
+                                {{ form.allow_draws }}
+                                <label class="form-check-label fw-bold ms-2" for="{{ form.allow_draws.id_for_label }}">
+                                    Allow Draws?
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-check-circle"></i> Generate Groups
+                            </button>
+                            <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card shadow h-100">
+                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-people-fill"></i> Select Players</h5>
+                        <small>Check players to include</small>
+                    </div>
+                    <div class="card-body bg-light">
+
+                        <div class="text-danger mb-2">{{ form.players.errors }}</div>
+
+                        {# --- SEKCJA 1: ZWYCIĘZCY (Champions) --- #}
+                        {% if form.winner_list %}
+                        <div class="card mb-3 border-success shadow-sm">
+                            <div class="card-header bg-success text-white py-2">
+                                <i class="bi bi-star-fill"></i> Qualified / Winners (Recommended)
+                            </div>
+                            <div class="card-body bg-white">
+                                <div class="row row-cols-1 row-cols-md-2 g-2">
+                                {% for player in form.winner_list %}
+                                    <div class="col">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="players" value="{{ player.id }}" id="p_win_{{ player.id }}" checked>
+                                            <label class="form-check-label fw-bold text-dark" for="p_win_{{ player.id }}">
+                                                {{ player }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {# --- SEKCJA 2: PRZEGRANI (Eliminated) --- #}
+                        {% if form.eliminated_list %}
+                        <div class="card mb-3 border-danger shadow-sm">
+                            <div class="card-header bg-danger text-white py-2">
+                                <i class="bi bi-x-circle"></i> Eliminated (Wildcards)
+                            </div>
+                            <div class="card-body bg-white">
+                                <div class="row row-cols-1 row-cols-md-2 g-2">
+                                {% for player in form.eliminated_list %}
+                                    <div class="col">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="players" value="{{ player.id }}" id="p_lost_{{ player.id }}">
+                                            <label class="form-check-label text-muted" for="p_lost_{{ player.id }}">
+                                                {{ player }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {# --- SEKCJA 3: POZOSTALI (Others) --- #}
+                        <div class="card mb-3 border-secondary shadow-sm">
+                            <div class="card-header bg-secondary text-white py-2">
+                                <i class="bi bi-people"></i> Others / Bench
+                            </div>
+                            <div class="card-body bg-white">
+                                {% if form.other_list %}
+                                    <div class="row row-cols-1 row-cols-md-2 g-2">
+                                    {% for player in form.other_list %}
+                                        <div class="col">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="players" value="{{ player.id }}" id="p_other_{{ player.id }}"
+                                                       {% if not form.winner_list and not form.eliminated_list %}checked{% endif %}>
+                                                <label class="form-check-label" for="p_other_{{ player.id }}">
+                                                    {{ player }}
+                                                </label>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-center text-muted py-3">
+                                        <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+                                        No other players found in this tournament.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div> </form>
+</div>
 {% endblock %}

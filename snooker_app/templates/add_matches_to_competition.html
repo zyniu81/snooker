@@ -1,28 +1,65 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container">
-    <h2>Add Matches to {{ competition.name }}</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ forms.as_p }}
-        <h3>Assign matches to stages:</h3>
-        {% for match in form.matches.field.queryset %}
-            <div>
-                <label>
-                    <input type="checkbox" name="{{ form.matches.name }}" value="{{ match.pk }}">
-                    {{ match }}
-                </label>
-                <select name="stage_{{ match.id }}">
-                    <option value="">--Select Stage--</option>
-                    {% for stage in stages %}
-                        <option value="{{ stage.id }}">{{ stage.name }}</option>
-                    {% endfor %}
-                </select>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0"><i class="bi bi-lightning-fill"></i> Add Extra Match</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        This creates a standalone match (e.g., 3rd Place Play-off or Exhibition) linked to this tournament,
+                        but outside the main bracket logic.
+                    </p>
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        {# Wyświetlanie błędów ogólnych #}
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+
+                        {# WYBÓR GRACZY #}
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Player 1</label>
+                                {{ form.player1 }}
+                                <div class="text-danger small">{{ form.player1.errors }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Player 2</label>
+                                {{ form.player2 }}
+                                <div class="text-danger small">{{ form.player2.errors }}</div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        {# RESZTA PÓL #}
+                        {% for field in form %}
+                            {% if field.name != 'player1' and field.name != 'player2' %}
+                                <div class="mb-3">
+                                    <label class="form-label">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% if field.help_text %}
+                                        <div class="form-text text-muted">{{ field.help_text }}</div>
+                                    {% endif %}
+                                    <div class="text-danger small">{{ field.errors }}</div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                            <a href="{% url 'competition_detail' competition.pk %}" class="btn btn-secondary me-md-2">Cancel</a>
+                            <button type="submit" class="btn btn-warning text-dark fw-bold">Create Match</button>
+                        </div>
+                    </form>
+                </div>
             </div>
-        {% endfor %}
-        <button type="submit" class="btn btn-primary">Add Selected Matches</button>
-        <a href="{% url 'competition_detail' competition.pk %}" class="btn btn-secondary">Cancel</a>
-    </form>
+        </div>
+    </div>
 </div>
 {% endblock %}
