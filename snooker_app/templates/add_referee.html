@@ -1,12 +1,72 @@
 {% extends 'base.html' %}
 
+{% block title %}Add Referee - Snooker App{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h2>Add Referee</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Add Referee</button>
-    </form>
+<style>
+    /* Styl formularza */
+    .form-card input[type="text"],
+    .form-card input[type="number"],
+    .form-card input[type="file"], /* Dodane stylowanie dla pliku */
+    .form-card select {
+        display: block;
+        width: 100%;
+        padding: 0.375rem 0.75rem;
+        font-size: 1rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+    }
+
+    .form-card input:focus {
+        border-color: #343a40;
+        outline: 0;
+        box-shadow: 0 0 0 0.25rem rgba(52, 58, 64, 0.25);
+    }
+
+    .form-card label {
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .form-card p {
+        margin-bottom: 1.5rem;
+    }
+</style>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+
+            <div class="card form-card shadow-sm border-0">
+                <div class="card-body p-4 p-md-5">
+
+                    <div class="text-center mb-4">
+                        <h3 class="fw-bold">Add New Referee</h3>
+                        <p class="text-muted small">Register a new official for your matches</p>
+                    </div>
+
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        {{ form.as_p }}
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-dark fw-bold py-2">
+                                <i class="bi bi-plus-lg"></i> Add Referee
+                            </button>
+
+                            <a href="{% url 'referee_list' %}" class="btn btn-light text-muted border">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
 </div>
 {% endblock %}

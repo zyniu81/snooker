@@ -12,7 +12,11 @@ from django.http import JsonResponse, HttpResponseForbidden
 from django.core.exceptions import PermissionDenied
 from django.forms import modelformset_factory
 from django.utils import timezone
+from django.contrib.auth.signals import user_logged_in
+from django.dispatch import receiver
 from datetime import timedelta
+from django.utils.safestring import mark_safe
+from django.urls import reverse
 
 import os
 from openai import OpenAI
@@ -52,19 +56,19 @@ def player_list(request):
 @login_required
 def add_player(request):
     if request.method == 'POST':
-        # Dodajemy request=request
-        form = PlayerForm(request.POST, request=request)
+        # ZMIANA: Dodano request.FILES
+        form = PlayerForm(request.POST, request.FILES, request=request)
         if form.is_valid():
             player = form.save(commit=False)
             player.owner = request.user
-            # Tę logikę (admin=public) przenieśliśmy już do formularza (initial),
-            # ale zostawienie jej tutaj dla pewności nie zaszkodzi.
+
+            # Admin domyślnie tworzy publicznych (opcjonalnie)
             if request.user.is_superuser:
                 player.is_public = True
+
             player.save()
             return redirect('player_list')
     else:
-        # Tu też request=request
         form = PlayerForm(request=request)
 
     return render(request, 'add_player.html', {'form': form})
@@ -75,18 +79,58 @@ def player_edit(request, pk):
     player = get_object_or_404(Player, pk=pk)
 
     if not check_ownership(request, player):
-        messages.error(request, "Nie możesz edytować tego gracza.")
+        messages.error(request, "You cannot edit this player.")
         return redirect('player_list')
 
     if request.method == 'POST':
-        # PlayerEditForm NIE MA __init__ z requestem w Twoim kodzie.
-        # Musimy go zaktualizować w forms.py (patrz niżej), albo użyć PlayerForm.
-        # Jeśli używasz PlayerEditForm, musisz w nim też dodać __init__.
-        # Zakładam, że zaktualizujemy forms.py.
-        form = PlayerEditForm(request.POST, instance=player, request=request) # <--- Dodajemy request
+        # ZMIANA: Dodano request.FILES
+        form = PlayerEditForm(request.POST, request.FILES, instance=player, request=request)
+
+        was_temporary = player.is_temporary
+
         if form.is_valid():
-            form.save()
-            return redirect('player_list')
+            saved_player = form.save(commit=False)
+            is_now_temporary = saved_player.is_temporary
+            saved_player.save()
+
+            # --- Logika konwersji (Tymczasowy -> Stały) ---
+            if was_temporary and not is_now_temporary:
+                matches_qs = Match.objects.filter(players=saved_player, is_temporary=True)
+
+                opponents_list = list(Player.objects.filter(
+                    match__in=matches_qs,
+                    is_temporary=True
+                ).exclude(id=saved_player.id).distinct())
+
+                matches_count = matches_qs.update(is_temporary=False)
+
+                opponents_info = []
+                for opponent in opponents_list:
+                    opponent.is_temporary = False
+                    opponent.save()
+                    edit_url = reverse('player_edit', args=[opponent.pk])
+                    link = f"<a href='{edit_url}' class='alert-link'>{opponent.first_name}</a>"
+                    opponents_info.append(link)
+
+                msg = f"Player '{saved_player.first_name}' converted to permanent successfully."
+                if matches_count > 0:
+                    msg += f" <br><strong>{matches_count} matches</strong> were also saved to history."
+                if opponents_info:
+                    opponents_str = ", ".join(opponents_info)
+                    msg += f"<br>Note: The following opponents were also converted: {opponents_str}. Click to rename them."
+
+                messages.success(request, mark_safe(msg))
+
+            else:
+                messages.success(request, "Player updated successfully.")
+
+            # --- Aktualizacja nazw w meczach ---
+            player_matches = Match.objects.filter(players=saved_player)
+            for m in player_matches:
+                m.save()
+
+            # Powrót do szczegółów gracza po edycji jest zazwyczaj lepszy niż do listy
+            return redirect('player_detail', pk=player.pk)
     else:
         form = PlayerEditForm(instance=player, request=request)
 
@@ -97,9 +141,21 @@ def player_edit(request, pk):
 def player_detail(request, pk):
     # Możemy podglądać publiczne lub swoje
     player = get_object_or_404(Player, pk=pk)
+
     if not (player.is_public or player.owner == request.user):
-        raise PermissionDenied("Nie masz dostępu do tego gracza.")
-    return render(request, 'player_detail.html', {'player': player})
+        raise PermissionDenied("You do not have access to this player.")
+
+    # --- POBIERANIE HISTORII MECZÓW ---
+    # Szukamy meczów, w których ten gracz jest na liście 'players'
+    # Sortujemy: najpierw data malejąco (-date), potem czas malejąco (-time)
+    # [:5] ogranicza listę do 5 ostatnich wyników (żeby nie zapchać profilu)
+    recent_matches = Match.objects.filter(players=player).order_by('-date', '-time')[:5]
+    # -------------------------------------------
+
+    return render(request, 'player_detail.html', {
+        'player': player,
+        'matches': recent_matches  # Przekazujemy mecze do szablonu
+    })
 
 
 class PlayerDeleteView(DeleteView):
@@ -122,16 +178,18 @@ def referee_list(request):
 @login_required
 def add_referee(request):
     if request.method == 'POST':
-        form = RefereeForm(request.POST, request=request) # <--- ZMIANA
+        # Dodano request.FILES
+        form = RefereeForm(request.POST, request.FILES, request=request)
         if form.is_valid():
             referee = form.save(commit=False)
             referee.owner = request.user
+            # Opcjonalne: Admin domyślnie tworzy publicznych, ale ma też checkboxa
             if request.user.is_superuser:
                 referee.is_public = True
             referee.save()
             return redirect('referee_list')
     else:
-        form = RefereeForm(request=request) # <--- ZMIANA
+        form = RefereeForm(request=request)
 
     return render(request, 'add_referee.html', {'form': form})
 
@@ -144,12 +202,13 @@ def edit_referee(request, pk):
         return redirect('referee_list')
 
     if request.method == 'POST':
-        form = RefereeForm(request.POST, instance=referee, request=request) # <--- ZMIANA
+        # Dodano request.FILES
+        form = RefereeForm(request.POST, request.FILES, instance=referee, request=request)
         if form.is_valid():
             form.save()
-            return redirect('referee_list')
+            return redirect('referee_detail', pk=referee.pk)
     else:
-        form = RefereeForm(instance=referee, request=request) # <--- ZMIANA
+        form = RefereeForm(instance=referee, request=request)
 
     return render(request, 'edit_referee.html', {'form': form, 'referee': referee})
 
@@ -184,18 +243,24 @@ def venue_list(request):
 @login_required
 def add_venue(request):
     if request.method == 'POST':
-        form = VenueForm(request.POST, request=request) # <--- ZMIANA
+        # TU BYŁ BŁĄD: Dodano request.FILES
+        form = VenueForm(request.POST, request.FILES, request=request)
         if form.is_valid():
             venue = form.save(commit=False)
             venue.owner = request.user
+
+            # Ta logika jest ok, jeśli wymuszamy publiczność dla admina,
+            # choć admin ma teraz checkbox w formularzu.
             if request.user.is_superuser:
                 venue.is_public = True
+
             venue.save()
             return redirect('venue_list')
     else:
-        form = VenueForm(request=request) # <--- ZMIANA
+        form = VenueForm(request=request)
 
     return render(request, 'add_venue.html', {'form': form})
+
 
 @login_required
 def edit_venue(request, pk):
@@ -205,12 +270,14 @@ def edit_venue(request, pk):
         return redirect('venue_list')
 
     if request.method == 'POST':
-        form = VenueForm(request.POST, instance=venue, request=request) # <--- ZMIANA
+        # TU BYŁ BŁĄD: Dodano request.FILES przed instance
+        form = VenueForm(request.POST, request.FILES, instance=venue, request=request)
         if form.is_valid():
             form.save()
-            return redirect('venue_list')
+            # Sugestia: Po edycji lepiej wrócić do szczegółów niż do listy
+            return redirect('venue_detail', pk=venue.pk)
     else:
-        form = VenueForm(instance=venue, request=request) # <--- ZMIANA
+        form = VenueForm(instance=venue, request=request)
 
     return render(request, 'edit_venue.html', {'form': form, 'venue': venue})
 
@@ -234,26 +301,40 @@ def venue_detail(request, pk):
 
 @login_required
 def match_list(request):
-    # Mecze - widzimy tylko swoje (chyba że zrobisz system publicznych turniejów, ale na razie Simple)
-    matches = Match.objects.filter(owner=request.user)
+    # Sortujemy: Najpierw data (od najnowszej), potem godzina (od najnowszej)
+    matches = Match.objects.filter(owner=request.user).order_by('-date', '-time')
     return render(request, 'match_list.html', {'matches': matches})
 
 
 @login_required
 def add_match(request):
     if request.method == 'POST':
-        # Przekazujemy request do formularza (ważne dla filtrowania list!)
         form = MatchForm(request.POST, request=request)
         if form.is_valid():
             match = form.save(commit=False)
-            match.owner = request.user  # Przypisujemy usera
-            match.save()  # Zapisujemy, żeby dostać ID
-            form.save_m2m()  # Zapisujemy relacje ManyToMany (players, referees)
+            match.owner = request.user
+            match.save()
+            form.save_m2m()  # Zapisuje graczy w relacji ManyToMany (ale bez pozycji)
 
-            # Obsługa graczy tymczasowych (przeniesiona logika z form.save tutaj, lub w form)
-            # W MatchForm.save już obsłużyliśmy tworzenie graczy tymczasowych z owner=match.owner
+            # 1. Sprawdzamy, czy formularz miał stworzyć tymczasowych
+            # Jeśli tak, to funkcja wewnątrz formularza zajmie się tworzeniem MatchPlayer
+            form.create_temp_players_if_needed(match)
 
-            return redirect('match_list')
+            # 2. --- NOWOŚĆ: OBSŁUGA ZWYKŁYCH GRACZY ---
+            # Jeśli NIE tworzyliśmy tymczasowych, to musimy "posadzić"
+            # wybranych z listy graczy na pozycjach 1 i 2.
+            # Sprawdzamy czy MatchPlayer są już utworzeni (żeby nie dublować tymczasowych)
+            if not MatchPlayer.objects.filter(match=match).exists():
+                players = list(match.players.all())
+
+                # Jeśli wybrano graczy, przypisujemy im pozycje
+                if len(players) >= 1:
+                    MatchPlayer.objects.create(match=match, player=players[0], position=1)
+
+                if len(players) >= 2:
+                    MatchPlayer.objects.create(match=match, player=players[1], position=2)
+
+            return redirect('match_detail', pk=match.pk)
     else:
         form = MatchForm(request=request)
 
@@ -625,39 +706,43 @@ def create_temporary_match(request):
             # Ustawienia zależne od logowania
             if request.user.is_authenticated:
                 match.owner = request.user
-                match.is_public = False  # Lub True, wg uznania
+                match.is_public = False
             else:
                 match.owner = None
-                match.is_public = True  # Gość musi mieć publiczny
+                match.is_public = True
 
             match.is_temporary = True
-            match.save()  # Zapisujemy, żeby mieć ID
+            match.save()
 
-            # Obsługa sesji dla gościa
             if not request.user.is_authenticated:
                 request.session['temp_match_id'] = match.id
 
             # --- LOGIKA GRACZY ---
-            # Sprawdzamy co przyszło z formularza
             create_temp = form.cleaned_data.get('create_temporary_players')
 
-            # Dla gościa (is_authenticated=False) zawsze chcemy tymczasowych,
-            # nawet jak formularz tego nie przesłał jawnie (bo pole hidden)
             if not request.user.is_authenticated or create_temp:
                 prefix = "Temporary Player"
                 p1 = Player.objects.create(first_name=f"{prefix} 1", is_temporary=True, owner=match.owner)
                 p2 = Player.objects.create(first_name=f"{prefix} 2", is_temporary=True, owner=match.owner)
+
+                # 1. Dodajemy do relacji ogólnej (dla pewności)
                 match.players.add(p1, p2)
 
-                # Wypełniamy pola pomocnicze modelu Match
+                # 2. --- POPRAWKA: TWORZYMY MATCHPLAYER Z POZYCJĄ ---
+                # To gwarantuje, że Player 1 będzie po lewej (Position 1)
+                MatchPlayer.objects.create(match=match, player=p1, position=1)
+                MatchPlayer.objects.create(match=match, player=p2, position=2)
+                # ---------------------------------------------------
+
                 match.temp_player1 = p1
                 match.temp_player2 = p2
                 match.save()
+
             else:
-                # Jeśli zalogowany wybrał graczy z listy, musimy ich zapisać
+                # Jeśli wybrano istniejących graczy
                 form.save_m2m()
 
-            return redirect('start_game', pk=match.pk)
+            return redirect('match_detail', pk=match.pk)
     else:
         form = MatchForm(request=request)
 
@@ -670,14 +755,12 @@ def create_group_stage(request, competition_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    if competition.players.count() == 0:
-        messages.error(request, "Please add players to the competition first.")
-        return redirect('add_players_to_competition', pk=competition.id)
+    # (Tu była blokada if count == 0 - już jej nie ma)
 
-    winners, eliminated, others = get_sorted_players_for_stage(competition)
+    # Pobieramy graczy (przekazujemy request.user, żeby widzieć całą bazę graczy)
+    winners, eliminated, others = get_sorted_players_for_stage(competition, request.user)
 
     if request.method == 'POST':
-        # Przekazujemy listy do formularza
         form = GroupStageForm(
             request.POST,
             competition=competition,
@@ -685,9 +768,28 @@ def create_group_stage(request, competition_id):
             eliminated=eliminated,
             others=others
         )
-        # ... reszta kodu zapisu bez zmian ...
+        if form.is_valid():
+            group_stage = form.save(commit=False)
+            group_stage.competition = competition
+            group_stage.save()
+
+            # Pobieramy wybranych graczy z formularza
+            selected_players = form.cleaned_data.get('players')
+
+            # --- NOWOŚĆ: Automatyczne dopisanie graczy do turnieju ---
+            # Jeśli wybrałeś kogoś, kto jeszcze nie był w competition.players, teraz tam trafi.
+            if selected_players:
+                competition.players.add(*selected_players)
+            # ---------------------------------------------------------
+
+            group_stage.create_groups_and_matches(
+                default_frames=form.cleaned_data['default_frames'],
+                selected_players=selected_players
+            )
+
+            messages.success(request, f"Group Stage '{group_stage.name}' created successfully.")
+            return redirect('competition_detail', pk=competition.id)
     else:
-        # GET: Też przekazujemy listy
         form = GroupStageForm(
             competition=competition,
             winners=winners,
@@ -704,16 +806,12 @@ def create_knockout_stage(request, competition_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    # --- SPRAWDZENIE CZY SĄ GRACZE ---
-    if competition.players.count() == 0:
-        messages.error(request, "Please add players to the competition first.")
-        return redirect('add_players_to_competition', pk=competition.id)
-    # -------------------------------------------
+    # (Tu była blokada - usunięta)
 
-    winners, eliminated, others = get_sorted_players_for_stage(competition)
+    winners, eliminated, others = get_sorted_players_for_stage(competition, request.user)
 
     if request.method == 'POST':
-        # --- POPRAWKA TUTAJ: Zmieniamy GroupStageForm na KnockoutStageForm ---
+        # Upewnij się, że tu jest KnockoutStageForm (nie GroupStageForm!)
         form = KnockoutStageForm(
             request.POST,
             competition=competition,
@@ -721,8 +819,6 @@ def create_knockout_stage(request, competition_id):
             eliminated=eliminated,
             others=others
         )
-
-        # Pamiętaj, żeby tutaj też była logika zapisu dla KnockoutStage!
         if form.is_valid():
             knockout_stage = form.save(commit=False)
             knockout_stage.competition = competition
@@ -730,16 +826,18 @@ def create_knockout_stage(request, competition_id):
 
             selected_players = form.cleaned_data.get('players')
 
-            # Tu wywołujemy metodę z modelu KnockoutStage
+            # --- NOWOŚĆ: Automatyczne dopisanie graczy do turnieju ---
+            if selected_players:
+                competition.players.add(*selected_players)
+            # ---------------------------------------------------------
+
             knockout_stage.create_knockout_matches(
                 selected_players=selected_players
             )
 
             messages.success(request, f"Knockout Stage '{knockout_stage.name}' created successfully.")
             return redirect('competition_detail', pk=competition.id)
-
     else:
-        # GET: --- POPRAWKA TUTAJ RÓWNIEŻ ---
         form = KnockoutStageForm(
             competition=competition,
             winners=winners,
@@ -881,11 +979,6 @@ def gpt_analysis(request):
     return JsonResponse({'error': 'Feature disabled'}, status=503)
 
 
-# --- API ENDPOINTS (CSRF exempt) ---
-# Te endpointy są używane przez JS podczas meczu.
-# Ponieważ JS wysyła JSON, zostawiamy csrf_exempt, ale warto dodać weryfikację
-# czy user ma dostęp do meczu. Tu dla uproszczenia sprawdzamy tylko czy mecz istnieje.
-
 @csrf_exempt
 @require_POST
 def update_game_data(request):
@@ -895,79 +988,62 @@ def update_game_data(request):
         player_id = data.get('player_id')
         points = data.get('points')
 
-        # ... (reszta logiki bez zmian) ...
-        # Skróciłem dla czytelności, logika zapisu punktów jest identyczna jak miałeś
-        # Wklej tu swoją starą funkcję update_game_data lub zostaw to, co masz
-        # Ważne: user musi mieć prawo edycji meczu, ale fetch z JS rzadko przesyła cookies sesji w prosty sposób
-        # Na razie zostawmy jak jest (działa publicznie jeśli znasz ID), uszczelnimy API później.
-
-        # (WKLEJ TU ORYGINALNĄ ZAWARTOŚĆ update_game_data Z POPRZEDNIEGO KODU - TĘ DŁUGĄ)
-        # Poniżej skrócona wersja placeholders, MUSISZ tu mieć swoją logikę:
-
-        if match_id is None: return JsonResponse({'status': 'error'})
-
-        match_player = MatchPlayer.objects.filter(match_id=match_id, player_id=player_id).first()
-        if not match_player: return JsonResponse({'status': 'error'})
-
-        frame = Frame.objects.filter(match_player=match_player).latest('frame_number')
-
-        if player_id == 1:  # (Uproszczenie, tu powinieneś użyć ID gracza, nie '1')
-            # W Twoim kodzie JS player_id to ID z bazy czy 1/2?
-            # Zakładam że ID. Twoja logika była OK, po prostu skopiuj ją z powrotem.
-            pass
-
-            # ...
-
-        return JsonResponse({'status': 'success'})
-
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)})
-
-
-# UWAGA: Ponieważ update_game_data, set_active_player, save_frame_result i update_player_stats
-# są długie i logicznie się nie zmieniły (poza ewentualnym sprawdzeniem uprawnień, co jest trudne przy fetch),
-# zostaw je TAKIE SAME jak miałeś w poprzednim pliku.
-# Jedyne co warto dodać to sprawdzenie na początku:
-# match = Match.objects.get(pk=match_id)
-# if match.owner != request.user: return JsonResponse(...)
-# Ale to może zablokować działanie JS jeśli sesja nie przechodzi.
-# ZOSTAW JE BEZ ZMIAN NA RAZIE.
-
-
-@csrf_exempt
-@require_POST
-def update_game_data(request):
-    try:
-        data = json.loads(request.body.decode('utf-8'))
-        match_id = data.get('match_id')
-        player_id = data.get('player_id')
-        points = data.get('points')
+        # Opcjonalne: kolor bili do statystyk (jeśli JS to wysyła)
         ball_color = data.get('ball_color')
 
-        if match_id is None or player_id is None or points is None or ball_color is None:
-            return JsonResponse({'status': 'error', 'message': 'Missing data fileds'})
+        if match_id is None or player_id is None or points is None:
+            return JsonResponse({'status': 'error', 'message': 'Missing data fields'})
 
+        # KROK 1: Próbujemy znaleźć Frame'a
+        # Najpierw szukamy frame'a dla tego meczu
+        try:
+            # Szukamy ostatniego frame'a w tym meczu (niezależnie od gracza)
+            frame = Frame.objects.filter(match_player__match_id=match_id).latest('frame_number')
+        except Frame.DoesNotExist:
+            # Fallback: Czasami relacja jest inna, spróbujmy znaleźć po prostu ostatni frame powiązany z meczem
+            # (To zależy od Twojej dokładnej struktury Frame <-> Match)
+            return JsonResponse({'status': 'error', 'message': 'No active frame found for this match'})
+
+        # KROK 2: Ustalamy, KTÓRY to gracz (1 czy 2?)
+
+        # Podejście A: PROFESJONALNE (Baza danych)
+        # Sprawdzamy, czy ten gracz jest przypisany do meczu jako poz. 1 czy 2
         match_player = MatchPlayer.objects.filter(match_id=match_id, player_id=player_id).first()
 
-        if not match_player:
-            return JsonResponse({'status': 'error', 'message': 'Match or player not found'})
+        target_position = None
 
-        frame = Frame.objects.filter(match_player=match_player).latest('frame_number')
+        if match_player:
+            # Jeśli znaleźliśmy go w bazie, ufamy bazie
+            target_position = match_player.position
+        else:
+            # Podejście B: AWARYJNE / TYMCZASOWE (Stara logika)
+            # Jeśli nie ma go w bazie MatchPlayer (np. Temporary Match),
+            # zakładamy, że JS wysłał nam po prostu '1' lub '2' jako ID.
+            if str(player_id) == '1':
+                target_position = 1
+            elif str(player_id) == '2':
+                target_position = 2
 
-        if player_id == 1:
+        # KROK 3: Zapisujemy punkty we właściwej kolumnie
+        if target_position == 1:
             frame.points_scored_player1 = (frame.points_scored_player1 or 0) + points
-        else:
-            frame.points_scored_player2 = (frame.points_scored_player2 or 0) + points
-
-        if player_id == 1:
+            if frame.break_points_player1 is None: frame.break_points_player1 = []
             frame.break_points_player1.append(points)
-        else:
+
+        elif target_position == 2:
+            frame.points_scored_player2 = (frame.points_scored_player2 or 0) + points
+            if frame.break_points_player2 is None: frame.break_points_player2 = []
             frame.break_points_player2.append(points)
 
-        frame.save()
+        else:
+            # Jeśli ani baza, ani ID nie pasują
+            return JsonResponse({'status': 'error', 'message': f'Cannot identify player position for ID {player_id}'})
 
+        frame.save()
         return JsonResponse({'status': 'success'})
+
     except Exception as e:
+        print(f"Błąd w update_game_data: {e}")
         return JsonResponse({'status': 'error', 'message': str(e)})
 
 
@@ -1310,64 +1386,55 @@ def mass_edit_matches(request, competition_id):
     })
 
 
-# --- FUNKCJA POMOCNICZA DO SORTOWANIA GRACZY ---
-def get_sorted_players_for_stage(competition):
+# --- FUNKCJA POMOCNICZA W VIEWS.PY ---
+
+def get_sorted_players_for_stage(competition, user):
     """
-    Zwraca trzy listy graczy na podstawie ostatniego etapu:
-    1. winners (Zwycięzcy meczów ostatniego etapu)
-    2. eliminated (Przegrani w ostatnim etapie)
-    3. others (Gracze z turnieju, którzy nie grali w ostatnim etapie)
+    Zwraca trzy listy graczy:
+    1. winners: Zwycięzcy ostatniego etapu
+    2. eliminated: Przegrani w ostatnim etapie
+    3. others: Wszyscy pozostali gracze użytkownika (bez tymczasowych),
+       którzy nie grali w ostatnim etapie.
     """
 
-    # 1. Znajdź wszystkie etapy i posortuj po 'order'
-    # Używamy nazw relacji wygenerowanych przez '%(class)s_stages'
-    # GroupStage -> groupstage_stages
-    # KnockoutStage -> knockoutstage_stages
-
+    # 1. Znajdź wszystkie etapy i posortuj
     group_stages = list(competition.groupstage_stages.all())
     knockout_stages = list(competition.knockoutstage_stages.all())
-
     all_stages = sorted(group_stages + knockout_stages, key=lambda x: x.order)
 
-    # Domyślnie wszyscy są "Inni"
-    all_players = set(competition.players.all())
+    # 2. BAZA GRACZY: Pobieramy WSZYSTKICH Twoich graczy (bez tymczasowych)
+    # To jest ta główna zmiana - patrzymy szeroko, na całą bazę.
+    all_user_players = set(Player.objects.filter(owner=user, is_temporary=False))
 
+    # Jeśli to pierwszy etap (brak historii etapów), wszyscy Twoi gracze trafiają do 'others'
     if not all_stages:
-        # Jeśli nie ma etapów, wszyscy gracze trafiają do 'others'
-        return [], [], list(all_players)
+        return [], [], list(all_user_players)
 
-    # 2. Pobierz ostatni etap
+    # 3. Pobierz ostatni etap
     last_stage = all_stages[-1]
 
-    # 3. Pobierz mecze z tego etapu
-    # Sprawdzamy, czy to obiekt GroupStage czy KnockoutStage, żeby wiedzieć, jakiej relacji użyć
-    # W modelu Match masz pola 'group_stage' i 'knockout_stage'
-    # Relacje zwrotne to zazwyczaj 'matches' (bo related_name='matches' w Twoim modelu Match)
-
+    # Pobierz mecze (zabezpieczenie, gdyby etap nie miał meczów)
     if hasattr(last_stage, 'matches'):
         matches = last_stage.matches.filter(status='FINISHED')
     else:
-        # Fallback (bezpiecznik)
         matches = []
 
-    # 4. Sortowanie
+    # 4. Sortowanie uczestników ostatniego etapu
     winners = set()
-    participants = set()
+    participants = set()  # Wszyscy, którzy grali w ostatnim etapie
 
     for match in matches:
-        # Dodajemy wszystkich uczestników meczu
         for p in match.players.all():
             participants.add(p)
-
-        # Dodajemy zwycięzcę (jeśli jest)
         if match.winner:
             winners.add(match.winner)
 
-    # Przegrani to: Uczestnicy MINUS Zwycięzcy
+    # Przegrani to: Uczestnicy ostatniego etapu MINUS Zwycięzcy
     eliminated = participants - winners
 
-    # Inni to: Wszyscy z turnieju MINUS Uczestnicy ostatniego etapu
-    others = all_players - participants
+    # Inni to: Wszyscy Twoi gracze z bazy MINUS ci, którzy brali udział w ostatnim etapie
+    # (Tutaj wpadną też gracze, których w turnieju jeszcze nie było - Wildcards)
+    others = all_user_players - participants
 
     return list(winners), list(eliminated), list(others)
 
@@ -1411,3 +1478,35 @@ def end_competition(request, competition_id):
 
     messages.success(request, f"Tournament '{competition.name}' has been officially closed! 🏆")
     return redirect('competition_detail', pk=competition.id)
+
+
+@receiver(user_logged_in)
+def claim_temporary_match(sender, user, request, **kwargs):
+    """
+    Funkcja uruchamia się AUTOMATYCZNIE po każdym poprawnym zalogowaniu.
+    Sprawdza, czy w sesji jest ID tymczasowego meczu i przypisuje go do użytkownika.
+    """
+    temp_match_id = request.session.get('temp_match_id')
+
+    if temp_match_id:
+        try:
+            # Szukamy meczu, który nie ma właściciela (jest gościa)
+            match = Match.objects.get(id=temp_match_id, owner__isnull=True)
+
+            # 1. Przypisujemy mecz do użytkownika
+            match.owner = user
+            match.save()
+
+            # 2. Przypisujemy też graczy tymczasowych do tego użytkownika!
+            # (Żeby mógł ich potem edytować/widzieć)
+            for player in match.players.all():
+                if player.is_temporary and player.owner is None:
+                    player.owner = user
+                    player.save()
+
+            del request.session['temp_match_id']
+
+            print(f"Success! Match {match.id} has been assigned to the user {user}.")
+
+        except Match.DoesNotExist:
+            pass

@@ -1,32 +1,80 @@
 {% extends 'base.html' %}
 
+{% block title %}Venues - Snooker App{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h1>Venue List</h1>
-    <a class="btn btn-sm btn-success" href="{% url 'add_venue' %}">Add Venue</a>
-    <table class="table">
-        <thead>
-        <tr>
-            <th scope="col">#</th>
-            <th scope="col">Name</th>
-            <th scope="col">Address</th>
-            <th scope="col">Capacity</th>
-        </tr>
-        </thead>
-        <tbody>
-            {% for venue in venues %}
-            <tr>
-                <th scope="row">{{ forloop.counter }}</th>
-                <td><a href="{% url 'venue_detail' venue.pk %}">{{ venue.name }}</a></td>
-                <td>{{ venue.address|default_if_none:"" }}</td>
-                <td>{{ venue.capacity|default_if_none:"" }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="5">No venues to display.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold"><i class="bi bi-geo-alt-fill text-primary"></i> Venues</h2>
+        <a href="{% url 'add_venue' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Add New Venue
+        </a>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        {% for venue in venues %}
+        <div class="col">
+            <div class="card h-100 shadow-sm border-0 hover-shadow transition-card">
+                <div class="ratio ratio-16x9 bg-light d-flex align-items-center justify-content-center overflow-hidden rounded-top">
+                    {% if venue.image %}
+                        <img src="{{ venue.image.url }}" class="card-img-top object-fit-cover" alt="{{ venue.name }}">
+                    {% else %}
+                        <div class="text-center text-muted py-5">
+                            <i class="bi bi-building" style="font-size: 3rem; opacity: 0.3;"></i>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title fw-bold mb-0">
+                            <a href="{% url 'venue_detail' venue.pk %}" class="text-decoration-none text-dark stretched-link">
+                                {{ venue.name }}
+                            </a>
+                        </h5>
+                        {% if venue.tables_count %}
+                            <span class="badge bg-primary rounded-pill">
+                                🔺 {{ venue.tables_count }} Tables
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    {% if venue.address %}
+                        <p class="card-text text-muted small mb-2">
+                            <i class="bi bi-geo-alt me-1"></i> {{ venue.address|truncatechars:40 }}
+                        </p>
+                    {% endif %}
+
+                    {% if venue.phone %}
+                         <p class="card-text text-muted small">
+                            <i class="bi bi-telephone me-1"></i> {{ venue.phone }}
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12 text-center py-5">
+            <h4 class="text-muted">No venues found</h4>
+            <p class="text-muted">Add your favorite club to start tracking matches there.</p>
+            <a href="{% url 'add_venue' %}" class="btn btn-outline-primary mt-2">Add First Venue</a>
+        </div>
+        {% endfor %}
+    </div>
 </div>
+
+<style>
+    .hover-shadow:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
+    }
+    .transition-card {
+        transition: all 0.3s ease;
+    }
+    .object-fit-cover {
+        object-fit: cover;
+        width: 100%;
+        height: 100%;
+    }
+</style>
 {% endblock %}

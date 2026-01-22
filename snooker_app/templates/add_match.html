@@ -1,21 +1,25 @@
 {% extends 'base.html' %}
 
-{% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card shadow">
-                <div class="card-header bg-primary text-white">
-                    <h3 class="card-title mb-0">Add New Match</h3>
-                </div>
-                <div class="card-body">
+{% block title %}Add Match - Snooker App{% endblock %}
 
-                    {# Wyświetlanie błędów ogólnych #}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-7">
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4 p-md-5">
+
+                    <div class="text-center mb-4">
+                        <h3 class="fw-bold">New Match</h3>
+                        <p class="text-muted small">Schedule a game or log a result</p>
+                    </div>
+
                     {% if form.non_field_errors %}
                         <div class="alert alert-danger" role="alert">
-                            <h4 class="alert-heading">Action Required</h4>
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
                             {% for error in form.non_field_errors %}
-                                <p class="mb-0">{{ error }}</p>
+                                {{ error }}
                             {% endfor %}
                         </div>
                     {% endif %}
@@ -23,59 +27,104 @@
                     <form method="post">
                         {% csrf_token %}
 
-                        {% for field in form %}
-                            {% if not field.is_hidden %}
+                        <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3">Match Setup</h6>
 
-                                {# --- 1. WYGLĄD DLA CHECKBOXÓW (Naprawia nachodzenie tekstu) --- #}
-                                {% if field.field.widget.input_type == 'checkbox' %}
-                                    <div class="mb-3 form-check">
-                                        {{ field }}
-                                        <label class="form-check-label" for="{{ field.id_for_label }}">
-                                            {{ field.label }}
-                                        </label>
-                                        {% if field.help_text %}
-                                            <div class="form-text text-muted">{{ field.help_text }}</div>
-                                        {% endif %}
-                                        {% if field.errors %}
-                                            <div class="text-danger small">{{ field.errors }}</div>
-                                        {% endif %}
-                                    </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Date</label>
+                                {{ form.date }}
+                                {{ form.date.errors }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Time</label>
+                                {{ form.time }}
+                                {{ form.time.errors }}
+                            </div>
+                        </div>
 
-                                {# --- 2. WYGLĄD DLA ZWYKŁYCH PÓL --- #}
-                                {% else %}
-                                    <div class="mb-3">
-                                        <label for="{{ field.id_for_label }}" class="form-label">
-                                            {{ field.label }}
-                                        </label>
-                                        {{ field }}
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Venue (Club)</label>
+                            {{ form.venue }}
+                            {{ form.venue.errors }}
+                        </div>
 
-                                        {% if field.errors %}
-                                            <div class="text-danger small mt-1">
-                                                {% for error in field.errors %}
-                                                    <strong>{{ error }}</strong>
-                                                {% endfor %}
-                                            </div>
-                                        {% endif %}
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Game Variant</label>
+                                {{ form.game_variant }}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label small fw-bold text-muted">Frames</label>
+                                {{ form.number_of_frames }}
+                                {{ form.number_of_frames.errors }}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label small fw-bold text-muted">Table No.</label>
+                                {{ form.table_number }}
+                            </div>
+                        </div>
 
-                                        {% if field.help_text %}
-                                            <div class="form-text text-muted">{{ field.help_text }}</div>
-                                        {% endif %}
-                                    </div>
-                                {% endif %}
+                        <div class="mb-4">
+                            <div class="form-check">
+                                {{ form.allow_draws }}
+                                <label class="form-check-label" for="{{ form.allow_draws.id_for_label }}">Allow Draws</label>
+                            </div>
+                            <div class="form-check">
+                                {{ form.is_public }}
+                                <label class="form-check-label" for="{{ form.is_public.id_for_label }}">Public Match</label>
+                            </div>
+                        </div>
 
-                            {% else %}
-                                {# Renderujemy ukryte pola (żeby formularz działał), ale ich nie widać #}
-                                {{ field }}
-                            {% endif %}
-                        {% endfor %}
+                        <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 mt-4">
+                            <i class="bi bi-people-fill me-2"></i>Players
+                        </h6>
 
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                            <a href="{% url 'match_list' %}" class="btn btn-secondary me-md-2">Cancel</a>
-                            <button type="submit" class="btn btn-primary">Add Match</button>
+                        <div class="mb-3">
+                            <div class="bg-light p-3 rounded border">
+                                {{ form.players }}
+                                {{ form.players.errors }}
+                                <div class="form-text text-muted small mt-2">
+                                    {{ form.players.help_text }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="form-check">
+                                {{ form.create_temporary_players }}
+                                <label class="form-check-label fw-bold" for="{{ form.create_temporary_players.id_for_label }}">
+                                    {{ form.create_temporary_players.label }}
+                                </label>
+                                <div class="form-text text-muted small">Useful for quick sparring without registering players.</div>
+                            </div>
+                        </div>
+
+                        <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 mt-4">
+                            <i class="bi bi-person-badge-fill me-2"></i>Officials
+                        </h6>
+
+                        <div class="mb-3">
+                            <div class="bg-white p-3 rounded border">
+                                {{ form.referees }}
+                                <div class="form-text text-muted small mt-2">
+                                    Select officials for this match (Optional).
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-5">
+                            <button type="submit" class="btn btn-success fw-bold py-2">
+                                <i class="bi bi-check-lg"></i> Create Match
+                            </button>
+                            <a href="{% url 'match_list' %}" class="btn btn-light text-muted border">
+                                Cancel
+                            </a>
                         </div>
                     </form>
+
                 </div>
             </div>
+
         </div>
     </div>
 </div>

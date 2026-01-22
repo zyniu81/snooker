@@ -14,12 +14,15 @@ import random
 class Player(models.Model):
     # --- 1. DANE OSOBOWE I KONFIGURACJA ---
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='players', null=True, blank=True)
+    user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='player_profile')
     is_public = models.BooleanField(default=False)
     is_temporary = models.BooleanField(default=False)
 
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
     nickname = models.CharField(max_length=30, blank=True, null=True)
+
+    photo = models.ImageField(upload_to='players_photos/', blank=True, null=True)
 
     # --- 2. STATYSTYKI MECZOWE (Kariera) ---
     matches_played = models.IntegerField(default=0)
@@ -89,20 +92,36 @@ class Player(models.Model):
 
 
 class Venue(models.Model):
-    # --- NOWE POLA WŁASNOŚCI ---
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='venues')
     is_public = models.BooleanField(default=False)
-    # ---------------------------
 
     name = models.CharField(max_length=100)
     address = models.CharField(max_length=255, blank=True, null=True)
-    capacity = models.PositiveIntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
 
+    # Image
+    image = models.ImageField(upload_to='venue_images/', blank=True, null=True)
+
+    # Kontakt
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    website = models.URLField(blank=True, null=True)
+
+    # Szczegóły techniczne
     tables_count = models.PositiveIntegerField(
         blank=True, null=True,
         validators=[MinValueValidator(0)],
-        help_text="Number of tables (optional)"
+        help_text="Liczba stołów"
     )
+    table_info = models.CharField(
+        max_length=100, blank=True, null=True,
+        help_text="Np. Star Tables, Strachan Cloth"
+    )
+    price_per_hour = models.DecimalField(
+        max_digits=6, decimal_places=2, blank=True, null=True,
+        help_text="Cena za godzinę (PLN)"
+    )
+
+    capacity = models.PositiveIntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
 
     def __str__(self):
         return self.name
@@ -118,7 +137,7 @@ class Referee(models.Model):
     last_name = models.CharField(max_length=30, blank=True)
     license_number = models.CharField(max_length=20, blank=True)
 
-    matches = models.ManyToManyField('Match', blank=True)
+    photo = models.ImageField(upload_to='referee_photos/', blank=True, null=True)
 
     def __str__(self):
         if self.first_name and self.last_name:
@@ -165,7 +184,7 @@ class Match(models.Model):
 
     # --- 2. GRACZE I SĘDZIOWIE ---
     players = models.ManyToManyField('Player')
-    referees = models.ManyToManyField('Referee', blank=True)
+    referees = models.ManyToManyField('Referee', blank=True, related_name='matches')
 
     # Cache nazw (tekstowe)
     player_names = models.TextField(blank=True, null=True)
@@ -374,6 +393,22 @@ class Match(models.Model):
     def delete_if_expired(self):
         if self.is_expired():
             self.delete()
+
+    def delete(self, *args, **kwargs):
+        # 1. Znajdujemy graczy tymczasowych powiązanych z TYM meczem
+        # Używamy list(), aby pobrać ich do pamięci przed usunięciem meczu
+        temp_players_to_check = list(self.players.filter(is_temporary=True))
+
+        # 2. Wykonujemy standardowe usuwanie meczu
+        super().delete(*args, **kwargs)
+
+        # 3. Sprzątanie sierot (Orphan Cleanup)
+        for player in temp_players_to_check:
+            # Sprawdzamy, czy ten gracz jest przypisany do jakichkolwiek innych meczów.
+            # Ponieważ właśnie usunęliśmy bieżący mecz, jeśli był to jego jedyny mecz,
+            # licznik wyniesie 0.
+            if player.match_set.count() == 0:
+                player.delete()
 
 
 class MatchPlayer(models.Model):
@@ -723,3 +758,114 @@ class KnockoutStage(Stage):
     class Meta(Stage.Meta):
         verbose_name = 'Knockout Stage'
         verbose_name_plural = 'Knockout Stages'
+
+
+# --- 4. EQUIPMENT (Historia Sprzętu) ---
+class Equipment(models.Model):
+    TYPE_CHOICES = [
+        ('CUE', 'Snooker Cue'),
+        ('TIP', 'Cue Tip'),
+        ('CHALK', 'Chalk'),
+        ('CASE', 'Cue Case'),
+        ('OTHER', 'Other'),
+    ]
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='equipment')
+
+    name = models.CharField(max_length=100, help_text="e.g. Parris Cues Ultimate")
+    item_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='CUE')
+
+    start_date = models.DateField(help_text="When did you start using this?")
+    end_date = models.DateField(null=True, blank=True, help_text="Leave empty if currently in use")
+
+    notes = models.TextField(blank=True, null=True)
+
+    def is_active(self):
+        return self.end_date is None
+
+    def __str__(self):
+        return f"{self.name} ({self.get_item_type_display()})"
+
+
+# --- 5. TRAINING SESSION (Dziennik Treningowy) ---
+class TrainingSession(models.Model):
+    TYPE_CHOICES = [
+        ('SOLO', 'Solo Practice'),
+        ('LINEUP', 'Line-up / Drills'),
+        ('SPARING', 'Sparing (No Match)'),
+        ('COACHING', 'Coaching Session'),
+    ]
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    venue = models.ForeignKey(Venue, on_delete=models.SET_NULL, null=True, blank=True)
+
+    date = models.DateField(default=timezone.now)
+    duration_minutes = models.PositiveIntegerField(help_text="Duration in minutes", default=60)
+    session_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='SOLO')
+
+    notes = models.TextField(blank=True, null=True, help_text="What did you practice? How did it go?")
+    rating = models.PositiveIntegerField(
+        default=5,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text="Self-rating (1-10)"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Training {self.date} - {self.get_session_type_display()}"
+
+
+# --- 6. COMPETITION RESULT (Osiągnięcia Turniejowe) ---
+class CompetitionResult(models.Model):
+    RESULT_CHOICES = [
+        # --- PODIUM ---
+        ('WINNER', 'Winner 🏆'),
+        ('RUNNER_UP', 'Runner-up 🥈'),
+        ('THIRD_PLACE', '3rd Place 🥉'),
+        ('FOURTH_PLACE', '4th Place'),
+
+        # --- ETAPY DYNAMICZNE ---
+        ('KNOCKOUT_ROUND', 'Knockout Round (Last X)'),  # Np. Last 16, Last 128
+        ('GROUP_STAGE', 'Group Stage'),  # Np. Grupy I, Grupy II
+        ('QUALIFIER', 'Qualifier'),  # Kwalifikacje
+    ]
+
+    competition = models.ForeignKey('Competition', on_delete=models.CASCADE, related_name='results')
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='competition_results')
+
+    result = models.CharField(max_length=20, choices=RESULT_CHOICES)
+
+    # --- NOWE MAGICZNE POLE ---
+    detail_number = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Dla Knockout: wpisz liczbę (np. 32 dla Last 32). Dla Group: numer etapu (np. 2 dla Group Stage II)."
+    )
+
+    rank = models.PositiveIntegerField(
+        default=0,
+        help_text="Miejsce liczbowo do sortowania (1=Winner, 2=Runner-up, 3=3rd Place, 4=4th Place, 5-8=Quarter...)"
+    )
+
+    prize_money = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        # Jeden gracz może mieć tylko jeden wynik końcowy w danym turnieju
+        unique_together = ('competition', 'player')
+        ordering = ['rank', 'detail_number']  # Sortujemy po randze, a przy remisach po szczegółach
+
+    def __str__(self):
+        # Logika inteligentnego wyświetlania nazwy
+        if self.result == 'KNOCKOUT_ROUND' and self.detail_number:
+            status = f"Last {self.detail_number}"
+        elif self.result == 'GROUP_STAGE':
+            if self.detail_number and self.detail_number > 1:
+                # Zamiana cyfry na rzymską (opcjonalnie) lub po prostu "Stage 2"
+                status = f"Group Stage {self.detail_number}"
+            else:
+                status = "Group Stage"
+        else:
+            status = self.get_result_display()
+
+        return f"{self.player} - {status} in {self.competition}"

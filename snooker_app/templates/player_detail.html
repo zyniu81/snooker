@@ -1,10 +1,253 @@
 {% extends 'base.html' %}
+
+{% block title %}{{ player.first_name }} - Player Profile{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h2>Player Detail</h2>
-    <p>Name: {{ player }}</p>
-    <a href="{% url 'player_edit' player.pk %}" class="btn btn-sm btn-primary">Edit Player</a>
-    <a href="{% url 'player_delete' player.pk %}" class="btn btn-sm btn-danger">Delete Player</a>
-    <a href="{% url 'player_list' %}" class="btn btn-sm btn-secondary">Back to list</a>
+<style>
+    /* Profilowy Header */
+    .profile-header-card {
+        border: none;
+        border-radius: 15px;
+        background-color: white;
+        overflow: hidden;
+    }
+
+    /* Wielki Awatar */
+    .profile-avatar-lg {
+        width: 120px;
+        height: 120px;
+        background: linear-gradient(135deg, #6f42c1, #a06ee1);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3.5rem;
+        font-weight: 800;
+        margin: 0 auto;
+        border: 5px solid #fff; /* Biała ramka */
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+        /* WAŻNE: Przycinanie zdjęcia do kółka */
+        overflow: hidden;
+    }
+
+    .profile-avatar-lg img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    /* Kafelki Statystyk */
+    .stat-card {
+        border: none;
+        border-radius: 12px;
+        background-color: #f8f9fa; /* Lekko szary */
+        transition: transform 0.2s;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-2px);
+        background-color: white;
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.1);
+    }
+
+    .stat-title {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6c757d;
+        font-weight: 600;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 800;
+        color: #212529;
+    }
+
+    .stat-subtext {
+        font-size: 0.8rem;
+        color: #adb5bd;
+    }
+</style>
+
+<div class="container mt-4">
+
+    <div class="mb-3">
+        <a href="{% url 'player_list' %}" class="text-decoration-none text-muted">
+            <i class="bi bi-arrow-left"></i> Back to Players
+        </a>
+    </div>
+
+    <div class="row">
+
+        <div class="col-lg-4 mb-4">
+            <div class="card profile-header-card shadow-sm h-100 text-center p-4">
+
+                <div class="mb-3">
+                    <div class="profile-avatar-lg">
+                        {% if player.photo %}
+                            <img src="{{ player.photo.url }}" alt="{{ player.nickname }}">
+                        {% elif player.first_name %}
+                            {{ player.first_name|slice:":1"|upper }}
+                        {% elif player.nickname %}
+                            {{ player.nickname|slice:":1"|upper }}
+                        {% elif player.last_name %}
+                            {{ player.last_name|slice:":1"|upper }}
+                        {% else %}
+                            <i class="bi bi-person"></i>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h2 class="mb-0 fw-bold lh-sm">
+                        {% if player.first_name %}
+                            <span class="d-block fw-normal fs-4">{{ player.first_name }}</span>
+                        {% endif %}
+
+                        {% if player.nickname %}
+                            <span class="d-block text-primary fst-italic py-1 fs-5">
+                                "{{ player.nickname }}"
+                            </span>
+                        {% endif %}
+
+                        {% if player.last_name %}
+                            <span class="d-block fw-bold">{{ player.last_name }}</span>
+                        {% endif %}
+                    </h2>
+                </div>
+
+                <div class="d-grid gap-2 col-10 mx-auto">
+                    <a href="{% url 'player_edit' player.pk %}" class="btn btn-outline-primary fw-bold">
+                        <i class="bi bi-pencil-fill"></i> Edit Profile
+                    </a>
+
+                    <a href="{% url 'player_delete' player.pk %}" class="btn btn-outline-danger btn-sm border-0">
+                        Delete Player
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+
+            <h4 class="fw-bold mb-3">Performance Stats</h4>
+
+            <div class="row g-3 mb-4">
+
+                <div class="col-md-4 col-sm-6">
+                    <div class="card stat-card h-100 p-3 text-center">
+                        <div class="stat-title mb-2">High Break</div>
+                        <div class="stat-number text-primary">
+                            {{ player.highest_break|default:"-" }}
+                        </div>
+                        <div class="stat-subtext">Points</div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 col-sm-6">
+                    <div class="card stat-card h-100 p-3 text-center">
+                        <div class="stat-title mb-2">Pot Success</div>
+                        <div class="stat-number text-success">
+                            {% if player.pot_success_percentage %}
+                                {{ player.pot_success_percentage }}<span class="fs-6">%</span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </div>
+                        {% if player.pot_success_percentage %}
+                        <div class="progress mt-2" style="height: 6px;">
+                            <div class="progress-bar bg-success" role="progressbar"
+                                 style="width: {{ player.pot_success_percentage }}%"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="col-md-4 col-sm-12">
+                    <div class="card stat-card h-100 p-3 text-center">
+                        <div class="stat-title mb-2">Avg Shot Time</div>
+                        <div class="stat-number">
+                            {% if player.avg_shot_time %}
+                                {{ player.avg_shot_time }}<span class="fs-6">s</span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </div>
+                        <div class="stat-subtext">Seconds</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 p-3 mb-4">
+                <div class="row text-center align-items-center">
+                    <div class="col-6 border-end">
+                        <div class="text-muted small text-uppercase">Avg Fouls / Match</div>
+                        <div class="fw-bold fs-5">{{ player.avg_fouls_per_match|default:"0" }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted small text-uppercase">Avg Foul Points</div>
+                        <div class="fw-bold fs-5">{{ player.avg_foul_points_per_match|default:"0" }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0">Recent Matches</h5>
+                {% if matches %}
+                    <a href="#" class="small text-decoration-none">View All</a>
+                {% endif %}
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-0">
+                    {% if matches %}
+                        <div class="list-group list-group-flush">
+                            {% for match in matches %}
+                                <a href="{% url 'match_detail' match.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="small text-muted" style="font-size: 0.75rem;">
+                                            {{ match.date|date:"d.m.Y" }}
+                                        </div>
+                                        <div class="fw-bold text-dark">
+                                            <span class="text-muted fw-normal small">vs</span>
+                                            {% for p in match.players.all %}
+                                                {% if p.id != player.id %}
+                                                    {% if p.first_name %} {{ p.first_name }} {% endif %}
+
+                                                    {% if p.nickname %} "{{ p.nickname }}" {% endif %}
+
+                                                    {% if p.last_name %} {{ p.last_name }} {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        {% if match.status == 'FINISHED' %}
+                                            <span class="badge bg-light text-dark border">
+                                                {{ match.final_score_player1 }} - {{ match.final_score_player2 }}
+                                            </span>
+                                        {% elif match.status == 'IN_PROGRESS' %}
+                                            <span class="badge bg-warning text-dark">LIVE</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary opacity-50">Plan</span>
+                                        {% endif %}
+                                    </div>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4 text-muted">
+                            <i class="bi bi-calendar-x mb-2" style="font-size: 1.5rem;"></i>
+                            <p class="mb-0 small">No recent match history found.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+    </div>
 </div>
 {% endblock %}

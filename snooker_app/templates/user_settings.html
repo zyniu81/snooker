@@ -1,17 +1,61 @@
 {% extends 'base.html' %}
-{% block content %}
-<div class="container">
-    <h2>User Settings: {{ user.username }}</h2>
-    <h4>Change Password</h4>
-    <form method="post" action="{% url 'user_settings' %}">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Change Password</button>
-    </form>
 
-    <form method="post">
-        {% csrf_token %}
-        <a href="{% url 'delete_user' %}" class="btn btn-danger">Delete User</a>
-    </form>
+{% block title %}Account Settings - Snooker App{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <h2 class="fw-bold mb-4">Account Settings</h2>
+
+            <div class="card shadow-sm border-0 mb-5">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2"></i>Security & Password</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post" action="{% url 'user_settings' %}">
+                        {% csrf_token %}
+
+                        {% for field in form %}
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.help_text %}
+                                    <div class="form-text small">{{ field.help_text }}</div>
+                                {% endif %}
+                                {% if field.errors %}
+                                    <div class="text-danger small">{{ field.errors }}</div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary fw-bold px-4">
+                                Update Password
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card border-danger shadow-sm">
+                <div class="card-header bg-danger text-white py-3">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i>Danger Zone</h5>
+                </div>
+                <div class="card-body p-4">
+                    <h6 class="fw-bold">Delete Account</h6>
+                    <p class="text-muted small mb-3">
+                        Once you delete your account, there is no going back. Please be certain.
+                        All your players, matches, and tournament history will be permanently removed.
+                    </p>
+                    <a href="{% url 'delete_user' %}" class="btn btn-outline-danger fw-bold">
+                        Delete Account
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
 </div>
 {% endblock %}

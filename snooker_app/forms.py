@@ -13,61 +13,75 @@ from .models import Player, Referee, Venue, Match, Competition, GroupStage, Knoc
 class PlayerForm(forms.ModelForm):
     class Meta:
         model = Player
-        fields = ['first_name', 'last_name', 'nickname', 'is_public', 'is_temporary']
+        fields = ['first_name', 'last_name', 'nickname', 'photo', 'is_public', 'is_temporary']
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'nickname': forms.TextInput(attrs={'class': 'form-control'}),
+            'photo': forms.ClearableFileInput(attrs={'class': 'form-control'}), # <--- NOWE
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_temporary': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, **kwargs):
-        self.request = kwargs.pop('request', None)  # Pobieramy request
+        self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
-        # Jeśli użytkownik NIE JEST superuserem (albo nie jest zalogowany)
+        # Logika dla zwykłego usera (nie-Admina)
         if not self.request or not self.request.user.is_superuser:
-            # Ukrywamy Is Public
+            # Usuwamy pole public całkowicie (czyściej niż ukrywanie)
             if 'is_public' in self.fields:
-                self.fields['is_public'].widget = forms.HiddenInput()
-                self.fields['is_public'].initial = False
+                del self.fields['is_public']
 
-            # Ukrywamy Is Temporary
+            # Ukrywamy Is Temporary (domyślnie False, user nie powinien tego klikać przy dodawaniu)
             if 'is_temporary' in self.fields:
                 self.fields['is_temporary'].widget = forms.HiddenInput()
                 self.fields['is_temporary'].initial = False
 
 
+# --- FORMULARZ EDYCJI GRACZA ---
 class PlayerEditForm(forms.ModelForm):
     class Meta:
         model = Player
-        fields = ['first_name', 'last_name', 'nickname', 'is_public']
+        fields = ['first_name', 'last_name', 'nickname', 'photo', 'is_public', 'is_temporary']
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'nickname': forms.TextInput(attrs={'class': 'form-control'}),
+            'photo': forms.ClearableFileInput(attrs={'class': 'form-control'}), # <--- NOWE
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_temporary': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, **kwargs):
-        self.request = kwargs.pop('request', None) # Pobieramy request
+        self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
-        # Logika ukrywania Is Public dla nie-admina
+        # 1. Logika Is Public
         if not self.request or not self.request.user.is_superuser:
             if 'is_public' in self.fields:
-                self.fields['is_public'].widget = forms.HiddenInput()
+                del self.fields['is_public']
+
+        # 2. LOGIKA RATOWANIA GRACZA
+        # Jeśli gracz JUŻ jest stały, nie pozwalamy go zmienić na tymczasowego.
+        if self.instance.pk and not self.instance.is_temporary:
+             if 'is_temporary' in self.fields:
+                 self.fields['is_temporary'].widget = forms.HiddenInput()
+                 self.fields['is_temporary'].disabled = True
+        else:
+            # Jeśli gracz JEST tymczasowy, zachęcamy do zmiany
+            self.fields['is_temporary'].label = "Is Temporary (Uncheck to save player permanently)"
 
 
 class RefereeForm(forms.ModelForm):
     class Meta:
         model = Referee
-        fields = ['first_name', 'last_name', 'license_number', 'is_public']
+        fields = ['first_name', 'last_name', 'license_number', 'photo', 'is_public']
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'license_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'photo': forms.ClearableFileInput(attrs={'class': 'form-control'}),
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
@@ -75,22 +89,41 @@ class RefereeForm(forms.ModelForm):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
+        # Logika dla Admina:
+        # Jeśli nie admin -> usuwamy pole is_public całkowicie
         if not self.request or not self.request.user.is_superuser:
             if 'is_public' in self.fields:
-                self.fields['is_public'].widget = forms.HiddenInput()
-                self.fields['is_public'].initial = False
+                del self.fields['is_public']
 
 
 class VenueForm(forms.ModelForm):
     class Meta:
         model = Venue
-        # Dodałem tables_count
-        fields = ['name', 'address', 'capacity', 'tables_count', 'is_public']
+        fields = [
+            'name',
+            'image',
+            'address',
+            'phone',
+            'email',
+            'website',
+            'tables_count',
+            'table_info',
+            'price_per_hour',
+            'capacity',
+            'is_public'
+        ]
+
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'image': forms.ClearableFileInput(attrs={'class': 'form-control'}),
             'address': forms.TextInput(attrs={'class': 'form-control'}),
-            'capacity': forms.NumberInput(attrs={'class': 'form-control'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'website': forms.URLInput(attrs={'class': 'form-control'}),
             'tables_count': forms.NumberInput(attrs={'class': 'form-control'}),
+            'table_info': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Star Tables'}),
+            'price_per_hour': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'capacity': forms.NumberInput(attrs={'class': 'form-control'}),
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
@@ -98,10 +131,13 @@ class VenueForm(forms.ModelForm):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
+        # LOGIKA DLA ADMINA:
+        # Jeśli nie ma requesta lub użytkownik nie jest superuserem (adminem)...
         if not self.request or not self.request.user.is_superuser:
+            # ... to całkowicie usuwamy pole 'is_public' z tego formularza.
+            # Zwykły user nawet nie dowie się, że ono istnieje.
             if 'is_public' in self.fields:
-                self.fields['is_public'].widget = forms.HiddenInput()
-                self.fields['is_public'].initial = False
+                del self.fields['is_public']
 
 
 # --- MECZE ---
@@ -144,7 +180,7 @@ class MatchForm(forms.ModelForm):
             'time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
             'game_variant': forms.Select(attrs={'class': 'form-select'}),
             'number_of_frames': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
-            'table_number': forms.TextInput(attrs={'class': 'form-control'}),  # <--- Zmiana na TextInput
+            'table_number': forms.TextInput(attrs={'class': 'form-control'}),
             'allow_draws': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
@@ -157,31 +193,24 @@ class MatchForm(forms.ModelForm):
 
         if is_auth:
             user = self.request.user
-            # Filtrujemy
             self.fields['players'].queryset = Player.objects.filter(Q(owner=user) | Q(is_public=True))
             self.fields['referees'].queryset = Referee.objects.filter(Q(owner=user) | Q(is_public=True))
             self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
 
-            # --- NOWOŚĆ: SPRAWDZANIE PUSTYCH LIST ---
-
-            # Sprawdzamy graczy
             if not self.fields['players'].queryset.exists():
                 self.fields['players'].help_text = "No players found. Please add players in your profile first."
-                self.fields['players'].disabled = True  # Blokujemy pole
+                self.fields['players'].disabled = True
 
-            # Sprawdzamy sędziów
             if not self.fields['referees'].queryset.exists():
                 self.fields['referees'].help_text = "No referees found. You can add them in the Referees section."
                 self.fields['referees'].disabled = True
 
-            # Ukrywamy opcje konfiguracyjne (domyślne wartości)
             self.fields['is_public'].widget = forms.HiddenInput()
             self.fields['allow_draws'].widget = forms.HiddenInput()
             self.fields['is_public'].initial = False
             self.fields['allow_draws'].initial = False
 
         else:
-            # DLA GOŚCIA
             del self.fields['venue']
             del self.fields['referees']
             del self.fields['players']
@@ -206,33 +235,48 @@ class MatchForm(forms.ModelForm):
         players = cleaned_data.get('players')
         create_temp = cleaned_data.get('create_temporary_players')
 
-        # Walidacja tylko jeśli pole players istnieje (czyli dla zalogowanego)
         if 'players' in self.fields:
             if not create_temp and (not players or players.count() < 2):
                 raise ValidationError("Select at least two players OR check 'Create temporary players'.")
         return cleaned_data
 
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        create_temp_players = self.cleaned_data.get('create_temporary_players', False)
+    # --- NOWA METODA (Zamiast def save) ---
+    def create_temp_players_if_needed(self, match):
+        """
+        Tworzy graczy tymczasowych ORAZ obiekty MatchPlayer z przypisaną pozycją.
+        """
+        create_temp = self.cleaned_data.get('create_temporary_players', False)
 
-        if commit:
-            instance.save()
-            self.save_m2m()
+        if create_temp:
+            owner = match.owner
 
-            if create_temp_players:
-                owner = instance.owner
-                count_base = Player.objects.filter(owner=owner).count() if owner else 0
-                prefix = "Temp Player"
+            # 1. Tworzymy graczy ze stałymi nazwami (zgodnie z życzeniem)
+            # Nie dodajemy licznika, żeby na tablicy było ładnie "Temp Player 1"
+            # W bazie stworzy się nowy rekord za każdym razem (to OK, tak ustaliliśmy)
+            p1 = Player.objects.create(first_name='Temp Player 1', is_temporary=True, owner=owner)
+            p2 = Player.objects.create(first_name='Temp Player 2', is_temporary=True, owner=owner)
 
-                p1 = Player.objects.create(first_name=f'{prefix} {count_base + 1}', is_temporary=True, owner=owner)
-                p2 = Player.objects.create(first_name=f'{prefix} {count_base + 2}', is_temporary=True, owner=owner)
-                instance.players.add(p1, p2)
-                instance.temp_player1 = p1
-                instance.temp_player2 = p2
-                instance.is_temporary = True
-                instance.save()
-        return instance
+            # 2. Przypisujemy do relacji ManyToMany (dla bezpieczeństwa i kompatybilności)
+            match.players.add(p1, p2)
+
+            # 3. KLUCZOWE: Tworzymy obiekty MatchPlayer z POZYCJĄ!
+            # To naprawia "Niewidzialnych graczy" w match_detail oraz "Złą kolejność"
+
+            # Importujemy tutaj, żeby uniknąć cyklicznych importów na górze pliku
+            from .models import MatchPlayer
+
+            # Gracz 1 -> Pozycja 1 (Lewa)
+            MatchPlayer.objects.create(match=match, player=p1, position=1)
+
+            # Gracz 2 -> Pozycja 2 (Prawa)
+            MatchPlayer.objects.create(match=match, player=p2, position=2)
+
+            # 4. Uzupełniamy pola pomocnicze w Match
+            match.temp_player1 = p1
+            match.temp_player2 = p2
+            match.is_temporary = True
+
+            match.save()
 
 
 # --- TURNIEJE ---
@@ -342,11 +386,17 @@ class GroupStageForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if self.competition:
-            self.fields['players'].queryset = self.competition.players.all()
+            # --- ZMIANA: ROZSZERZAMY LISTĘ ---
+            # Zamiast ograniczać się do self.competition.players.all()...
+            # ...pozwalamy wybrać każdego 'normalnego' gracza właściciela turnieju.
+            owner = self.competition.owner
+            self.fields['players'].queryset = Player.objects.filter(owner=owner, is_temporary=False)
 
+            # Domyślne zaznaczanie (logika bez zmian)
             if self.winner_list:
                 self.fields['players'].initial = [p.id for p in self.winner_list]
             else:
+                # Jeśli to pierwszy etap, zaznaczy wszystkich dostępnych
                 self.fields['players'].initial = [p.id for p in self.other_list]
 
 
@@ -382,8 +432,11 @@ class KnockoutStageForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if self.competition:
-            self.fields['players'].queryset = self.competition.players.all()
+            # --- ZMIANA: ROZSZERZAMY LISTĘ ---
+            owner = self.competition.owner
+            self.fields['players'].queryset = Player.objects.filter(owner=owner, is_temporary=False)
 
+            # Domyślne zaznaczanie
             if self.winner_list:
                 self.fields['players'].initial = [p.id for p in self.winner_list]
             else:

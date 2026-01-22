@@ -67,9 +67,13 @@
                                 <a class="nav-item nav-link ms-3" href="{% url 'login' %}">Login</a>
 
                                 {% if request.session.temp_match_id %}
-                                    <a class="nav-item nav-link btn btn-success text-white btn-sm ms-2 shadow-sm fw-bold" href="{% url 'register' %}">
-                                        <i class="bi bi-save-fill"></i> Save Match
-                                    </a>
+                                    <div class="d-flex align-items-center">
+                                        <a class="btn btn-success text-white btn-sm ms-2 shadow-sm fw-bold"
+                                           style="opacity: 1 !important;"
+                                           href="{% url 'login' %}?next={{ request.path }}">
+                                            <i class="bi bi-save-fill"></i> Save Match
+                                        </a>
+                                    </div>
                                 {% else %}
                                     <a class="nav-item nav-link btn btn-outline-primary btn-sm ms-2" href="{% url 'register' %}">Register</a>
                                 {% endif %}

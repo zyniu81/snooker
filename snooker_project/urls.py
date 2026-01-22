@@ -17,6 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path
+from django.conf import settings
+from django.conf.urls.static import static
 from snooker_app import views
 from snooker_app.views import PlayerDeleteView, VenueDeleteView
 
@@ -73,3 +75,7 @@ urlpatterns = [
     path('end-knockout-stage/<int:stage_id>/', views.end_knockout_stage, name='end_knockout_stage'),
     path('end-competition/<int:competition_id>/', views.end_competition, name='end_competition'),
 ]
+
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

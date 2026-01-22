@@ -14,11 +14,48 @@
         padding: 0 !important;
         border-top: none !important;
     }
+    .match-info-pill {
+        background-color: #e9ecef;
+        padding: 0.25rem 0.75rem;
+        border-radius: 50rem;
+        font-size: 0.85rem;
+        color: #495057;
+        margin: 0 0.25rem;
+        display: inline-flex;
+        align-items: center;
+    }
 </style>
 
 <div class="container pb-5">
 
-    <div class="card shadow-sm mt-4 mb-4 border-0">
+    <div class="text-center mt-4 mb-2">
+        <div class="mb-2">
+            <span class="fw-bold text-dark">{{ match.date|date:"l, d M Y" }}</span>
+            <span class="text-muted mx-1">•</span>
+            <span>{{ match.time|time:"H:i" }}</span>
+        </div>
+
+        <div class="d-flex justify-content-center flex-wrap gap-2">
+            {% if match.venue %}
+                <div class="match-info-pill">
+                    <i class="bi bi-geo-alt-fill text-danger me-2"></i>
+                    {{ match.venue.name }}
+                    {% if match.table_number %} (Table {{ match.table_number }}){% endif %}
+                </div>
+            {% endif %}
+
+            {% if match.referees.exists %}
+                <div class="match-info-pill">
+                    <i class="bi bi-person-badge-fill text-dark me-2"></i>
+                    {% for referee in match.referees.all %}
+                        {{ referee.first_name }} {{ referee.last_name }}{% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow-sm mt-3 mb-4 border-0">
         <div class="card-body bg-light text-center rounded">
             <h5 class="text-muted text-uppercase small ls-1">Match Score</h5>
             <div class="d-flex justify-content-center align-items-center">
@@ -89,17 +126,33 @@
         <div class="card-body text-center">
              <div class="mt-2">
                 {% if is_finished %}
+                    {# --- SCENARIUSZ 1: MECZ ZAKOŃCZONY --- #}
                     <div class="alert alert-success d-inline-block px-5">
                         <h4><i class="bi bi-trophy-fill text-warning"></i> Match Finished</h4>
                         Winner: <strong>{{ winner }}</strong>
                     </div>
                     <div class="mt-3">
-                        <a href="{% url 'match_list' %}" class="btn btn-secondary">Back to List</a>
+                        {# INTELIGENTNY PRZYCISK POWROTU #}
+                        {% if match.group_stage %}
+                            <a href="{% url 'competition_detail' match.group_stage.competition.id %}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Back to Tournament
+                            </a>
+                        {% elif match.knockout_stage %}
+                            <a href="{% url 'competition_detail' match.knockout_stage.competition.id %}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Back to Tournament
+                            </a>
+                        {% else %}
+                            <a href="{% url 'match_list' %}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Back to List
+                            </a>
+                        {% endif %}
+
                         {% if user == match.owner %}
                              <a href="{% url 'delete_match' match.pk %}" class="btn btn-outline-danger ms-2">Delete Match</a>
                         {% endif %}
                     </div>
                 {% else %}
+                    {# --- SCENARIUSZ 2: MECZ W TRAKCIE --- #}
                     <p class="text-muted">The match is active.</p>
                     <a href="{% url 'start_game' match.pk %}" class="btn btn-success btn-lg px-5 mb-3 shadow">
                         <i class="bi bi-play-circle-fill"></i> Play Match
@@ -109,7 +162,21 @@
                         {% if user == match.owner or not match.owner %}
                             <a href="{% url 'delete_match' match.pk %}" class="btn btn-sm btn-danger">Delete</a>
                         {% endif %}
-                        <a href="{% url 'match_list' %}" class="btn btn-sm btn-secondary">Back to List</a>
+
+                        {# INTELIGENTNY PRZYCISK POWROTU (Mniejszy btn-sm) #}
+                        {% if match.group_stage %}
+                            <a href="{% url 'competition_detail' match.group_stage.competition.id %}" class="btn btn-sm btn-secondary">
+                                Back to Tournament
+                            </a>
+                        {% elif match.knockout_stage %}
+                            <a href="{% url 'competition_detail' match.knockout_stage.competition.id %}" class="btn btn-sm btn-secondary">
+                                Back to Tournament
+                            </a>
+                        {% else %}
+                            <a href="{% url 'match_list' %}" class="btn btn-sm btn-secondary">
+                                Back to List
+                            </a>
+                        {% endif %}
                     </div>
                 {% endif %}
             </div>
