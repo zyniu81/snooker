@@ -284,7 +284,8 @@ class MatchForm(forms.ModelForm):
 class CompetitionForm(forms.ModelForm):
     class Meta:
         model = Competition
-        fields = ['name', 'start_date', 'end_date', 'venue', 'game_variant', 'is_public']
+        # Dodany 'status', aby ręcznie zmienić "Scheduled" na "Active"
+        fields = ['name', 'start_date', 'end_date', 'venue', 'game_variant', 'is_public', 'status']
 
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Competition Name'}),
@@ -293,19 +294,19 @@ class CompetitionForm(forms.ModelForm):
             'venue': forms.Select(attrs={'class': 'form-control'}),
             'game_variant': forms.Select(attrs={'class': 'form-select'}),
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'status': forms.Select(attrs={'class': 'form-select'}), # <-- Nowy widget
         }
 
     def __init__(self, *args, **kwargs):
-        # 1. Odbieramy 'request' i usuwamy go z argumentów, zanim trafi do super().__init__
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
-        # 2. Logika filtrowania Venue (żeby widzieć tylko swoje + publiczne)
         if self.request and self.request.user.is_authenticated:
             user = self.request.user
+            # Filtrujemy venue (moje + publiczne)
             self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
 
-        # 3. Ukrywanie 'is_public' dla zwykłych użytkowników (nie-adminów)
+        # Ukrywanie opcji publicznej dla zwykłych userów
         if not self.request or not self.request.user.is_superuser:
             if 'is_public' in self.fields:
                 self.fields['is_public'].widget = forms.HiddenInput()
@@ -315,7 +316,6 @@ class CompetitionForm(forms.ModelForm):
         cleaned_data = super().clean()
         start_date = cleaned_data.get('start_date')
         end_date = cleaned_data.get('end_date')
-
         if start_date and end_date and end_date < start_date:
             raise forms.ValidationError("End date cannot be earlier than start date.")
         return cleaned_data

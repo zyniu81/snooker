@@ -437,24 +437,17 @@ def start_game(request, pk):
 
     # --- LOGIKA DOSTĘPU ---
     has_access = False
-
-    # 1. Mecz bez właściciela (Tymczasowy) -> WSTĘP WOLNY
     if match.owner is None:
         has_access = True
-    # 2. Mecz publiczny -> WSTĘP WOLNY
     elif match.is_public:
         has_access = True
-    # 3. Mecz prywatny -> TYLKO WŁAŚCICIEL
     elif request.user.is_authenticated and match.owner == request.user:
         has_access = True
 
-    # Jeśli żaden warunek nie jest spełniony -> BLOKADA
     if not has_access:
         if request.user.is_authenticated:
-            # Zalogowany, ale próbuje wejść na cudzy prywatny mecz
             raise PermissionDenied("Brak dostępu do meczu.")
         else:
-            # Niezalogowany próbuje wejść na prywatny mecz -> Logowanie
             return redirect(f'{reverse("login")}?next={request.path}')
     # ----------------------
 
@@ -463,24 +456,22 @@ def start_game(request, pk):
         messages.warning(request, "Ten mecz jest już zakończony!")
         return redirect('match_detail', pk=pk)
 
+    # --- CZYSTA LOGIKA (Bez auto-naprawy) ---
+    # Pobieramy graczy TYLKO z tabeli MatchPlayer, posortowanych po pozycji.
+    # Jeśli tu jest pusto -> trudno. Nie zgadujemy.
     match_players = MatchPlayer.objects.filter(match=match).order_by('position')
 
-    # --- AUTO-NAPRAWA (Twoja logika) ---
-    if not match_players.exists() and match.players.exists():
-        print(f"⚠️ Naprawa MatchPlayer dla meczu {pk}...")
-        for index, player in enumerate(match.players.all()):
-            MatchPlayer.objects.create(match=match, player=player, position=index + 1)
-        match_players = MatchPlayer.objects.filter(match=match).order_by('position')
-
+    # Tworzymy listę obiektów Player (potrzebna do active_player itp.)
     players_list = [mp.player for mp in match_players]
 
     # --- LOGIKA FRAMÓW ---
     existing_frames = Frame.objects.filter(match_player__in=match_players)
     active_frame_object = None
 
+    # Tworzymy Frame 1 tylko jeśli mamy graczy (żeby nie wywaliło błędu przy pustej liście)
     if not existing_frames.exists() and match_players.exists():
         active_frame_object = Frame.objects.create(
-            match_player=match_players.first(),
+            match_player=match_players.first(), # To jest bezpieczne, bo mamy .exists()
             frame_number=1,
             points_scored_player1=0,
             points_scored_player2=0,
@@ -503,7 +494,7 @@ def start_game(request, pk):
 
     context = {
         'match': match,
-        'players': player_results,
+        'players': player_results, # Jeśli mecz był zepsuty, to będzie puste. I dobrze.
         'pk': pk,
         'number_of_frames': match.number_of_frames,
         'frame': active_frame_object
@@ -576,54 +567,28 @@ def competition_list(request):
 @login_required
 def competition_detail(request, pk):
     competition = get_object_or_404(Competition, pk=pk)
+
+    # Sprawdzenie uprawnień
     if not (competition.owner == request.user or competition.is_public):
         raise PermissionDenied
 
-    group_stages = competition.groupstage_stages.all().prefetch_related('matches')
-    knockout_stages = competition.knockoutstage_stages.all().prefetch_related('matches')
+    # 1. Pobieramy Etapy Grupowe
+    group_stages = competition.groupstage_stages.all().prefetch_related(
+        'groups__standings__player',  # Pobierz tabele i dane graczy
+        'groups__matches'  # Pobierz mecze w grupach
+    )
 
-    group_data = []
-    for group_stage in group_stages:
-        matches = group_stage.matches.all()
-        players = Player.objects.filter(matchplayer__match__in=matches).distinct()
+    # 2. Pobieramy Etapy Pucharowe
+    knockout_stages = competition.knockoutstage_stages.all().prefetch_related(
+        'matches__players'
+    )
 
-        player_stats = []
-        for player in players:
-            stats = MatchPlayer.objects.filter(
-                match__in=matches,
-                player=player).aggregate(
-                played=Count('match', distinct=True),
-                won=Sum(Case(
-                    When(points_scored__gt=F('points_scored'), then=1),
-                    default=0, output_field=IntegerField())),
-                drawn=Sum(Case(
-                    When(points_scored=F('points_scored'), then=1),
-                    default=0, output_field=IntegerField())),
-                frames_won=Sum('points_scored'),
-                frames_lost=Sum(F('points_scored')) - Sum('points_scored')
-            )
-            stats['match_points'] = (stats['won'] or 0) * 3 + (stats['drawn'] or 0)
-            player_stats.append(stats)
-
-        player_stats.sort(key=lambda x: (x['match_points'], x['frames_won'] - x['frames_lost']), reverse=True)
-        group_data.append({
-            'stage': group_stage,
-            'matches': matches,
-            'player_stats': player_stats
-        })
-
-    knockout_data = []
-    for knockout_stage in knockout_stages:
-        matches = knockout_stage.matches.all().order_by('group_name')
-        knockout_data.append({
-            'stage': knockout_stage,
-            'matches': matches
-        })
+    # Przygotowujemy dane do szablonu
 
     return render(request, 'competition_detail.html', {
         'competition': competition,
-        'group_data': group_data,
-        'knockout_data': knockout_data,
+        'group_stages': group_stages,  # Przekazujemy całe obiekty, szablon sobie poradzi
+        'knockout_stages': knockout_stages,
         'add_players_url': reverse('add_players_to_competition', kwargs={'pk': competition.pk})
     })
 
@@ -988,41 +953,31 @@ def update_game_data(request):
         player_id = data.get('player_id')
         points = data.get('points')
 
-        # Opcjonalne: kolor bili do statystyk (jeśli JS to wysyła)
+        # Opcjonalne: kolor bili do statystyk
         ball_color = data.get('ball_color')
 
         if match_id is None or player_id is None or points is None:
             return JsonResponse({'status': 'error', 'message': 'Missing data fields'})
 
         # KROK 1: Próbujemy znaleźć Frame'a
-        # Najpierw szukamy frame'a dla tego meczu
         try:
-            # Szukamy ostatniego frame'a w tym meczu (niezależnie od gracza)
             frame = Frame.objects.filter(match_player__match_id=match_id).latest('frame_number')
         except Frame.DoesNotExist:
-            # Fallback: Czasami relacja jest inna, spróbujmy znaleźć po prostu ostatni frame powiązany z meczem
-            # (To zależy od Twojej dokładnej struktury Frame <-> Match)
             return JsonResponse({'status': 'error', 'message': 'No active frame found for this match'})
 
-        # KROK 2: Ustalamy, KTÓRY to gracz (1 czy 2?)
-
-        # Podejście A: PROFESJONALNE (Baza danych)
-        # Sprawdzamy, czy ten gracz jest przypisany do meczu jako poz. 1 czy 2
+        # KROK 2: Ustalamy, KTÓRY to gracz (1 czy 2?) - TYLKO TWARDE DANE
         match_player = MatchPlayer.objects.filter(match_id=match_id, player_id=player_id).first()
 
         target_position = None
 
         if match_player:
-            # Jeśli znaleźliśmy go w bazie, ufamy bazie
+            # Ufamy tylko bazie danych
             target_position = match_player.position
         else:
-            # Podejście B: AWARYJNE / TYMCZASOWE (Stara logika)
-            # Jeśli nie ma go w bazie MatchPlayer (np. Temporary Match),
-            # zakładamy, że JS wysłał nam po prostu '1' lub '2' jako ID.
-            if str(player_id) == '1':
-                target_position = 1
-            elif str(player_id) == '2':
-                target_position = 2
+            # ZERO TOLERANCE: Jeśli gracza nie ma w MatchPlayer, to jest błąd krytyczny.
+            # Nie zgadujemy, nie sprawdzamy czy ID to "1" czy "2".
+            return JsonResponse(
+                {'status': 'error', 'message': f'Security: Player ID {player_id} is not assigned to Match {match_id}.'})
 
         # KROK 3: Zapisujemy punkty we właściwej kolumnie
         if target_position == 1:
@@ -1036,14 +991,14 @@ def update_game_data(request):
             frame.break_points_player2.append(points)
 
         else:
-            # Jeśli ani baza, ani ID nie pasują
-            return JsonResponse({'status': 'error', 'message': f'Cannot identify player position for ID {player_id}'})
+            # To się teoretycznie nie powinno wydarzyć, jeśli MatchPlayer ma position 1 lub 2
+            return JsonResponse({'status': 'error', 'message': f'Invalid player position: {target_position}'})
 
         frame.save()
         return JsonResponse({'status': 'success'})
 
     except Exception as e:
-        print(f"Błąd w update_game_data: {e}")
+        print(f"Error in update_game_data: {e}")
         return JsonResponse({'status': 'error', 'message': str(e)})
 
 
@@ -1089,28 +1044,19 @@ def save_frame_result(request):
         match_id = data.get('match_id')
 
         # --- ZABEZPIECZENIE API ---
-        # 1. Sprawdzamy czy mecz istnieje
         match = get_object_or_404(Match, pk=match_id)
 
-        # 2. Sprawdzamy uprawnienia użytkownika (taka sama logika jak w start_game)
         has_access = False
-
-        # A) Mecz tymczasowy (owner=None) -> Każdy może zapisać (zazwyczaj z tej samej sesji)
         if match.owner is None:
             has_access = True
-        # B) Mecz publiczny -> Każdy może
         elif match.is_public:
             has_access = True
-        # C) Mecz prywatny -> Tylko właściciel
         elif request.user.is_authenticated and match.owner == request.user:
             has_access = True
 
         if not has_access:
-            return JsonResponse({'status': 'error', 'message': 'Permission Denied: You cannot modify this match.'},
-                                status=403)
+            return JsonResponse({'status': 'error', 'message': 'Permission Denied'}, status=403)
 
-        # 3. Sprawdzamy czy mecz nie jest już zakończony
-        # Pobieramy status z modelu
         game_status = match.get_game_status()
         if game_status['is_finished']:
             return JsonResponse({'status': 'error', 'message': 'Match is already finished!'}, status=400)
@@ -1119,30 +1065,23 @@ def save_frame_result(request):
         winner_id = data.get('winner_id')
         p1_score = data.get('p1_score')
         p2_score = data.get('p2_score')
-        # Pobieramy czas (w sekundach), domyślnie 0
         duration_seconds = data.get('duration', 0)
 
+        # Statystyki...
         p1_fouls = data.get('p1_fouls', 0)
         p2_fouls = data.get('p2_fouls', 0)
         p1_foul_pts = data.get('p1_foul_pts', 0)
         p2_foul_pts = data.get('p2_foul_pts', 0)
-
         p1_shots = data.get('p1_shots', 0)
         p1_misses = data.get('p1_misses', 0)
         p1_pots = data.get('p1_pots', 0)
-
         p2_shots = data.get('p2_shots', 0)
         p2_misses = data.get('p2_misses', 0)
         p2_pots = data.get('p2_pots', 0)
-
-        # Odbieramy ilość prób odstawnych
         p1_safeties = data.get('p1_safeties', 0)
         p2_safeties = data.get('p2_safeties', 0)
-
-        # Odbieramy ilość UDANYCH odstawnych
         p1_safe_succ = data.get('p1_safe_success_count', 0)
         p2_safe_succ = data.get('p2_safe_success_count', 0)
-
         p1_breaks_list = data.get('p1_breaks', [])
         p2_breaks_list = data.get('p2_breaks', [])
 
@@ -1151,38 +1090,22 @@ def save_frame_result(request):
 
         winner = get_object_or_404(Player, pk=winner_id)
 
-        # 1. Próbujemy pobrać graczy z tabeli łączącej
+        # 1. Pobieramy graczy (CZYSTA LOGIKA)
         match_players = MatchPlayer.objects.filter(match=match).order_by('position')
 
-        # --- SEKCJA AUTO-NAPRAWY BRAKUJĄCYCH GRACZY (Dla Meczów Tymczasowych) ---
+        # --- ZERO TOLERANCE ---
+        # Jeśli nie ma graczy w MatchPlayer, przerywamy. Nie naprawiamy na siłę.
         if not match_players.exists():
-            print(f"Brak MatchPlayer dla meczu {match.id}. Próba naprawy z pól temp...")
-
-            p1_temp = match.temp_player1
-            p2_temp = match.temp_player2
-
-            if not p1_temp and match.players.exists():
-                all_players = list(match.players.all())
-                if len(all_players) >= 2:
-                    p1_temp = all_players[0]
-                    p2_temp = all_players[1]
-
-            if p1_temp and p2_temp:
-                MatchPlayer.objects.create(match=match, player=p1_temp, position=1)
-                MatchPlayer.objects.create(match=match, player=p2_temp, position=2)
-                match_players = MatchPlayer.objects.filter(match=match).order_by('position')
-                print("Naprawiono! Utworzono obiekty MatchPlayer.")
-            else:
-                return JsonResponse({'status': 'error',
-                                     'message': 'CRITICAL: No players found in MatchPlayer table or Match temp fields!'})
-        # -------------------------------------------------------------------------
+            return JsonResponse({
+                'status': 'error',
+                'message': 'CRITICAL ERROR: Match data integrity violation. Players not found in MatchPlayer table. Please recreate the match.'
+            })
 
         # 2. Szukamy ostatniego frama
         last_frame = Frame.objects.filter(match_player__in=match_players).order_by('-frame_number').first()
 
-        # --- SEKCJA RATUNKOWA FRAMA: Jeśli nie ma frama, tworzymy go TERAZ ---
+        # --- SEKCJA RATUNKOWA FRAMA (To zostawiamy, bo tworzenie frama jest bezpieczne, jeśli mamy graczy) ---
         if not last_frame:
-            print("Brak aktywnego frama - tworzenie awaryjne Frame 1")
             last_frame = Frame.objects.create(
                 match_player=match_players.first(),
                 frame_number=1,
@@ -1190,11 +1113,8 @@ def save_frame_result(request):
                 points_scored_player2=0,
                 active_player=match_players.first().player
             )
-        # ---------------------------------------------------------------
 
-        # --- OBLICZANIE SKUTECZNOŚCI (Pot Success) ---
-        # Wzór: Wbite / (Wbite + Pudła). Ignorujemy Safety!
-
+        # --- OBLICZANIE SKUTECZNOŚCI ---
         p1_attempts = p1_pots + p1_misses
         p1_success_rate = 0.0
         if p1_attempts > 0:
@@ -1204,47 +1124,28 @@ def save_frame_result(request):
         p2_success_rate = 0.0
         if p2_attempts > 0:
             p2_success_rate = round((p2_pots / p2_attempts) * 100, 2)
-        # ---------------------------------------------
 
         # 3. Zapisz wyniki
         last_frame.points_scored_player1 = p1_score
         last_frame.points_scored_player2 = p2_score
         last_frame.winner = winner
-
         last_frame.player1_fouls = p1_fouls
         last_frame.player2_fouls = p2_fouls
         last_frame.foul_points_player1 = p1_foul_pts
         last_frame.foul_points_player2 = p2_foul_pts
-
-        # --- ZAPIS SKUTECZNOŚCI I STRZAŁÓW ---
-        # Total shots = (Pots + Misses + Safety) -> Tak to wyliczył JS
         last_frame.total_shots_player1 = p1_shots
         last_frame.total_shots_player2 = p2_shots
-
         last_frame.misses_player1 = p1_misses
         last_frame.misses_player2 = p2_misses
-
         last_frame.pot_success_percentage_player1 = p1_success_rate
         last_frame.pot_success_percentage_player2 = p2_success_rate
-
-        # --- ZAPIS ODSTAWNYCH (SAFETY) ---
-        # Tu przypisujemy to, co odebraliśmy w punkcie 1
         last_frame.safety_shot_player1 = p1_safeties
         last_frame.safety_shot_player2 = p2_safeties
-
         last_frame.successful_safety_shots_player1 = p1_safe_succ
         last_frame.successful_safety_shots_player2 = p2_safe_succ
-        # ---------------------------------
 
-        # --- ZAPIS CZASU GRY ---
         if duration_seconds > 0:
             last_frame.time_duration = timedelta(seconds=duration_seconds)
-        # -----------------------
-
-        if last_frame.break_points_player1:
-            last_frame.max_break_player1 = max(last_frame.break_points_player1)
-        if last_frame.break_points_player2:
-            last_frame.max_break_player2 = max(last_frame.break_points_player2)
 
         last_frame.break_points_player1 = p1_breaks_list
         last_frame.break_points_player2 = p2_breaks_list
@@ -1261,21 +1162,19 @@ def save_frame_result(request):
 
         last_frame.save()
 
-        # 4. Sprawdź czy mecz się skończył (korzystając z nowej logiki w modelu)
+        # 4. Aktualizacja statusu
         match.update_status_from_frames()
         game_status = match.get_game_status()
         match_over = game_status['is_finished']
         match_winner_obj = game_status['winner']
 
-        # Ustal co wyświetlić w alercie (Imię zwycięzcy lub Remis)
         winner_name = "Unknown"
         if match_over:
             if match_winner_obj:
                 winner_name = str(match_winner_obj)
             else:
-                winner_name = "Draw"  # To wyświetli się w alercie: "Winner: Draw"
+                winner_name = "Draw"
 
-        # Jeśli mecz się NIE skończył, tworzymy nowy frame
         if not match_over:
             new_frame_number = last_frame.frame_number + 1
             Frame.objects.create(

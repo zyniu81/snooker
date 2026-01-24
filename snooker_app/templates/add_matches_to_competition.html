@@ -1,64 +1,91 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container mt-5">
+<div class="container mt-4 mb-5">
     <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card shadow">
-                <div class="card-header bg-warning text-dark">
-                    <h4 class="mb-0"><i class="bi bi-lightning-fill"></i> Add Extra Match</h4>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted small">
-                        This creates a standalone match (e.g., 3rd Place Play-off or Exhibition) linked to this tournament,
-                        but outside the main bracket logic.
-                    </p>
+        <div class="col-lg-8">
 
-                    <form method="post">
-                        {% csrf_token %}
+            <form method="post">
+                {% csrf_token %}
 
-                        {# Wyświetlanie błędów ogólnych #}
+                <div class="card shadow border-danger"> <div class="card-header bg-danger text-white py-3">
+                        <h4 class="mb-0"><i class="bi bi-lightning-fill"></i> Add Extra Match</h4>
+                        <small class="text-white-50">Create a single match outside of the main bracket (e.g. 3rd Place, Exhibition)</small>
+                    </div>
+
+                    <div class="card-body bg-light">
+
                         {% if form.non_field_errors %}
                             <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                         {% endif %}
 
-                        {# WYBÓR GRACZY #}
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold">Player 1</label>
-                                {{ form.player1 }}
-                                <div class="text-danger small">{{ form.player1.errors }}</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold">Player 2</label>
-                                {{ form.player2 }}
-                                <div class="text-danger small">{{ form.player2.errors }}</div>
-                            </div>
-                        </div>
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-body">
+                                <h6 class="text-uppercase text-muted fw-bold mb-3 small">Matchup</h6>
+                                <div class="row align-items-center">
+                                    <div class="col-md-5">
+                                        <label class="form-label fw-bold">Player 1</label>
+                                        {{ form.player1 }} <div class="text-danger small">{{ form.player1.errors }}</div>
+                                    </div>
 
-                        <hr>
+                                    <div class="col-md-2 text-center py-2">
+                                        <span class="badge bg-danger rounded-circle p-2 fs-6 fw-bold">VS</span>
+                                    </div>
 
-                        {# RESZTA PÓL #}
-                        {% for field in form %}
-                            {% if field.name != 'player1' and field.name != 'player2' %}
-                                <div class="mb-3">
-                                    <label class="form-label">{{ field.label }}</label>
-                                    {{ field }}
-                                    {% if field.help_text %}
-                                        <div class="form-text text-muted">{{ field.help_text }}</div>
-                                    {% endif %}
-                                    <div class="text-danger small">{{ field.errors }}</div>
+                                    <div class="col-md-5">
+                                        <label class="form-label fw-bold">Player 2</label>
+                                        {{ form.player2 }}
+                                        <div class="text-danger small">{{ form.player2.errors }}</div>
+                                    </div>
                                 </div>
-                            {% endif %}
-                        {% endfor %}
-
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                            <a href="{% url 'competition_detail' competition.pk %}" class="btn btn-secondary me-md-2">Cancel</a>
-                            <button type="submit" class="btn btn-warning text-dark fw-bold">Create Match</button>
+                            </div>
                         </div>
-                    </form>
+
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-body">
+                                <h6 class="text-uppercase text-muted fw-bold mb-3 small">Match Details</h6>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold"><i class="bi bi-calendar-event me-1"></i> Date</label>
+                                        {{ form.date }}
+                                        <div class="text-danger small">{{ form.date.errors }}</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold"><i class="bi bi-clock me-1"></i> Time</label>
+                                        {{ form.time }}
+                                        <div class="text-danger small">{{ form.time.errors }}</div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Table No.</label>
+                                        {{ form.table_number }}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Frames (Best of)</label>
+                                        {{ form.number_of_frames }}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Game Variant</label>
+                                        {{ form.game_variant }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary px-4">Cancel</a>
+                            <button type="submit" class="btn btn-danger px-5 fw-bold">
+                                <i class="bi bi-check-lg me-2"></i> Create Match
+                            </button>
+                        </div>
+
+                    </div>
                 </div>
-            </div>
+
+            </form>
         </div>
     </div>
 </div>
