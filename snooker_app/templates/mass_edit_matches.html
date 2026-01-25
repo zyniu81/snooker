@@ -1,74 +1,130 @@
 {% extends 'base.html' %}
 
+{% block title %}Mass Edit - {{ competition.name }}{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-4 mb-5">
+
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3>Bulk Edit Matches: {{ competition.name }}</h3>
-        <a href="{% url 'competition_detail' competition.id %}" class="btn btn-secondary">Back to Tournament</a>
+        <div>
+            <h3 class="fw-bold mb-1">
+                <i class="bi bi-list-check text-primary me-2"></i>Bulk Edit Matches
+            </h3>
+            <p class="text-muted mb-0 small">Tournament: <strong>{{ competition.name }}</strong></p>
+        </div>
+        <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Tournament
+        </a>
     </div>
 
     <form method="post">
         {% csrf_token %}
         {{ formset.management_form }}
 
-        <div class="table-responsive shadow-sm border rounded">
-            <table class="table table-hover align-middle mb-0 bg-white">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width: 20%">Match Info</th>
-                        <th style="width: 15%">Date</th>
-                        <th style="width: 15%">Time</th>
-                        <th style="width: 10%">Table</th>
-                        <th style="width: 25%">Referee(s)</th>
-                        <th style="display:none;"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for form in formset %}
-                        <tr>
-                            <td class="small">
-                                {% if form.instance.group_stage %}
-                                    <span class="badge bg-primary mb-1">Group {{ form.instance.group_name }}</span><br>
-                                {% elif form.instance.knockout_stage %}
-                                    <span class="badge bg-success mb-1">{{ form.instance.knockout_name }}</span><br>
-                                {% endif %}
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-light">
+                            <tr class="text-muted small text-uppercase">
+                                <th style="width: 25%" class="ps-4">Match Info</th>
+                                <th style="width: 15%">Date</th>
+                                <th style="width: 15%">Time</th>
+                                <th style="width: 10%">Table</th>
+                                <th style="width: 25%">Referee(s)</th>
+                                <th style="display:none;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for form in formset %}
+                                <tr>
+                                    {# --- KOLUMNA 1: INFO O MECZU + EDYCJA GRACZY --- #}
+                                    <td class="ps-4">
+                                        {# Badże etapu #}
+                                        <div class="mb-2">
+                                            {% if form.instance.group_stage %}
+                                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size: 0.7rem;">
+                                                    Group {{ form.instance.group_name }}
+                                                </span>
+                                            {% elif form.instance.knockout_stage %}
+                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size: 0.7rem;">
+                                                    {{ form.instance.knockout_name }}
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size: 0.7rem;">
+                                                    Extra
+                                                </span>
+                                            {% endif %}
+                                        </div>
 
-                                <strong>
-                                    {% for player in form.instance.players.all %}
-                                        {{ player.last_name }}
-                                        {% if not forloop.last %} vs {% endif %}
-                                    {% endfor %}
-                                </strong>
-                            </td>
+                                        {# --- ZMIANA: Pola wyboru zamiast tekstu --- #}
+                                        <div class="d-flex flex-column gap-1">
+                                            <div>
+                                                {{ form.player1 }}
+                                                {% if form.player1.errors %}<div class="text-danger small">{{ form.player1.errors|striptags }}</div>{% endif %}
+                                            </div>
+                                            <div class="text-center text-muted small fw-bold">vs</div>
+                                            <div>
+                                                {{ form.player2 }}
+                                                {% if form.player2.errors %}<div class="text-danger small">{{ form.player2.errors|striptags }}</div>{% endif %}
+                                            </div>
+                                        </div>
+                                    </td>
 
-                            <td>
-                                {{ form.date }}
-                                {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors }}</div>{% endif %}
-                            </td>
-                            <td>
-                                {{ form.time }}
-                                {% if form.time.errors %}<div class="text-danger small">{{ form.time.errors }}</div>{% endif %}
-                            </td>
-                            <td>
-                                {{ form.table_number }}
-                            </td>
-                            <td>
-                                {{ form.referees }}
-                                <div class="form-text" style="font-size: 0.7rem;">Hold Ctrl to select multiple</div>
-                            </td>
+                                    {# --- KOLUMNA 2: DATA --- #}
+                                    <td>
+                                        {{ form.date }}
+                                        {% if form.date.errors %}
+                                            <div class="text-danger small mt-1">{{ form.date.errors|striptags }}</div>
+                                        {% endif %}
+                                    </td>
 
-                            <td style="display:none;">
-                                {{ form.id }}
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                                    {# --- KOLUMNA 3: CZAS --- #}
+                                    <td>
+                                        {{ form.time }}
+                                        {% if form.time.errors %}
+                                            <div class="text-danger small mt-1">{{ form.time.errors|striptags }}</div>
+                                        {% endif %}
+                                    </td>
 
-        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4 mb-5">
-            <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary me-md-2">Cancel</a>
-            <button type="submit" class="btn btn-primary btn-lg px-5">Save All Changes</button>
+                                    {# --- KOLUMNA 4: STÓŁ --- #}
+                                    <td>
+                                        {{ form.table_number }}
+                                        {% if form.table_number.errors %}
+                                            <div class="text-danger small mt-1">{{ form.table_number.errors|striptags }}</div>
+                                        {% endif %}
+                                    </td>
+
+                                    {# --- KOLUMNA 5: SĘDZIOWIE --- #}
+                                    <td>
+                                        {{ form.referees }}
+                                        <div class="form-text text-muted fst-italic mt-1" style="font-size: 0.7rem;">
+                                            <i class="bi bi-info-circle me-1"></i>Hold Ctrl/Cmd
+                                        </div>
+                                    </td>
+
+                                    {# --- UKRYTE ID --- #}
+                                    <td style="display:none;">
+                                        {{ form.id }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {# --- STOPKA KARTY Z PRZYCISKAMI --- #}
+            <div class="card-footer bg-light p-3 border-top-0">
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-success fw-bold px-4">
+                        <i class="bi bi-check-lg me-1"></i> Save All Changes
+                    </button>
+                </div>
+            </div>
         </div>
     </form>
 </div>

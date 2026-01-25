@@ -249,7 +249,10 @@ class Match(models.Model):
     allow_draws = models.BooleanField(default=False)
 
     # --- 2. GRACZE I SĘDZIOWIE ---
-    players = models.ManyToManyField('Player')
+    player1 = models.ForeignKey('Player', on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='matches_as_p1')
+    player2 = models.ForeignKey('Player', on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='matches_as_p2')
     referees = models.ManyToManyField('Referee', blank=True, related_name='matches')
 
     # Cache nazw (tekstowe)
@@ -259,11 +262,11 @@ class Match(models.Model):
     referee_ids = models.TextField(blank=True, null=True)
 
     # --- 3. STRUKTURA TURNIEJOWA ---
-    group_stage = models.ForeignKey('GroupStage', on_delete=models.SET_NULL, null=True, blank=True,
+    group_stage = models.ForeignKey('GroupStage', on_delete=models.CASCADE, null=True, blank=True,
                                     related_name='matches')
-    knockout_stage = models.ForeignKey('KnockoutStage', on_delete=models.SET_NULL, null=True, blank=True,
+    knockout_stage = models.ForeignKey('KnockoutStage', on_delete=models.CASCADE, null=True, blank=True,
                                        related_name='matches')
-    group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True, blank=True, related_name='matches')
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, null=True, blank=True, related_name='matches')
     group_name = models.CharField(max_length=10, blank=True, null=True)
     knockout_name = models.CharField(max_length=100, blank=True, null=True)
 
@@ -321,15 +324,11 @@ class Match(models.Model):
 
     def get_ordered_players(self):
         """
-        Zwraca listę graczy zawsze w kolejności: [Player1, Player2].
-        Naprawia problem zamiany miejscami w widokach.
+        Zwraca listę graczy zawsze w kolejności: [Gospodarz, Gość].
+        Teraz to jest sztywne, wynikające z modelu.
         """
-        # Pobieramy posortowane po 'position' (1, potem 2)
-        mps = list(self.matchplayer_set.all().order_by('position'))
-        ordered = []
-        for mp in mps:
-            ordered.append(mp.player)
-        return ordered
+        # Zwracamy listę [p1, p2], filtrując None (gdyby kogoś brakowało)
+        return [p for p in [self.player1, self.player2] if p]
 
     @property
     def sort_key(self):
@@ -351,22 +350,18 @@ class Match(models.Model):
         return f'{self.player_names} - {self.date}'
 
     def get_game_status(self):
-        # Pobieramy listę graczy
-        players = list(self.players.all())
-
-        # Zabezpieczenie: jeśli nie ma 2 graczy, nie ma gry
-        if len(players) < 2:
+        # Sprawdzamy czy mamy obu graczy na fotelach
+        if not self.player1 or not self.player2:
             return {'is_finished': False, 'winner': None}
 
-        p1 = players[0]
-        p2 = players[1]
+        p1 = self.player1
+        p2 = self.player2
 
-        # LICZYMY ZWYCIĘSTWA WPROST Z TABELI FRAME (To naprawia błędy zliczania)
+        # LICZYMY ZWYCIĘSTWA
         p1_wins = Frame.objects.filter(match_player__match=self, winner=p1).count()
         p2_wins = Frame.objects.filter(match_player__match=self, winner=p2).count()
 
         total_played = p1_wins + p2_wins
-
         is_finished = False
         winner = None
 
@@ -374,7 +369,6 @@ class Match(models.Model):
         if self.allow_draws:
             if total_played >= self.number_of_frames:
                 is_finished = True
-
                 if p1_wins > p2_wins:
                     winner = p1
                 elif p2_wins > p1_wins:
@@ -385,7 +379,6 @@ class Match(models.Model):
         # --- SCENARIUSZ B: STANDARDOWY ---
         else:
             threshold = (self.number_of_frames // 2) + 1
-
             if p1_wins >= threshold:
                 is_finished = True
                 winner = p1
@@ -401,16 +394,12 @@ class Match(models.Model):
 
     def get_real_score(self):
         """Zwraca krotkę (wynik_p1, wynik_p2) liczoną z frame'ów"""
-        players = list(self.players.all())
-        if len(players) < 2:
+        if not self.player1 or not self.player2:
             return 0, 0
 
-        p1 = players[0]
-        p2 = players[1]
-
-        # Liczymy wygrane framy
-        p1_score = Frame.objects.filter(match_player__match=self, winner=p1).count()
-        p2_score = Frame.objects.filter(match_player__match=self, winner=p2).count()
+        # Liczymy wygrane framy, sprawdzając pole 'winner' we Frame
+        p1_score = Frame.objects.filter(match_player__match=self, winner=self.player1).count()
+        p2_score = Frame.objects.filter(match_player__match=self, winner=self.player2).count()
 
         return p1_score, p2_score
 
@@ -441,16 +430,12 @@ class Match(models.Model):
         return self.get_game_status()['is_finished']
 
     def clean(self):
-        # 1. Sprawdzamy liczbę framów TYLKO jeśli została podana (nie jest None)
         if self.number_of_frames is not None and self.number_of_frames <= 0:
             raise ValidationError('The number of frames must be greater than zero.')
 
-        # 2. Walidacja liczby graczy (tylko dla istniejących obiektów)
-        if self.pk:
-            if self.players.count() < 2:
-                # Opcjonalnie można rzucić błąd, ale przy tworzeniu (create)
-                # gracze dodawani są PO zapisie, więc tu często bywa pusto.
-                pass
+        # Walidacja: Gracz nie może grać sam ze sobą
+        if self.player1 and self.player2 and self.player1 == self.player2:
+            raise ValidationError('Player 1 and Player 2 cannot be the same person.')
 
     def get_stage(self):
         return self.group_stage or self.knockout_stage
@@ -465,16 +450,60 @@ class Match(models.Model):
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
+
+        # 1. Aktualizacja cache nazw (To już mieliśmy)
+        names = []
+        ids = []
+        if self.player1:
+            names.append(str(self.player1))
+            ids.append(str(self.player1.id))
+        if self.player2:
+            names.append(str(self.player2))
+            ids.append(str(self.player2.id))
+        self.player_names = ', '.join(names)
+        self.player_ids = ', '.join(ids)
+
+        # 2. Zapisz Mecz (żeby mieć ID)
         super().save(*args, **kwargs)
 
-        # Aktualizacja nazw graczy w polach tekstowych (dla szybszego odczytu)
+        # 3. Cache Sędziów (To już mieliśmy)
         if not is_new:
-            self.player_names = ', '.join([str(player) for player in self.players.all()])
-            self.player_ids = ', '.join([str(player.id) for player in self.players.all()])
             self.referee_names = ', '.join([str(referee) for referee in self.referees.all()])
             self.referee_ids = ', '.join([str(referee.id) for referee in self.referees.all()])
-            # Zapisujemy tylko zaktualizowane pola, żeby nie robić pętli
-            super().save(update_fields=['player_names', 'player_ids', 'referee_names', 'referee_ids'])
+            super().save(update_fields=['referee_names', 'referee_ids', 'player_names', 'player_ids'])
+
+        # --- NOWOŚĆ: MOST DO STAREGO SYSTEMU (MatchPlayer Sync) ---
+        # Importujemy wewnątrz, żeby uniknąć problemów, jeśli MatchPlayer jest niżej w pliku
+        # Jeśli są w tym samym pliku, Python sobie poradzi, ale to jest bezpieczniejsze.
+        from .models import MatchPlayer
+
+        # Synchronizacja Gracza 1 (Gospodarz)
+        if self.player1:
+            mp1, created = MatchPlayer.objects.get_or_create(
+                match=self,
+                position=1,
+                defaults={'player': self.player1}
+            )
+            # Jeśli gracz się zmienił (np. edycja meczu), aktualizujemy go
+            if mp1.player != self.player1:
+                mp1.player = self.player1
+                mp1.save()
+        else:
+            # Jeśli usunięto gracza 1 z formularza, usuwamy też jego bilet
+            MatchPlayer.objects.filter(match=self, position=1).delete()
+
+        # Synchronizacja Gracza 2 (Gość)
+        if self.player2:
+            mp2, created = MatchPlayer.objects.get_or_create(
+                match=self,
+                position=2,
+                defaults={'player': self.player2}
+            )
+            if mp2.player != self.player2:
+                mp2.player = self.player2
+                mp2.save()
+        else:
+            MatchPlayer.objects.filter(match=self, position=2).delete()
 
     def is_expired(self):
         return self.is_temporary and self.created_at < timezone.now() - timedelta(days=30)
@@ -485,18 +514,28 @@ class Match(models.Model):
 
     def delete(self, *args, **kwargs):
         # 1. Znajdujemy graczy tymczasowych powiązanych z TYM meczem
-        # Używamy list(), aby pobrać ich do pamięci przed usunięciem meczu
-        temp_players_to_check = list(self.players.filter(is_temporary=True))
+        # Zbieramy ich z foteli player1 i player2
+        temp_players_to_check = []
+
+        if self.player1 and self.player1.is_temporary:
+            temp_players_to_check.append(self.player1)
+
+        if self.player2 and self.player2.is_temporary:
+            temp_players_to_check.append(self.player2)
 
         # 2. Wykonujemy standardowe usuwanie meczu
         super().delete(*args, **kwargs)
 
         # 3. Sprzątanie sierot (Orphan Cleanup)
         for player in temp_players_to_check:
-            # Sprawdzamy, czy ten gracz jest przypisany do jakichkolwiek innych meczów.
-            # Ponieważ właśnie usunęliśmy bieżący mecz, jeśli był to jego jedyny mecz,
-            # licznik wyniesie 0.
-            if player.match_set.count() == 0:
+            # Sprawdzamy, czy ten gracz jest przypisany do innych meczów.
+            # Musimy sprawdzić obie role: jako Gospodarz (matches_as_p1) i jako Gość (matches_as_p2)
+            # Te related_name dodaliśmy w definicji ForeignKeys.
+
+            p1_count = player.matches_as_p1.count()
+            p2_count = player.matches_as_p2.count()
+
+            if (p1_count + p2_count) == 0:
                 player.delete()
 
 
@@ -707,6 +746,9 @@ class GroupStage(Stage):
     def create_groups_and_matches(self, default_frames, selected_players=None):
         """Generuje grupy (1, 2...) i wypasione tabele."""
 
+        # Import wewnątrz, żeby nie było cykli (jeśli potrzebne)
+        from .models import Group, GroupStanding, Match
+
         if selected_players:
             players = list(selected_players)
         else:
@@ -754,7 +796,8 @@ class GroupStage(Stage):
             for j, player1 in enumerate(group_players):
                 for player2 in group_players[j + 1:]:
                     for _ in range(self.matches_per_pair):
-                        match = Match.objects.create(
+                        # --- ZMIANA: Przypisujemy graczy wprost do foteli ---
+                        Match.objects.create(
                             owner=comp_owner,
                             is_public=self.competition.is_public,
                             date=self.competition.start_date,
@@ -765,19 +808,14 @@ class GroupStage(Stage):
                             allow_draws=self.allow_draws,
 
                             group_stage=self,
-                            group=group,  # <-- Przypisujemy obiekt grupy
+                            group=group,
                             group_name=group.name,
-                            status='SCHEDULED'
+                            status='SCHEDULED',
+
+                            # TUTAJ: Sadzamy graczy na fotelach
+                            player1=player1,
+                            player2=player2
                         )
-                        match.players.add(player1, player2)
-
-                        # Tworzymy powiązania MatchPlayer z pozycją (kluczowe!)
-                        from .models import MatchPlayer
-                        MatchPlayer.objects.create(match=match, player=player1, position=1)
-                        MatchPlayer.objects.create(match=match, player=player2, position=2)
-
-                        match.save()
-
 
 class KnockoutStage(Stage):
     # --- KONFIGURACJA DRABINKI ---
@@ -789,7 +827,7 @@ class KnockoutStage(Stage):
     has_third_place_match = models.BooleanField(default=False)
 
     def create_knockout_matches(self, selected_players=None):
-        """Tworzy drabinkę i OD RAZU przypisuje pozycje (1 i 2) w MatchPlayer."""
+        """Tworzy drabinkę, przypisując graczy bezpośrednio do foteli player1/player2."""
 
         # 1. Pobieramy graczy
         if selected_players:
@@ -826,7 +864,8 @@ class KnockoutStage(Stage):
                     if idx1 < len(players): p1 = players[idx1]
                     if idx2 < len(players): p2 = players[idx2]
 
-                match = Match.objects.create(
+                # --- ZMIANA: Podajemy player1 i player2 bezpośrednio w create ---
+                Match.objects.create(
                     owner=comp_owner,
                     is_public=self.competition.is_public,
                     date=self.competition.start_date + timedelta(days=round_num),
@@ -837,19 +876,12 @@ class KnockoutStage(Stage):
                     allow_draws=False,
                     knockout_stage=self,
                     knockout_name=round_name,
-                    status='SCHEDULED'
+                    status='SCHEDULED',
+
+                    # Tu sadzamy graczy na fotelach:
+                    player1=p1,
+                    player2=p2
                 )
-
-                # --- POPRAWKA: Robimy OBYDWIE rzeczy ---
-                if p1:
-                    match.players.add(p1)  # 1. Dodajemy do ogólnej listy (naprawia "Waiting..." i logikę końca)
-                    MatchPlayer.objects.create(match=match, player=p1,
-                                               position=1)  # 2. Przypisujemy pozycję (naprawia lewa/prawa)
-
-                if p2:
-                    match.players.add(p2)  # 1. Dodajemy do ogólnej listy
-                    MatchPlayer.objects.create(match=match, player=p2, position=2)  # 2. Przypisujemy pozycję
-                # ---------------------------------------
 
             # Przygotowanie do kolejnej rundy
             current_round_matches = current_round_matches // 2

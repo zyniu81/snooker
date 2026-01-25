@@ -1,6 +1,7 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import transaction
+from django.core.exceptions import ObjectDoesNotExist  # <--- WAŻNY IMPORT
 from .models import Match, MatchPlayer, GroupStanding, Competition, GroupStage, KnockoutStage
 
 
@@ -9,8 +10,13 @@ def recalculate_group_standings(group):
     Resetuje i przelicza tabelę dla konkretnej grupy na podstawie zakończonych meczów.
     Pobiera zasady punktacji (win/draw) z etapu (GroupStage).
     """
+    # Zabezpieczenie: Jeśli grupa nie ma przypisanego etapu (sierota), przerwij
+    try:
+        stage = group.stage
+    except ObjectDoesNotExist:
+        return
+
     # 1. Pobierz ustawienia punktacji z Etapu
-    stage = group.stage
     pts_win = stage.points_for_win
     pts_draw = stage.points_for_draw
     pts_loss = stage.points_for_loss
@@ -30,22 +36,20 @@ def recalculate_group_standings(group):
         s.small_points_scored = 0
         s.small_points_conceded = 0
         s.highest_break = 0
-        # Nie resetujemy is_qualified ręcznie, to robi admin lub inna logika
+        # Nie resetujemy is_qualified ręcznie
 
     # 4. Pobierz ZAKOŃCZONE mecze w tej grupie
     finished_matches = group.matches.filter(status='FINISHED')
 
     for match in finished_matches:
         # Pobierz graczy i ich wyniki z modelu Match
-        # Zakładamy, że MatchPlayer ma poprawne pozycje 1 i 2
         mps = list(match.matchplayer_set.all().order_by('position'))
         if len(mps) < 2:
-            continue  # Coś nie tak z danymi, pomijamy
+            continue
 
         p1 = mps[0].player
         p2 = mps[1].player
 
-        # Jeśli gracza nie ma w tabeli (np. wildcard dodany później), pomiń
         if p1.id not in standings or p2.id not in standings:
             continue
 
@@ -77,7 +81,7 @@ def recalculate_group_standings(group):
         s2.small_points_scored += sp2
         s2.small_points_conceded += sp1
 
-        # Najwyższy Break w Grupie (aktualizujemy jeśli w tym meczu był lepszy)
+        # Najwyższy Break w Grupie
         if match.highest_break_p1 > s1.highest_break:
             s1.highest_break = match.highest_break_p1
         if match.highest_break_p2 > s2.highest_break:
@@ -101,7 +105,7 @@ def recalculate_group_standings(group):
             s2.matches_drawn += 1
             s2.points += pts_draw
 
-    # 5. Zapisz wszystko w bazie (Bulk update dla wydajności)
+    # 5. Zapisz wszystko w bazie
     GroupStanding.objects.bulk_update(standings.values(), [
         'matches_played', 'matches_won', 'matches_drawn', 'matches_lost',
         'frames_won', 'frames_lost', 'points',
@@ -113,10 +117,8 @@ def update_records(match):
     """
     Sprawdza, czy w meczu padł rekord breaka dla Etapu lub Turnieju.
     """
-    # Sprawdzamy obu graczy
     breaks = []
     if match.highest_break_p1 > 0:
-        # Pobieramy gracza z pozycji 1 (bezpieczniej przez relację)
         mp1 = match.matchplayer_set.filter(position=1).first()
         if mp1: breaks.append((match.highest_break_p1, mp1.player))
 
@@ -127,27 +129,26 @@ def update_records(match):
     if not breaks:
         return
 
-    # Pobieramy kontekst (Etap i Turniej)
-    # Match.get_stage() to twoja metoda pomocnicza w modelu Match
-    stage = match.get_stage()
+    # Pobieramy kontekst bezpiecznie
+    try:
+        stage = match.get_stage()
+    except ObjectDoesNotExist:
+        return
+
     competition = stage.competition if stage else None
 
     for points, player in breaks:
-        # 1. Rekord ETAPU (GroupStage lub KnockoutStage)
+        # 1. Rekord ETAPU
         if stage and points > stage.highest_break_points:
             stage.highest_break_points = points
             stage.highest_break_player = player
             stage.save()
 
-        # 2. Rekord TURNIEJU (Competition)
-        # Uwaga: Konkurencja może mieć pole highest_break_points wprost
-        if competition:
-            # Tu jest drobny haczyk: musimy sprawdzić, czy ten nowy break
-            # jest lepszy niż AKTUALNY rekord turnieju (który mógł być z innej grupy)
-            if points > competition.highest_break_points:
-                competition.highest_break_points = points
-                competition.highest_break_player = player
-                competition.save()
+        # 2. Rekord TURNIEJU
+        if competition and points > competition.highest_break_points:
+            competition.highest_break_points = points
+            competition.highest_break_player = player
+            competition.save()
 
 
 @receiver(post_save, sender=Match)
@@ -155,21 +156,32 @@ def match_post_save_handler(sender, instance, created, **kwargs):
     """
     Główny sygnał. Uruchamia się po zapisaniu meczu.
     """
-    # Uruchamiamy logikę tylko jeśli mecz jest ZAKOŃCZONY
-    # (Możemy też uruchamiać przy każdej zmianie, ale FINISHED jest kluczowe dla punktów)
-
     # 1. Jeśli to mecz grupowy -> Przelicz tabelę tej grupy
     if instance.group:
-        # Używamy transaction.on_commit, żeby upewnić się, że dane meczu są już w bazie na 100%
         transaction.on_commit(lambda: recalculate_group_standings(instance.group))
 
-    # 2. Sprawdź rekordy (Max Break) - niezależnie czy grupa czy puchar
+    # 2. Sprawdź rekordy (Max Break)
     if instance.status == 'FINISHED':
         transaction.on_commit(lambda: update_records(instance))
 
 
-# Opcjonalnie: Obsługa usunięcia meczu (też trzeba przeliczyć tabelę!)
+# --- TU BYŁ BŁĄD ---
 @receiver(post_delete, sender=Match)
 def match_post_delete_handler(sender, instance, **kwargs):
-    if instance.group:
-        recalculate_group_standings(instance.group)
+    """
+    Obsługa usunięcia meczu.
+    Musi być odporna na sytuację, gdy usuwamy cały Turniej (wtedy Grupa też znika).
+    """
+    try:
+        # Próbujemy pobrać grupę.
+        # Jeśli usuwamy kaskadowo (Turniej -> Grupa -> Mecz),
+        # to w tym momencie Grupa już nie istnieje w bazie.
+        # Django rzuci wyjątek ObjectDoesNotExist przy próbie dostępu do instance.group
+        if instance.group:
+            recalculate_group_standings(instance.group)
+
+    except ObjectDoesNotExist:
+        # Jeśli grupa nie istnieje, to znaczy, że albo została usunięta wcześniej,
+        # albo usuwamy cały turniej. W obu przypadkach - nie musimy nic przeliczać.
+        # Po prostu ignorujemy błąd.
+        pass

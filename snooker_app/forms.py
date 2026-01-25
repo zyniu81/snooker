@@ -143,12 +143,21 @@ class VenueForm(forms.ModelForm):
 # --- MECZE ---
 
 class MatchForm(forms.ModelForm):
-    # Dynamiczne pola
-    players = forms.ModelMultipleChoiceField(
+    # --- NOWOŚĆ: Dwa osobne fotele zamiast jednego worka ---
+    player1 = forms.ModelChoiceField(
         queryset=Player.objects.none(),
-        widget=forms.CheckboxSelectMultiple,
         required=False,
+        label="Player 1 (Host / Left)",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
+
+    player2 = forms.ModelChoiceField(
+        queryset=Player.objects.none(),
+        required=False,
+        label="Player 2 (Guest / Right)",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    # -------------------------------------------------------
 
     referees = forms.ModelMultipleChoiceField(
         queryset=Referee.objects.none(),
@@ -173,7 +182,7 @@ class MatchForm(forms.ModelForm):
         model = Match
         fields = [
             'date', 'time', 'venue', 'game_variant', 'number_of_frames',
-            'allow_draws', 'players', 'referees', 'is_public', 'table_number'
+            'allow_draws', 'player1', 'player2', 'referees', 'is_public', 'table_number'
         ]
         widgets = {
             'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
@@ -193,16 +202,23 @@ class MatchForm(forms.ModelForm):
 
         if is_auth:
             user = self.request.user
-            self.fields['players'].queryset = Player.objects.filter(Q(owner=user) | Q(is_public=True))
+            # Filtrujemy graczy dla obu list
+            available_players = Player.objects.filter(Q(owner=user) | Q(is_public=True))
+
+            self.fields['player1'].queryset = available_players
+            self.fields['player2'].queryset = available_players
+
             self.fields['referees'].queryset = Referee.objects.filter(Q(owner=user) | Q(is_public=True))
             self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
 
-            if not self.fields['players'].queryset.exists():
-                self.fields['players'].help_text = "No players found. Please add players in your profile first."
-                self.fields['players'].disabled = True
+            if not available_players.exists():
+                msg = "No players found. Please add players in your profile first."
+                self.fields['player1'].help_text = msg
+                self.fields['player1'].disabled = True
+                self.fields['player2'].disabled = True
 
             if not self.fields['referees'].queryset.exists():
-                self.fields['referees'].help_text = "No referees found. You can add them in the Referees section."
+                self.fields['referees'].help_text = "No referees found."
                 self.fields['referees'].disabled = True
 
             self.fields['is_public'].widget = forms.HiddenInput()
@@ -211,9 +227,11 @@ class MatchForm(forms.ModelForm):
             self.fields['allow_draws'].initial = False
 
         else:
+            # Dla niezalogowanych usuwamy wybór konkretnych graczy
             del self.fields['venue']
             del self.fields['referees']
-            del self.fields['players']
+            del self.fields['player1']
+            del self.fields['player2']
             del self.fields['table_number']
 
             self.fields['create_temporary_players'].initial = True
@@ -232,50 +250,44 @@ class MatchForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        players = cleaned_data.get('players')
+
+        # Pobieramy dane z formularza
+        p1 = cleaned_data.get('player1')
+        p2 = cleaned_data.get('player2')
         create_temp = cleaned_data.get('create_temporary_players')
 
-        if 'players' in self.fields:
-            if not create_temp and (not players or players.count() < 2):
-                raise ValidationError("Select at least two players OR check 'Create temporary players'.")
+        # Walidacja dla zalogowanych (kiedy pola player1/2 istnieją)
+        if 'player1' in self.fields:
+            if not create_temp:
+                # 1. Czy wybrano obu graczy? (To zostawiamy, bo chcemy wymusić wybór)
+                if not p1 or not p2:
+                    raise ValidationError("Please select both Player 1 and Player 2.")
+
         return cleaned_data
 
-    # --- NOWA METODA (Zamiast def save) ---
+    # --- UPROSZCZONA METODA ---
     def create_temp_players_if_needed(self, match):
         """
-        Tworzy graczy tymczasowych ORAZ obiekty MatchPlayer z przypisaną pozycją.
+        Tworzy graczy tymczasowych i przypisuje do nowych pól player1/player2.
+        Resztę (tworzenie MatchPlayer) załatwia teraz model Match.save().
         """
         create_temp = self.cleaned_data.get('create_temporary_players', False)
 
         if create_temp:
-            owner = match.owner
+            owner = match.owner  # Może być None dla anonimowych
 
-            # 1. Tworzymy graczy ze stałymi nazwami (zgodnie z życzeniem)
-            # Nie dodajemy licznika, żeby na tablicy było ładnie "Temp Player 1"
-            # W bazie stworzy się nowy rekord za każdym razem (to OK, tak ustaliliśmy)
+            # 1. Tworzymy graczy
             p1 = Player.objects.create(first_name='Temp Player 1', is_temporary=True, owner=owner)
             p2 = Player.objects.create(first_name='Temp Player 2', is_temporary=True, owner=owner)
 
-            # 2. Przypisujemy do relacji ManyToMany (dla bezpieczeństwa i kompatybilności)
-            match.players.add(p1, p2)
-
-            # 3. KLUCZOWE: Tworzymy obiekty MatchPlayer z POZYCJĄ!
-            # To naprawia "Niewidzialnych graczy" w match_detail oraz "Złą kolejność"
-
-            # Importujemy tutaj, żeby uniknąć cyklicznych importów na górze pliku
-            from .models import MatchPlayer
-
-            # Gracz 1 -> Pozycja 1 (Lewa)
-            MatchPlayer.objects.create(match=match, player=p1, position=1)
-
-            # Gracz 2 -> Pozycja 2 (Prawa)
-            MatchPlayer.objects.create(match=match, player=p2, position=2)
-
-            # 4. Uzupełniamy pola pomocnicze w Match
+            # 2. Przypisujemy do nowych foteli
+            match.player1 = p1
+            match.player2 = p2
             match.temp_player1 = p1
             match.temp_player2 = p2
             match.is_temporary = True
 
+            # 3. Zapisujemy - to uruchomi "most" w models.py i stworzy MatchPlayer!
             match.save()
 
 
@@ -386,9 +398,6 @@ class GroupStageForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if self.competition:
-            # --- ZMIANA: ROZSZERZAMY LISTĘ ---
-            # Zamiast ograniczać się do self.competition.players.all()...
-            # ...pozwalamy wybrać każdego 'normalnego' gracza właściciela turnieju.
             owner = self.competition.owner
             self.fields['players'].queryset = Player.objects.filter(owner=owner, is_temporary=False)
 
@@ -472,44 +481,79 @@ class SignUpForm(UserCreationForm):
 class MassMatchEditForm(forms.ModelForm):
     class Meta:
         model = Match
-        fields = ['date', 'time', 'table_number', 'referees']
+        fields = ['date', 'time', 'table_number', 'player1', 'player2', 'referees']
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}),
             'time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control form-control-sm'}),
-            'table_number': forms.TextInput(attrs={'class': 'form-control form-control-sm', 'style': 'width: 80px;'}),
-            # Sędziów zostawiamy jako SelectMultiple, ale w HTML dodamy mu klasę, żeby nie był gigantyczny
-            'referees': forms.SelectMultiple(attrs={'class': 'form-select form-select-sm', 'size': '1'}),
+            'table_number': forms.TextInput(attrs={'class': 'form-control form-control-sm', 'style': 'width: 60px;'}),
+            'referees': forms.SelectMultiple(attrs={'class': 'form-select form-select-sm', 'size': 1}),
+            'player1': forms.Select(attrs={'class': 'form-select form-select-sm'}),
+            'player2': forms.Select(attrs={'class': 'form-select form-select-sm'}),
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        p1 = cleaned_data.get('player1')
+        p2 = cleaned_data.get('player2')
+        instance = self.instance # Edytowany mecz
+
+        # 1. BLOKADA: Ten sam gracz przeciwko sobie
+        if p1 and p2 and p1 == p2:
+            # Przypisujemy błąd do pola player2, żeby wyświetlił się pod dropdownem
+            self.add_error('player2', "Player cannot play against themselves.")
+
+        # 2. BLOKADA: Gracz gra w dwóch meczach tej samej rundy (tylko dla Knockout)
+        if instance.knockout_stage and p1 and p2:
+            # Szukamy INNYCH meczów w tej samej fazie i o tej samej nazwie rundy (np. "Quarter-Final")
+            # Wykluczamy obecny mecz (.exclude(pk=instance.pk))
+            other_matches_in_round = Match.objects.filter(
+                knockout_stage=instance.knockout_stage,
+                knockout_name=instance.knockout_name
+            ).exclude(pk=instance.pk)
+
+            # Sprawdzamy Gracza 1
+            # Czy P1 występuje jako player1 LUB player2 w innych meczach tej rundy?
+            is_p1_busy = other_matches_in_round.filter(Q(player1=p1) | Q(player2=p1)).exists()
+            if is_p1_busy:
+                self.add_error('player1', f"{p1} is already playing in another match in {instance.knockout_name}.")
+
+            # Sprawdzamy Gracza 2
+            is_p2_busy = other_matches_in_round.filter(Q(player1=p2) | Q(player2=p2)).exists()
+            if is_p2_busy:
+                self.add_error('player2', f"{p2} is already playing in another match in {instance.knockout_name}.")
+
+        return cleaned_data
 
 
 class ExtraMatchForm(forms.ModelForm):
-    # Pola wyboru graczy (ograniczone do uczestników turnieju)
-    player1 = forms.ModelChoiceField(queryset=Player.objects.none(), label="Player 1")
-    player2 = forms.ModelChoiceField(queryset=Player.objects.none(), label="Player 2")
 
     class Meta:
         model = Match
-        fields = ['date', 'time', 'table_number', 'game_variant', 'number_of_frames']
+        fields = ['date', 'time', 'player1', 'player2', 'table_number', 'game_variant', 'number_of_frames']
+
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
             'table_number': forms.TextInput(attrs={'class': 'form-control'}),
             'game_variant': forms.Select(attrs={'class': 'form-select'}),
             'number_of_frames': forms.NumberInput(attrs={'class': 'form-control'}),
+
+            # Możemy dodać widgety dla graczy tutaj, żeby były ładne
+            'player1': forms.Select(attrs={'class': 'form-select'}),
+            'player2': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
         competition = kwargs.pop('competition', None)
         super().__init__(*args, **kwargs)
+
         if competition:
+            # Filtrujemy listę graczy tylko do uczestników tego turnieju
             self.fields['player1'].queryset = competition.players.all()
             self.fields['player2'].queryset = competition.players.all()
-            # Ustaw domyślny wariant z turnieju
-            self.fields['game_variant'].initial = competition.game_variant
 
-    def clean(self):
-        cleaned_data = super().clean()
-        p1 = cleaned_data.get('player1')
-        p2 = cleaned_data.get('player2')
-        if p1 and p2 and p1 == p2:
-            raise forms.ValidationError("Player 1 and Player 2 cannot be the same person.")
+            # Ładne etykiety
+            self.fields['player1'].label = "Player 1 (Left)"
+            self.fields['player2'].label = "Player 2 (Right)"
+
+            self.fields['game_variant'].initial = competition.game_variant

@@ -64,7 +64,10 @@
                             </div>
                         </div>
 
-                        <div class="mb-4">
+                        {# --- UKRYWANIE OPCJI DLA ZWYKŁYCH USERÓW --- #}
+                        {% if user.is_superuser %}
+                        <div class="mb-4 p-3 bg-light border rounded">
+                            <h6 class="small fw-bold text-muted mb-2">Admin Options</h6>
                             <div class="form-check">
                                 {{ form.allow_draws }}
                                 <label class="form-check-label" for="{{ form.allow_draws.id_for_label }}">Allow Draws</label>
@@ -74,20 +77,39 @@
                                 <label class="form-check-label" for="{{ form.is_public.id_for_label }}">Public Match</label>
                             </div>
                         </div>
+                        {% else %}
+                            {# Dla pewności renderujemy jako hidden, żeby formularz otrzymał dane #}
+                            {{ form.allow_draws.as_hidden }}
+                            {{ form.is_public.as_hidden }}
+                        {% endif %}
 
                         <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 mt-4">
                             <i class="bi bi-people-fill me-2"></i>Players
                         </h6>
 
-                        <div class="mb-3">
-                            <div class="bg-light p-3 rounded border">
-                                {{ form.players }}
-                                {{ form.players.errors }}
-                                <div class="form-text text-muted small mt-2">
-                                    {{ form.players.help_text }}
-                                </div>
+                        {# --- SEKCJA: GRACZ 1 vs GRACZ 2 --- #}
+                        {% if form.player1 and form.player2 %}
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-primary">
+                                    <i class="bi bi-person-fill"></i> {{ form.player1.label }}
+                                </label>
+                                {{ form.player1 }}
+                                {{ form.player1.errors }}
+                                {% if form.player1.help_text %}
+                                    <div class="form-text text-muted small">{{ form.player1.help_text }}</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-danger">
+                                    <i class="bi bi-person-fill"></i> {{ form.player2.label }}
+                                </label>
+                                {{ form.player2 }}
+                                {{ form.player2.errors }}
                             </div>
                         </div>
+                        {% endif %}
 
                         <div class="mb-4">
                             <div class="form-check">
@@ -99,15 +121,16 @@
                             </div>
                         </div>
 
+                        {# --- ZMIANA: OFFICIALS -> REFEREES --- #}
                         <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 mt-4">
-                            <i class="bi bi-person-badge-fill me-2"></i>Officials
+                            <i class="bi bi-whistle me-2"></i>Referees
                         </h6>
 
                         <div class="mb-3">
                             <div class="bg-white p-3 rounded border">
                                 {{ form.referees }}
                                 <div class="form-text text-muted small mt-2">
-                                    Select officials for this match (Optional).
+                                    Select referees for this match (Optional).
                                 </div>
                             </div>
                         </div>
