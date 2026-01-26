@@ -70,6 +70,7 @@
 
         <div class="tab-pane fade show active" id="stages" role="tabpanel">
 
+            {# --- PANEL ZARZĄDZANIA (Bez zmian) --- #}
             {% if user == competition.owner %}
             <div class="d-flex justify-content-between align-items-center mb-4 p-3 bg-white rounded shadow-sm border">
                 <div>
@@ -78,7 +79,6 @@
 
                 <div class="d-flex gap-2">
                     {% if competition.status != 'FINISHED' %}
-                        {# DROPDOWN: DODAJ ETAP #}
                         <div class="dropdown">
                             <button class="btn btn-primary dropdown-toggle fw-bold shadow-sm" type="button" id="nextStageDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="bi bi-plus-circle-fill me-1"></i> Add Stage
@@ -121,7 +121,7 @@
             </div>
             {% endif %}
 
-            {% if not group_stages and not knockout_stages %}
+            {% if not all_stages %}
                 <div class="text-center py-5 bg-light rounded border border-dashed">
                     <i class="bi bi-diagram-3 text-muted display-4 mb-3"></i>
                     <h4 class="text-muted">No stages created yet</h4>
@@ -131,229 +131,307 @@
                 </div>
             {% endif %}
 
-            {# --- SEKCJA ETAPÓW GRUPOWYCH --- #}
-            {% for stage in group_stages %}
-                <div class="card shadow-sm mb-5 border-0">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <h4 class="mb-0 fw-bold">{{ stage.name }}</h4>
-                            {% if stage.is_finished %}
-                                <span class="badge bg-dark border border-light ms-2">Finished</span>
-                            {% else %}
-                                <span class="badge bg-light text-primary ms-2">Group Stage</span>
+            {# --- GŁÓWNA PĘTLA PO ETAPACH (SORTOWANA OD NAJNOWSZEGO) --- #}
+            {% for stage in all_stages %}
+
+                {# === SPRAWDZAMY CZY TO ETAP GRUPOWY === #}
+                {% if stage.groups %}
+                    <div class="card shadow-sm mb-5 border-0">
+                        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <h4 class="mb-0 fw-bold">{{ stage.name }}</h4>
+                                {% if stage.is_finished %}
+                                    <span class="badge bg-dark border border-light ms-2">Finished</span>
+                                {% else %}
+                                    <span class="badge bg-light text-primary ms-2">Group Stage</span>
+                                {% endif %}
+                            </div>
+
+                            {% if not stage.is_finished and user == competition.owner %}
+                                <a href="{% url 'end_group_stage' stage.id %}"
+                                   class="btn btn-sm btn-light text-primary fw-bold"
+                                   onclick="return confirm('Are you sure? This will lock the group tables.')">
+                                    <i class="bi bi-check2-circle"></i> Finish Stage
+                                </a>
                             {% endif %}
                         </div>
 
-                        {% if not stage.is_finished and user == competition.owner %}
-                            <a href="{% url 'end_group_stage' stage.id %}"
-                               class="btn btn-sm btn-light text-primary fw-bold"
-                               onclick="return confirm('Are you sure? This will lock the group tables.')">
-                                <i class="bi bi-check2-circle"></i> Finish Stage
-                            </a>
-                        {% endif %}
-                    </div>
-
-                    <div class="card-body bg-light">
-                        {% for group in stage.groups.all %}
-                            <div class="card mb-4 border shadow-sm">
-                                <div class="card-header bg-white fw-bold text-uppercase text-muted border-bottom-0">
-                                    Group {{ group.name }}
-                                </div>
-                                <div class="card-body p-0">
-
-                                    {# TABELA WYNIKÓW #}
-                                    <div class="table-responsive">
-                                        <table class="table table-hover table-striped mb-0 text-center" style="font-size: 0.9rem;">
-                                            <thead class="bg-light text-muted small text-uppercase">
-                                                <tr>
-                                                    <th>#</th>
-                                                    <th class="text-start">Player</th>
-                                                    <th>Pld</th>
-                                                    <th>W</th>
-                                                    <th>D</th>
-                                                    <th>L</th>
-                                                    <th>Frames</th>
-                                                    <th title="Small Points (Scored - Conceded)">Small Pts</th>
-                                                    <th>Max Break</th>
-                                                    <th class="bg-primary text-white">Pts</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                            {% for standing in group.standings.all %}
-                                                <tr {% if standing.is_qualified %}class="table-success"{% endif %}>
-                                                    <td>{{ forloop.counter }}</td>
-                                                    <td class="text-start fw-bold">{{ standing.player }}</td>
-                                                    <td>{{ standing.matches_played }}</td>
-                                                    <td>{{ standing.matches_won }}</td>
-                                                    <td>{{ standing.matches_drawn }}</td>
-                                                    <td>{{ standing.matches_lost }}</td>
-                                                    <td>
-                                                        <span class="text-success fw-bold">{{ standing.frames_won }}</span> :
-                                                        <span class="text-danger">{{ standing.frames_lost }}</span>
-                                                    </td>
-                                                    <td class="text-muted small">
-                                                        {{ standing.small_points_scored }} - {{ standing.small_points_conceded }}
-                                                    </td>
-                                                    <td>
-                                                        {% if standing.highest_break > 0 %}
-                                                            <span class="badge bg-warning text-dark">{{ standing.highest_break }}</span>
-                                                        {% else %}
-                                                            -
-                                                        {% endif %}
-                                                    </td>
-                                                    <td class="fw-bold bg-primary bg-opacity-10">{{ standing.points }}</td>
-                                                </tr>
-                                            {% endfor %}
-                                            </tbody>
-                                        </table>
+                        <div class="card-body bg-light">
+                            {% for group in stage.groups.all %}
+                                <div class="card mb-4 border shadow-sm">
+                                    <div class="card-header bg-white fw-bold text-uppercase text-muted border-bottom-0 d-flex justify-content-between">
+                                        <span>Group {{ group.name }}</span>
+                                        <small class="text-success fw-normal">
+                                            Top {{ stage.num_qualifiers }} advance
+                                        </small>
                                     </div>
+                                    <div class="card-body p-0">
 
-                                    {# LISTA MECZÓW W GRUPIE #}
-                                    <div class="accordion accordion-flush" id="accordionMatches{{ group.id }}">
-                                        <div class="accordion-item">
-                                            <h2 class="accordion-header" id="heading{{ group.id }}">
-                                                <button class="accordion-button collapsed py-2 bg-light text-muted small" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ group.id }}">
-                                                    <i class="bi bi-calendar-event me-2"></i> Show Matches for Group {{ group.name }}
-                                                </button>
-                                            </h2>
-                                            <div id="collapse{{ group.id }}" class="accordion-collapse collapse" data-bs-parent="#accordionMatches{{ group.id }}">
-                                                <div class="list-group list-group-flush">
-                                                    {% for match in group.matches.all|dictsort:"sort_key" %}
-                                                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                                                            <div class="d-flex align-items-center" style="flex: 1;">
+                                        {# TABELA WYNIKÓW #}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover table-striped mb-0 text-center" style="font-size: 0.9rem;">
+                                                <thead class="bg-light text-muted small text-uppercase">
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th class="text-start">Player</th>
+                                                        <th>Pld</th>
+                                                        <th>W</th>
+                                                        <th>D</th>
+                                                        <th>L</th>
+                                                        <th>Frames</th>
+                                                        <th title="Small Points">Small Pts</th>
+                                                        <th>Break</th>
+                                                        <th class="bg-primary text-white">Pts</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                {% for standing in group.standings.all %}
+                                                    {# Sprawdzamy, czy gracz wychodzi #}
+                                                    {% if forloop.counter <= stage.num_qualifiers %}
+                                                        {# --- STYL DLA AWANSUJĄCYCH (Q) --- #}
+                                                        <tr style="background-color: #f8fff9;"> {# Bardzo jasna mięta #}
+                                                            {# 1. Pozycja: Ciemna "pastylka" z numerem #}
+                                                            <td class="align-middle">
+                                                                <span class="badge bg-success rounded-pill shadow-sm" style="min-width: 25px;">
+                                                                    {{ forloop.counter }}
+                                                                </span>
+                                                            </td>
 
-                                                                {# --- NAPRAWA: Bezpośrednio używamy player1 i player2 --- #}
-                                                                {% with scores=match.get_real_score %}
-                                                                    {% with p1=match.player1 p2=match.player2 %}
+                                                            {# 2. Gracz: Pogrubiony + mała literka 'Q' #}
+                                                            <td class="text-start align-middle">
+                                                                <span class="fw-bold text-dark">{{ standing.player }}</span>
+                                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2" style="font-size: 0.65rem;">Q</span>
+                                                            </td>
+                                                    {% else %}
+                                                        {# --- STYL DLA RESZTY --- #}
+                                                        <tr>
+                                                            {# 1. Pozycja: Zwykły szary tekst #}
+                                                            <td class="align-middle text-muted fw-bold" style="color: #adb5bd;">
+                                                                {{ forloop.counter }}
+                                                            </td>
 
-                                                                        <div class="d-flex align-items-center w-100 justify-content-center">
-                                                                            <span class="text-end me-3 {% if match.winner == p1 %}fw-bold text-dark{% else %}text-muted{% endif %}" style="width: 40%;">
-                                                                                {{ p1 }} </span>
+                                                            {# 2. Gracz: Zwykły tekst #}
+                                                            <td class="text-start align-middle">
+                                                                {{ standing.player }}
+                                                            </td>
+                                                    {% endif %}
 
-                                                                            <span class="badge {% if match.is_finished %}bg-dark{% else %}bg-secondary{% endif %} px-3">
-                                                                                {% if match.is_finished or scores.0 > 0 or scores.1 > 0 %}
-                                                                                    {{ scores.0 }} - {{ scores.1 }}
-                                                                                {% else %}
-                                                                                    vs
-                                                                                {% endif %}
-                                                                            </span>
-
-                                                                            <span class="text-start ms-3 {% if match.winner == p2 %}fw-bold text-dark{% else %}text-muted{% endif %}" style="width: 40%;">
-                                                                                {{ p2 }}
-                                                                            </span>
-                                                                        </div>
-
-                                                                    {% endwith %}
-                                                                {% endwith %}
-                                                            </div>
-
-                                                            <div class="ms-3">
-                                                                {% if not match.is_finished %}
-                                                                    <a href="{% url 'start_game' match.pk %}" class="btn btn-sm btn-success fw-bold">Play</a>
+                                                            {# --- RESZTA KOLUMN (Wspólna) --- #}
+                                                            <td class="align-middle">{{ standing.matches_played }}</td>
+                                                            <td class="align-middle">{{ standing.matches_won }}</td>
+                                                            <td class="align-middle">{{ standing.matches_drawn }}</td>
+                                                            <td class="align-middle">{{ standing.matches_lost }}</td>
+                                                            <td class="align-middle">
+                                                                <span class="fw-bold">{{ standing.frames_won }}</span>
+                                                                <span class="text-muted mx-1">:</span>
+                                                                <span>{{ standing.frames_lost }}</span>
+                                                            </td>
+                                                            <td class="text-muted small align-middle">
+                                                                {{ standing.small_points_scored }} - {{ standing.small_points_conceded }}
+                                                            </td>
+                                                            <td class="align-middle">
+                                                                {% if standing.highest_break > 0 %}
+                                                                    <span class="fw-bold text-dark">{{ standing.highest_break }}</span>
                                                                 {% else %}
-                                                                    <a href="{% url 'match_detail' match.pk %}" class="btn btn-sm btn-outline-secondary">View</a>
+                                                                    <span class="text-muted">-</span>
                                                                 {% endif %}
+                                                            </td>
+                                                            <td class="fw-bold align-middle bg-light text-primary border-start">
+                                                                {{ standing.points }}
+                                                            </td>
+                                                        </tr>
+                                                {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
 
-                                                                {% if user == competition.owner %}
-                                                                    <a href="{% url 'edit_match' match.pk %}" class="btn btn-sm btn-light text-muted border"><i class="bi bi-pencil"></i></a>
-                                                                {% endif %}
+                                        {# LISTA MECZÓW W GRUPIE (Z PODZIAŁEM NA KOLEJKI) #}
+                                        <div class="accordion accordion-flush" id="accordionMatches{{ group.id }}">
+                                            <div class="accordion-item">
+                                                <h2 class="accordion-header" id="heading{{ group.id }}">
+                                                    <button class="accordion-button collapsed py-2 bg-light text-muted small" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ group.id }}">
+                                                        <i class="bi bi-calendar-event me-2"></i> Show Matches
+                                                    </button>
+                                                </h2>
+                                                <div id="collapse{{ group.id }}" class="accordion-collapse collapse" data-bs-parent="#accordionMatches{{ group.id }}">
+                                                    <div class="list-group list-group-flush">
+
+                                                        {# --- REGROUP: Podział na kolejki (Round 1, Round 2...) --- #}
+                                                        {# Najpierw sortujemy po rundzie, potem po dacie/czasie #}
+                                                        {% regroup group.matches.all|dictsort:"round_number" by round_number as matches_by_round %}
+
+                                                        {% for round in matches_by_round %}
+                                                            {# Belka kolejki #}
+                                                            <div class="list-group-item bg-light text-uppercase fw-bold small text-muted py-1 ps-3">
+                                                                Round {{ round.grouper }}
                                                             </div>
-                                                        </div>
-                                                    {% empty %}
-                                                        <div class="text-center p-3 text-muted small">No matches generated yet.</div>
-                                                    {% endfor %}
+
+                                                            {# Pętla meczów w danej kolejce #}
+                                                            {% for match in round.list|dictsort:"sort_key" %}
+                                                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                                    <div class="d-flex align-items-center" style="flex: 1;">
+                                                                        {% with scores=match.get_real_score %}
+                                                                            {% with p1=match.player1 p2=match.player2 %}
+                                                                                <div class="d-flex align-items-center w-100 justify-content-center">
+                                                                                    <span class="text-end me-3 {% if match.winner == p1 %}fw-bold text-dark{% else %}text-muted{% endif %}" style="width: 40%;">
+                                                                                        {{ p1 }}
+                                                                                    </span>
+
+                                                                                    <span class="badge {% if match.is_finished %}bg-dark{% else %}bg-secondary{% endif %} px-3">
+                                                                                        {% if match.is_finished or scores.0 > 0 or scores.1 > 0 %}
+                                                                                            {{ scores.0 }} - {{ scores.1 }}
+                                                                                        {% else %}
+                                                                                            vs
+                                                                                        {% endif %}
+                                                                                    </span>
+
+                                                                                    <span class="text-start ms-3 {% if match.winner == p2 %}fw-bold text-dark{% else %}text-muted{% endif %}" style="width: 40%;">
+                                                                                        {{ p2 }}
+                                                                                    </span>
+                                                                                </div>
+                                                                            {% endwith %}
+                                                                        {% endwith %}
+                                                                    </div>
+
+                                                                    <div class="ms-3">
+                                                                        {% if not match.is_finished %}
+                                                                            <a href="{% url 'start_game' match.pk %}" class="btn btn-sm btn-success fw-bold">Play</a>
+                                                                        {% else %}
+                                                                            <a href="{% url 'match_detail' match.pk %}" class="btn btn-sm btn-outline-secondary">View</a>
+                                                                        {% endif %}
+
+                                                                        {# --- UKRYWANIE OŁÓWKA JEŚLI ZAKOŃCZONY --- #}
+                                                                        {% if user == competition.owner and not match.is_finished %}
+                                                                            <a href="{% url 'edit_match' match.pk %}" class="btn btn-sm btn-light text-muted border"><i class="bi bi-pencil"></i></a>
+                                                                        {% endif %}
+                                                                    </div>
+                                                                </div>
+                                                            {% endfor %}
+                                                        {% endfor %}
+
+                                                        {% if not matches_by_round %}
+                                                            <div class="text-center p-3 text-muted small">No matches generated yet.</div>
+                                                        {% endif %}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                </div>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-
-            {# --- SEKCJA ETAPÓW PUCHAROWYCH (KNOCKOUT) --- #}
-            {% for stage in knockout_stages %}
-                <div class="card shadow-sm mb-5 border-0">
-                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center py-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <h4 class="mb-0 fw-bold">{{ stage.name }}</h4>
-                            {% if stage.is_finished %}
-                                <span class="badge bg-dark border border-light ms-2">Finished</span>
-                            {% else %}
-                                <span class="badge bg-light text-success ms-2">Knockout</span>
-                            {% endif %}
-                        </div>
-
-                        {% if not stage.is_finished and user == competition.owner %}
-                            <a href="{% url 'end_knockout_stage' stage.id %}"
-                               class="btn btn-sm btn-light text-success fw-bold"
-                               onclick="return confirm('Finish this knockout stage?')">
-                                <i class="bi bi-check2-circle"></i> Finish Stage
-                            </a>
-                        {% endif %}
-                    </div>
-
-                    <div class="card-body">
-                        <div class="list-group">
-                            {# --- ZMIANA: Używamy sort_key zamiast date --- #}
-                            {% for match in stage.matches.all|dictsort:"sort_key" %}
-                                <div class="list-group-item d-flex justify-content-between align-items-center p-3">
-
-                                    <div class="me-3 text-center" style="min-width: 80px;">
-                                        <small class="d-block text-muted text-uppercase" style="font-size: 0.7rem;">{{ match.knockout_name }}</small>
-                                        <small class="fw-bold text-success">{{ match.date|date:"d M" }}</small>
-                                        {# Opcjonalnie: Dodaj godzinę, żeby widzieć że sortowanie działa #}
-                                        <small class="d-block text-muted" style="font-size: 0.7rem;">{{ match.time|time:"H:i" }}</small>
-                                    </div>
-
-                                    <div class="d-flex align-items-center flex-grow-1 justify-content-center">
-                                        {% if match.player1 and match.player2 %}
-                                            {% with p1=match.player1 p2=match.player2 scores=match.get_real_score %}
-                                                <div class="d-flex align-items-center w-100 justify-content-center">
-                                                    <span class="text-end me-3 {% if match.winner == p1 %}fw-bold text-dark{% else %}text-muted{% endif %}" style="width: 35%;">
-                                                        {{ p1 }} {% if match.winner == p1 %}🏆{% endif %}
-                                                    </span>
-
-                                                    <span class="badge {% if match.is_finished %}bg-dark{% else %}bg-success{% endif %} fs-6 px-3 shadow-sm">
-                                                        {% if match.is_finished or scores.0 > 0 or scores.1 > 0 %}
-                                                            {{ scores.0 }} - {{ scores.1 }}
-                                                        {% else %}
-                                                            vs
-                                                        {% endif %}
-                                                    </span>
-
-                                                    <span class="text-start ms-3 {% if match.winner == p2 %}fw-bold text-dark{% else %}text-muted{% endif %}" style="width: 35%;">
-                                                        {{ p2 }} {% if match.winner == p2 %}🏆{% endif %}
-                                                    </span>
-                                                </div>
-                                            {% endwith %}
-                                        {% else %}
-                                            <span class="text-muted fst-italic">Waiting for players...</span>
-                                        {% endif %}
-                                    </div>
-
-                                    <div class="ms-3 btn-group">
-                                        {% if match.player1 and match.player2 %}
-                                            {% if not match.is_finished and not stage.is_finished %}
-                                                <a href="{% url 'start_game' match.pk %}" class="btn btn-success fw-bold btn-sm">Play</a>
-                                            {% else %}
-                                                <a href="{% url 'match_detail' match.pk %}" class="btn btn-outline-secondary btn-sm">View</a>
-                                            {% endif %}
-                                        {% endif %}
-                                        {% if user == competition.owner %}
-                                            <a href="{% url 'edit_match' match.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil"></i></a>
-                                        {% endif %}
                                     </div>
                                 </div>
-                            {% empty %}
-                                <div class="text-center p-3 text-muted">No matches available.</div>
                             {% endfor %}
                         </div>
                     </div>
-                </div>
+
+                {# === SPRAWDZAMY CZY TO ETAP PUCHAROWY === #}
+                {% else %}
+                    <div class="card shadow-sm mb-5 border-0">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center py-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <h4 class="mb-0 fw-bold">{{ stage.name }}</h4>
+                                {% if stage.is_finished %}
+                                    <span class="badge bg-dark border border-light ms-2">Finished</span>
+                                {% else %}
+                                    <span class="badge bg-light text-success ms-2">Knockout</span>
+                                {% endif %}
+                            </div>
+
+                            {% if not stage.is_finished and user == competition.owner %}
+                                <a href="{% url 'end_knockout_stage' stage.id %}"
+                                   class="btn btn-sm btn-light text-success fw-bold"
+                                   onclick="return confirm('Finish this knockout stage?')">
+                                    <i class="bi bi-check2-circle"></i> Finish Stage
+                                </a>
+                            {% endif %}
+                        </div>
+
+                        <div class="card-body bg-light">
+
+                            {# --- NOWOŚĆ: GRUPOWANIE PO NAZWIE RUNDY (np. Semi-Final) --- #}
+                            {# Sortujemy po round_number, żeby Finał był pod Półfinałami #}
+                            {% regroup stage.matches.all|dictsort:"round_number" by knockout_name as matches_by_round %}
+
+                            {% for round_group in matches_by_round %}
+
+                                {# DELIKATNY NAGŁÓWEK ROZDZIELAJĄCY #}
+                                <div class="position-relative py-3">
+                                    <hr class="border-secondary opacity-25">
+                                    <span class="position-absolute top-50 start-50 translate-middle bg-light px-3 text-muted fw-bold text-uppercase" style="font-size: 0.75rem; letter-spacing: 1px;">
+                                        {{ round_group.grouper }}
+                                    </span>
+                                </div>
+
+                                <div class="list-group shadow-sm mb-2">
+                                    {% for match in round_group.list|dictsort:"id" %}
+                                        <div class="list-group-item d-flex justify-content-between align-items-center p-3 border-start-0 border-end-0">
+
+                                            {# DATA (ukryta na mobile, widoczna na desktop) #}
+                                            <div class="d-none d-md-block me-3 text-center text-muted" style="min-width: 60px;">
+                                                <small class="fw-bold">{{ match.date|date:"d M" }}</small>
+                                                <small class="d-block" style="font-size: 0.7rem;">{{ match.time|time:"H:i" }}</small>
+                                            </div>
+
+                                            {# ZAWODNICY I WYNIK #}
+                                            <div class="d-flex align-items-center flex-grow-1 justify-content-center">
+                                                {% if match.player1 or match.player2 %}
+                                                    {% with p1=match.player1 p2=match.player2 scores=match.get_real_score %}
+                                                        <div class="d-flex align-items-center w-100 justify-content-center">
+                                                            {# Player 1 #}
+                                                            <span class="text-end me-3 {% if match.winner == p1 and match.is_finished %}fw-bold text-success{% elif match.winner == p2 %}text-muted{% endif %}" style="width: 35%;">
+                                                                {{ p1|default:"TBD" }}
+                                                            </span>
+
+                                                            {# WYNIK / VS #}
+                                                            <span class="badge {% if match.is_finished %}bg-dark{% else %}bg-white text-dark border{% endif %} px-3 py-2 shadow-sm" style="min-width: 60px;">
+                                                                {% if match.is_finished or scores.0 > 0 or scores.1 > 0 %}
+                                                                    <span class="fs-6">{{ scores.0 }} - {{ scores.1 }}</span>
+                                                                {% else %}
+                                                                    <span class="small text-muted">vs</span>
+                                                                {% endif %}
+                                                            </span>
+
+                                                            {# Player 2 #}
+                                                            <span class="text-start ms-3 {% if match.winner == p2 and match.is_finished %}fw-bold text-success{% elif match.winner == p1 %}text-muted{% endif %}" style="width: 35%;">
+                                                                {{ p2|default:"TBD" }}
+                                                            </span>
+                                                        </div>
+                                                    {% endwith %}
+                                                {% else %}
+                                                    <span class="text-muted fst-italic small">Waiting for opponents...</span>
+                                                {% endif %}
+                                            </div>
+
+                                            {# PRZYCISKI AKCJI #}
+                                            <div class="ms-3 btn-group">
+                                                {% if match.player1 and match.player2 %}
+                                                    {% if not match.is_finished and not stage.is_finished %}
+                                                        <a href="{% url 'start_game' match.pk %}" class="btn btn-sm btn-success fw-bold">Play</a>
+                                                    {% else %}
+                                                        <a href="{% url 'match_detail' match.pk %}" class="btn btn-sm btn-outline-secondary">View</a>
+                                                    {% endif %}
+                                                {% endif %}
+
+                                                {# OŁÓWEK (Tylko dla właściciela i niezakończonych) #}
+                                                {% if user == competition.owner and not match.is_finished %}
+                                                    <a href="{% url 'edit_match' match.pk %}" class="btn btn-sm btn-light text-secondary border"><i class="bi bi-pencil"></i></a>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endfor %}
+
+                            {% if not stage.matches.all %}
+                                <div class="text-center p-5 text-muted">
+                                    <i class="bi bi-ghost fs-1 d-block mb-3"></i>
+                                    No matches generated yet.
+                                </div>
+                            {% endif %}
+
+                        </div>
+                    </div>
+                {% endif %}
+
             {% endfor %}
 
         </div>

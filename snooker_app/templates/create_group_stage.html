@@ -19,15 +19,10 @@
                         {% endif %}
 
                         <div class="row mb-3">
-                            <div class="col-md-8">
+                            <div class="col-12">
                                 <label class="form-label fw-bold">Stage Name</label>
                                 {{ form.name }}
                                 <div class="text-danger small">{{ form.name.errors }}</div>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Order</label>
-                                {{ form.order }}
-                                <div class="text-danger small">{{ form.order.errors }}</div>
                             </div>
                         </div>
 
@@ -47,6 +42,17 @@
                                 <div class="text-danger small">{{ form.players_per_group.errors }}</div>
                             </div>
                         </div>
+
+                        {# --- NOWE POLE: NUM QUALIFIERS --- #}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-success">
+                                <i class="bi bi-trophy-fill me-1"></i>Qualifiers per Group
+                            </label>
+                            {{ form.num_qualifiers }}
+                            <div class="form-text text-muted">How many players advance to Knockout? (e.g. 2)</div>
+                            <div class="text-danger small">{{ form.num_qualifiers.errors }}</div>
+                        </div>
+                        {# --------------------------------- #}
 
                         <div class="mb-3">
                             <label class="form-label fw-bold">Frames per Match</label>

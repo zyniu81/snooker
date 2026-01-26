@@ -185,3 +185,75 @@ def match_post_delete_handler(sender, instance, **kwargs):
         # albo usuwamy cały turniej. W obu przypadkach - nie musimy nic przeliczać.
         # Po prostu ignorujemy błąd.
         pass
+
+
+@receiver(post_save, sender=Match)
+def advance_knockout_winner(sender, instance, created, **kwargs):
+    """
+    Automatycznie przesuwa zwycięzcę do następnej rundy w drabince pucharowej.
+    """
+    # Działamy tylko dla zakończonych meczów pucharowych, które mają zwycięzcę
+    if not instance.knockout_stage or not instance.is_finished or not instance.winner:
+        return
+
+    stage = instance.knockout_stage
+    current_round = instance.round_number
+
+    # --- LOGIKA GŁÓWNA: AWANS DO NASTĘPNEJ RUNDY ---
+
+    # 1. Pobieramy wszystkie mecze TEJ rundy, posortowane po ID (kolejność tworzenia)
+    current_round_matches = Match.objects.filter(
+        knockout_stage=stage,
+        round_number=current_round
+    ).order_by('id')
+
+    # 2. Sprawdzamy, którym meczem z kolei jest nasz zakończony mecz (indeks 0, 1, 2...)
+    matches_list = list(current_round_matches)
+    try:
+        current_match_index = matches_list.index(instance)
+    except ValueError:
+        return  # Coś dziwnego, meczu nie ma na liście
+
+    # 3. Obliczamy cel: Następna runda, Mecz o indeksie (nasz_indeks // 2)
+    next_round = current_round + 1
+    target_match_index = current_match_index // 2
+
+    # Pobieramy mecze NASTĘPNEJ rundy
+    next_round_matches = Match.objects.filter(
+        knockout_stage=stage,
+        round_number=next_round
+    ).order_by('id')
+
+    # Jeśli cel istnieje (czyli nie jest to finał)
+    if target_match_index < len(next_round_matches):
+        target_match = next_round_matches[target_match_index]
+
+        # Parzysty indeks (0, 2...) idzie na Player 1 (Góra drabinki)
+        # Nieparzysty indeks (1, 3...) idzie na Player 2 (Dół drabinki)
+        if current_match_index % 2 == 0:
+            target_match.player1 = instance.winner
+        else:
+            target_match.player2 = instance.winner
+
+        target_match.save()
+
+    # --- LOGIKA DODATKOWA: MECZ O 3 MIEJSCE ---
+    # Jeśli to Półfinał (przedostatnia runda) i mamy mecz o 3 miejsce
+    total_rounds = stage.num_rounds
+    if stage.has_third_place_match and current_round == (total_rounds - 1):
+        # Znajdź przegranego
+        loser = instance.player1 if instance.winner == instance.player2 else instance.player2
+
+        if loser:
+            # Szukamy meczu o 3 miejsce (ma specjalny round_number=99 lub nazwę)
+            third_place_match = Match.objects.filter(
+                knockout_stage=stage,
+                knockout_name="3rd Place Match"
+            ).first()
+
+            if third_place_match:
+                if current_match_index % 2 == 0:
+                    third_place_match.player1 = loser
+                else:
+                    third_place_match.player2 = loser
+                third_place_match.save()

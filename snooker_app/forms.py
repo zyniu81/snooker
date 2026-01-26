@@ -7,6 +7,8 @@ from django.db.models import Q
 
 from .models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage
 
+import math
+
 
 # --- OSOBY I MIEJSCA ---
 
@@ -367,22 +369,26 @@ class GroupStageForm(forms.ModelForm):
         min_value=1,
         initial=3,
         label="Frames per Match",
-        widget=forms.NumberInput(attrs={'class': 'form-control'})  # <-- Widget dla pola spoza modelu
+        widget=forms.NumberInput(attrs={'class': 'form-control'})
     )
 
     class Meta:
         model = GroupStage
         fields = [
-            'name', 'order', 'num_groups', 'players_per_group',
+            'name', 'num_groups', 'players_per_group',
+            'num_qualifiers',
             'matches_per_pair', 'points_for_win', 'points_for_draw', 'allow_draws'
         ]
 
         # --- WIDGETY DLA PÓL MODELU (Żeby wyglądały ładnie) ---
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Group Stage'}),
-            'order': forms.NumberInput(attrs={'class': 'form-control'}),
             'num_groups': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'players_per_group': forms.NumberInput(attrs={'class': 'form-control', 'min': '2'}),
+
+            # <--- NOWY WIDGET DLA AWANSUJĄCYCH ---
+            'num_qualifiers': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'placeholder': 'e.g. 2'}),
+
             'matches_per_pair': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'value': '1'}),
             'points_for_win': forms.NumberInput(attrs={'class': 'form-control'}),
             'points_for_draw': forms.NumberInput(attrs={'class': 'form-control'}),
@@ -410,7 +416,6 @@ class GroupStageForm(forms.ModelForm):
 
 
 class KnockoutStageForm(forms.ModelForm):
-    # Lista graczy
     players = forms.ModelMultipleChoiceField(
         queryset=Player.objects.none(),
         widget=forms.CheckboxSelectMultiple,
@@ -420,13 +425,9 @@ class KnockoutStageForm(forms.ModelForm):
 
     class Meta:
         model = KnockoutStage
-        # TO JEST KLUCZOWE: Tu muszą być wypisane wszystkie 5 pól
-        fields = ['name', 'order', 'num_rounds', 'frames_per_match', 'has_third_place_match']
-
-        # Definicja wyglądu (żeby pola miały ramki i wyglądały ładnie)
+        fields = ['name', 'num_rounds', 'frames_per_match', 'has_third_place_match']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Finals'}),
-            'order': forms.NumberInput(attrs={'class': 'form-control'}),
             'num_rounds': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'frames_per_match': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'has_third_place_match': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -441,21 +442,42 @@ class KnockoutStageForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if self.competition:
-            # --- ZMIANA: ROZSZERZAMY LISTĘ ---
             owner = self.competition.owner
             self.fields['players'].queryset = Player.objects.filter(owner=owner, is_temporary=False)
 
-            # Domyślne zaznaczanie
             if self.winner_list:
                 self.fields['players'].initial = [p.id for p in self.winner_list]
             else:
                 self.fields['players'].initial = [p.id for p in self.other_list]
 
-    def clean_num_rounds(self):
-        num_rounds = self.cleaned_data.get('num_rounds')
-        if num_rounds < 1:
-            raise forms.ValidationError('Number of rounds must be at least 1.')
-        return num_rounds
+    def clean(self):
+        cleaned_data = super().clean()
+        players = cleaned_data.get('players')
+        num_rounds = cleaned_data.get('num_rounds')
+
+        if not players:
+            raise forms.ValidationError("You must select players.")
+
+        count = len(players)
+
+        # 1. PODSTAWOWY WARUNEK: Musi być parzysta liczba na start
+        if count % 2 != 0:
+            raise forms.ValidationError(f"Selected {count} players. You need an even number of players to start.")
+
+        # 2. SYMULACJA RUND
+        if num_rounds:
+            current_players = count
+            for r in range(1, num_rounds + 1):
+                # Na początku każdej rundy musimy mieć parzystą liczbę graczy
+                if current_players % 2 != 0:
+                    raise forms.ValidationError(
+                        f"Cannot create {num_rounds} rounds with {count} players. "
+                        f"After Round {r - 1}, there would be {current_players} players left, which cannot be paired."
+                    )
+                # Po rundzie zostaje połowa
+                current_players = current_players // 2
+
+        return cleaned_data
 
 
 class SignUpForm(UserCreationForm):
@@ -495,32 +517,43 @@ class MassMatchEditForm(forms.ModelForm):
         cleaned_data = super().clean()
         p1 = cleaned_data.get('player1')
         p2 = cleaned_data.get('player2')
-        instance = self.instance # Edytowany mecz
+        instance = self.instance  # Edytowany mecz
 
         # 1. BLOKADA: Ten sam gracz przeciwko sobie
         if p1 and p2 and p1 == p2:
-            # Przypisujemy błąd do pola player2, żeby wyświetlił się pod dropdownem
             self.add_error('player2', "Player cannot play against themselves.")
 
-        # 2. BLOKADA: Gracz gra w dwóch meczach tej samej rundy (tylko dla Knockout)
-        if instance.knockout_stage and p1 and p2:
-            # Szukamy INNYCH meczów w tej samej fazie i o tej samej nazwie rundy (np. "Quarter-Final")
-            # Wykluczamy obecny mecz (.exclude(pk=instance.pk))
-            other_matches_in_round = Match.objects.filter(
-                knockout_stage=instance.knockout_stage,
-                knockout_name=instance.knockout_name
-            ).exclude(pk=instance.pk)
+        # 2. INTELIGENTNA BLOKADA (KOLIZJA W KOLEJCE)
+        # Sprawdzamy czy gracze nie są zajęci w INNYM meczu tej samej KOLEJKI (round_number)
+        if p1 and p2:
+            query_filter = Q()
+            context_name = ""
 
-            # Sprawdzamy Gracza 1
-            # Czy P1 występuje jako player1 LUB player2 w innych meczach tej rundy?
-            is_p1_busy = other_matches_in_round.filter(Q(player1=p1) | Q(player2=p1)).exists()
-            if is_p1_busy:
-                self.add_error('player1', f"{p1} is already playing in another match in {instance.knockout_name}.")
+            # Rozróżniamy Grupy od Pucharu
+            if instance.group_stage:
+                # Szukamy w tym samym etapie grupowym
+                query_filter = Q(group_stage=instance.group_stage)
+                context_name = f"Round {instance.round_number}"
+            elif instance.knockout_stage:
+                # Szukamy w tym samym etapie pucharowym
+                query_filter = Q(knockout_stage=instance.knockout_stage)
+                context_name = instance.knockout_name or f"Round {instance.round_number}"
 
-            # Sprawdzamy Gracza 2
-            is_p2_busy = other_matches_in_round.filter(Q(player1=p2) | Q(player2=p2)).exists()
-            if is_p2_busy:
-                self.add_error('player2', f"{p2} is already playing in another match in {instance.knockout_name}.")
+            # Wykonujemy sprawdzenie tylko, jeśli mecz należy do jakiegoś etapu
+            if query_filter:
+                # Znajdź inne mecze w tym etapie i w TEJ SAMEJ RUNDZIE (kolejce)
+                conflicting_matches = Match.objects.filter(
+                    query_filter,
+                    round_number=instance.round_number
+                ).exclude(pk=instance.pk)
+
+                # Czy P1 jest zajęty?
+                if conflicting_matches.filter(Q(player1=p1) | Q(player2=p1)).exists():
+                    self.add_error('player1', f"{p1} is already playing in another match in {context_name}.")
+
+                # Czy P2 jest zajęty?
+                if conflicting_matches.filter(Q(player1=p2) | Q(player2=p2)).exists():
+                    self.add_error('player2', f"{p2} is already playing in another match in {context_name}.")
 
         return cleaned_data
 

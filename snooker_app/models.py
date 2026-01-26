@@ -244,6 +244,7 @@ class Match(models.Model):
     time = models.TimeField()
     venue = models.ForeignKey('Venue', on_delete=models.SET_NULL, blank=True, null=True)
     table_number = models.CharField(max_length=10, blank=True, null=True, help_text="e.g. 1, 12, A1, other")
+    round_number = models.PositiveIntegerField(default=1, help_text="Numer kolejki (Grupy) lub Rundy (Puchar)")
 
     number_of_frames = models.PositiveIntegerField()
     allow_draws = models.BooleanField(default=False)
@@ -703,8 +704,12 @@ class Competition(models.Model):
 
     def get_stages(self):
         stages = []
-        stages.extend(list(self.group_stages.all()))
-        stages.extend(list(self.knockout_stages.all()))
+        if hasattr(self, 'groupstage_stages'):
+            stages.extend(list(self.groupstage_stages.all()))
+
+        if hasattr(self, 'knockoutstage_stages'):
+            stages.extend(list(self.knockoutstage_stages.all()))
+
         return sorted(stages, key=lambda x: x.order)
 
 
@@ -737,6 +742,13 @@ class GroupStage(Stage):
     players_per_group = models.IntegerField(validators=[MinValueValidator(2)])
     matches_per_pair = models.IntegerField(default=1, validators=[MinValueValidator(1)])
 
+    # --- NOWE POLE: Automatyczny awans ---
+    num_qualifiers = models.IntegerField(
+        default=2,
+        validators=[MinValueValidator(1)],
+        help_text="Ilu graczy automatycznie awansuje z grupy?"
+    )
+
     # --- ZASADY PUNKTACJI ---
     points_for_win = models.IntegerField(default=3)
     points_for_draw = models.IntegerField(default=1)
@@ -744,9 +756,7 @@ class GroupStage(Stage):
     allow_draws = models.BooleanField(default=True)
 
     def create_groups_and_matches(self, default_frames, selected_players=None):
-        """Generuje grupy (1, 2...) i wypasione tabele."""
-
-        # Import wewnątrz, żeby nie było cykli (jeśli potrzebne)
+        """Generuje grupy i mecze w systemie Round Robin (każdy z każdym z podziałem na kolejki)."""
         from .models import Group, GroupStanding, Match
 
         if selected_players:
@@ -762,7 +772,6 @@ class GroupStage(Stage):
         self.groups.all().delete()
 
         for i in range(self.num_groups):
-            # i=0 -> "1", i=1 -> "2" itd.
             group_name_str = str(i + 1)
 
             # 1. Tworzymy obiekt GRUPY
@@ -771,7 +780,7 @@ class GroupStage(Stage):
                 name=group_name_str
             )
 
-            # Dobieramy graczy
+            # Dobieramy graczy do grupy
             start_idx = i * self.players_per_group
             end_idx = start_idx + self.players_per_group
             group_players = players[start_idx:end_idx] if start_idx < total_players else []
@@ -779,43 +788,76 @@ class GroupStage(Stage):
             if len(group_players) < 2:
                 continue
 
-            # 2. Tworzymy TABELĘ (GroupStanding) - Zerujemy statystyki
+            # 2. Tworzymy TABELĘ
             for player in group_players:
                 GroupStanding.objects.create(
-                    group=group,
-                    player=player,
-                    points=0,
+                    group=group, player=player, points=0,
                     matches_played=0, matches_won=0, matches_drawn=0, matches_lost=0,
                     frames_won=0, frames_lost=0,
-                    small_points_scored=0, small_points_conceded=0,
-                    highest_break=0,
+                    small_points_scored=0, small_points_conceded=0, highest_break=0,
                     is_qualified=False
                 )
 
-            # 3. Tworzymy MECZE
-            for j, player1 in enumerate(group_players):
-                for player2 in group_players[j + 1:]:
-                    for _ in range(self.matches_per_pair):
-                        # --- ZMIANA: Przypisujemy graczy wprost do foteli ---
-                        Match.objects.create(
-                            owner=comp_owner,
-                            is_public=self.competition.is_public,
-                            date=self.competition.start_date,
-                            time=timezone.now().time(),
-                            venue=self.competition.venue,
-                            number_of_frames=default_frames,
-                            game_variant=self.competition.game_variant,
-                            allow_draws=self.allow_draws,
+            # 3. GENEROWANIE MECZY (Algorytm Round Robin / Kołowy)
+            # Dzięki temu mamy ładne kolejki (Round 1, Round 2...)
 
-                            group_stage=self,
-                            group=group,
-                            group_name=group.name,
-                            status='SCHEDULED',
+            # Kopia listy graczy do rotacji
+            rotation_players = list(group_players)
 
-                            # TUTAJ: Sadzamy graczy na fotelach
-                            player1=player1,
-                            player2=player2
-                        )
+            # Jeśli nieparzysta liczba graczy, dodajemy "Ducha" (Bye)
+            if len(rotation_players) % 2 != 0:
+                rotation_players.append(None)
+
+            num_participants = len(rotation_players)
+            num_rounds = num_participants - 1
+            half = num_participants // 2
+
+            # Pętla rewanżowa (jeśli matches_per_pair > 1)
+            for leg in range(self.matches_per_pair):
+
+                # Resetujemy ustawienie graczy dla nowej rundy rewanżowej
+                current_rotation = list(rotation_players)
+
+                for round_idx in range(num_rounds):
+                    # Obliczamy faktyczny numer kolejki (uwzględniając rewanże)
+                    # Np. przy 4 graczach: Rundy 1-3, potem rewanże 4-6
+                    actual_round_number = (leg * num_rounds) + round_idx + 1
+
+                    for j in range(half):
+                        p1 = current_rotation[j]
+                        p2 = current_rotation[num_participants - 1 - j]
+
+                        # Jeśli obaj istnieją (żaden nie jest "Duchem"), tworzymy mecz
+                        if p1 and p2:
+                            # Zamieniamy gospodarza z gościem w rundach rewanżowych (dla porządku)
+                            if leg % 2 == 1:
+                                host, guest = p2, p1
+                            else:
+                                host, guest = p1, p2
+
+                            Match.objects.create(
+                                owner=comp_owner,
+                                is_public=self.competition.is_public,
+                                date=self.competition.start_date,  # Data do edycji później
+                                time=timezone.now().time(),
+                                venue=self.competition.venue,
+                                number_of_frames=default_frames,
+                                game_variant=self.competition.game_variant,
+                                allow_draws=self.allow_draws,
+                                group_stage=self,
+                                group=group,
+                                group_name=group.name,
+                                status='SCHEDULED',
+                                player1=host,
+                                player2=guest,
+                                round_number=actual_round_number  # <--- TU ZAPISUJEMY KOLEJKĘ
+                            )
+
+                    # Rotacja zawodników (Algorytm Berger)
+                    # Zostawiamy pierwszego (indeks 0) w miejscu, resztę przesuwamy
+                    # [0, 1, 2, 3] -> [0, 3, 1, 2]
+                    current_rotation.insert(1, current_rotation.pop())
+
 
 class KnockoutStage(Stage):
     # --- KONFIGURACJA DRABINKI ---
@@ -827,44 +869,38 @@ class KnockoutStage(Stage):
     has_third_place_match = models.BooleanField(default=False)
 
     def create_knockout_matches(self, selected_players=None):
-        """Tworzy drabinkę, przypisując graczy bezpośrednio do foteli player1/player2."""
-
-        # 1. Pobieramy graczy
+        """Tworzy drabinkę."""
         if selected_players:
             players = list(selected_players)
         else:
             players = list(self.competition.players.all())
 
-        # Mieszamy ich (losowanie drabinki)
         random.shuffle(players)
         comp_owner = self.competition.owner
-
-        # 2. Obliczamy startową liczbę meczów
         current_round_matches = len(players) // 2
 
         if current_round_matches < 1:
             return
 
-        # 3. Pętla po rundach
         for round_num in range(self.num_rounds):
-
             if current_round_matches < 1:
                 break
 
             round_name = self._get_round_name(current_round_matches)
 
+            # round_num idzie od 0. Zapiszmy w bazie jako 1, 2, 3...
+            db_round_number = round_num + 1
+
             for i in range(current_round_matches):
                 p1 = None
                 p2 = None
 
-                # Tylko w pierwszej rundzie obsadzamy graczy
                 if round_num == 0:
                     idx1 = 2 * i
                     idx2 = 2 * i + 1
                     if idx1 < len(players): p1 = players[idx1]
                     if idx2 < len(players): p2 = players[idx2]
 
-                # --- ZMIANA: Podajemy player1 i player2 bezpośrednio w create ---
                 Match.objects.create(
                     owner=comp_owner,
                     is_public=self.competition.is_public,
@@ -877,16 +913,14 @@ class KnockoutStage(Stage):
                     knockout_stage=self,
                     knockout_name=round_name,
                     status='SCHEDULED',
-
-                    # Tu sadzamy graczy na fotelach:
                     player1=p1,
-                    player2=p2
+                    player2=p2,
+                    round_number=db_round_number  # <--- ZAPISUJEMY RUNDĘ
                 )
 
-            # Przygotowanie do kolejnej rundy
             current_round_matches = current_round_matches // 2
 
-        # --- Mecz o 3. miejsce ---
+        # Mecz o 3. miejsce
         if self.has_third_place_match and self.num_rounds > 1:
             Match.objects.create(
                 owner=comp_owner,
@@ -899,7 +933,8 @@ class KnockoutStage(Stage):
                 allow_draws=False,
                 knockout_stage=self,
                 knockout_name="3rd Place Match",
-                status='SCHEDULED'
+                status='SCHEDULED',
+                round_number=99  # Specjalny numer dla meczu o 3 miejsce
             )
 
     def _get_round_name(self, matches_count):
