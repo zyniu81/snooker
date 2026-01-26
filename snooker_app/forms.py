@@ -5,7 +5,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.db.models import Q
 
-from .models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage
+from .models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Group, GroupStanding
 
 import math
 
@@ -590,3 +590,104 @@ class ExtraMatchForm(forms.ModelForm):
             self.fields['player2'].label = "Player 2 (Right)"
 
             self.fields['game_variant'].initial = competition.game_variant
+
+
+class SubstitutePlayerForm(forms.Form):
+    player_out = forms.ModelChoiceField(
+        queryset=Player.objects.none(),
+        label="Player to Replace (OUT)",
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text="Only players who haven't played any finished matches in this stage are listed."
+    )
+
+    player_in = forms.ModelChoiceField(
+        queryset=Player.objects.none(),
+        label="New Player (IN)",
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text="Select a player to take over the spot."
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.stage = kwargs.pop('stage', None)
+        self.owner = kwargs.pop('owner', None)
+        super().__init__(*args, **kwargs)
+
+        if self.stage and self.owner:
+            # 1. Znajdź graczy, którzy JUŻ GRALI w tym etapie (mają status FINISHED)
+            # Musimy ich wykluczyć, bo nie wolno fałszować historii meczy
+            finished_matches = Match.objects.filter(
+                group_stage=self.stage,
+                status='FINISHED'
+            )
+            busy_ids = set()
+            for m in finished_matches:
+                if m.player1: busy_ids.add(m.player1.id)
+                if m.player2: busy_ids.add(m.player2.id)
+
+            # 2. Lista "OUT": Wszyscy z grup w tym etapie MINUS ci co grali
+            # Pobieramy ID graczy, którzy mają wpis w tabeli (GroupStanding) tego etapu
+            players_in_stage_ids = list(Player.objects.filter(
+                groupstanding__group__stage=self.stage
+            ).values_list('id', flat=True))
+
+            self.fields['player_out'].queryset = Player.objects.filter(
+                id__in=players_in_stage_ids
+            ).exclude(id__in=busy_ids)  # <--- TU JEST BLOKADA HISTORII
+
+            # 3. Lista "IN": Wszyscy moi gracze MINUS ci co już są w tym etapie
+            # (żeby nie wstawić gracza, który już gra w innej grupie tego samego etapu)
+            self.fields['player_in'].queryset = Player.objects.filter(
+                owner=self.owner,
+                is_temporary=False
+            ).exclude(id__in=players_in_stage_ids)
+
+
+# Formularz do zmiany grupy dla istniejącego gracza (wiersz tabeli)
+class GroupAssignmentForm(forms.ModelForm):
+    # Pole Checkbox do usunięcia gracza z etapu
+    delete_player = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+    class Meta:
+        model = GroupStanding
+        fields = ['group']  # Tylko zmiana grupy
+
+    def __init__(self, *args, **kwargs):
+        stage = kwargs.pop('stage', None)
+        super().__init__(*args, **kwargs)
+        if stage:
+            # W dropdownie pokazujemy tylko grupy z tego etapu
+            self.fields['group'].queryset = Group.objects.filter(stage=stage)
+            self.fields['group'].widget.attrs.update({'class': 'form-select form-select-sm'})
+
+
+# Formularz do dodania zupełnie nowego gracza z zewnątrz
+class AddPlayerToGroupForm(forms.Form):
+    player = forms.ModelChoiceField(
+        queryset=Player.objects.none(),
+        label="Select Player",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    group = forms.ModelChoiceField(
+        queryset=Group.objects.none(),
+        label="Assign to Group",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.stage = kwargs.pop('stage', None)
+        self.owner = kwargs.pop('owner', None)
+        super().__init__(*args, **kwargs)
+
+        if self.stage and self.owner:
+            # Gracze dostępni = Wszyscy moi gracze MINUS ci co już są w grupach
+            players_in_stage = Player.objects.filter(groupstanding__group__stage=self.stage)
+
+            self.fields['player'].queryset = Player.objects.filter(
+                owner=self.owner, is_temporary=False
+            ).exclude(id__in=players_in_stage.values('id'))
+
+            self.fields['group'].queryset = Group.objects.filter(stage=self.stage)

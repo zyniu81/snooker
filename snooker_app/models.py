@@ -858,6 +858,82 @@ class GroupStage(Stage):
                     # [0, 1, 2, 3] -> [0, 3, 1, 2]
                     current_rotation.insert(1, current_rotation.pop())
 
+    def regenerate_schedule(self):
+        """
+        Regeneruje mecze dla aktualnego składu grup (bez usuwania grup).
+        Używane po ręcznej edycji (Manage Groups).
+        """
+        from .models import Match
+
+        # 1. Zabezpieczenie: Jeśli są zakończone mecze, nie dotykamy!
+        if self.matches.filter(status='FINISHED').exists():
+            return False, "Cannot regenerate schedule because some matches are already finished."
+
+        # 2. Pobieramy ustawienia z istniejących meczów (zanim je usuniemy)
+        # Żeby wiedzieć ile frame'ów grać.
+        sample_match = self.matches.first()
+        frames_count = sample_match.number_of_frames if sample_match else 2  # Domyślnie 2 jakby co
+
+        # 3. Usuwamy tylko mecze (SCHEDULED)
+        self.matches.all().delete()
+
+        # 4. Generujemy nowe pary dla każdej grupy (Logika Round Robin)
+        comp_owner = self.competition.owner
+
+        for group in self.groups.all():
+            # Pobieramy graczy z tabeli tej grupy
+            group_players = [standing.player for standing in group.standings.all()]
+
+            if len(group_players) < 2:
+                continue
+
+            # --- Algorytm Round Robin (ten sam co przy tworzeniu) ---
+            rotation_players = list(group_players)
+            if len(rotation_players) % 2 != 0:
+                rotation_players.append(None)  # "Duch"
+
+            num_participants = len(rotation_players)
+            num_rounds = num_participants - 1
+            half = num_participants // 2
+
+            for leg in range(self.matches_per_pair):
+                current_rotation = list(rotation_players)
+
+                for round_idx in range(num_rounds):
+                    actual_round_number = (leg * num_rounds) + round_idx + 1
+
+                    for j in range(half):
+                        p1 = current_rotation[j]
+                        p2 = current_rotation[num_participants - 1 - j]
+
+                        if p1 and p2:
+                            if leg % 2 == 1:
+                                host, guest = p2, p1
+                            else:
+                                host, guest = p1, p2
+
+                            Match.objects.create(
+                                owner=comp_owner,
+                                is_public=self.competition.is_public,
+                                date=self.competition.start_date,
+                                time=timezone.now().time(),
+                                venue=self.competition.venue,
+                                number_of_frames=frames_count,
+                                game_variant=self.competition.game_variant,
+                                allow_draws=self.allow_draws,
+                                group_stage=self,
+                                group=group,
+                                group_name=group.name,
+                                status='SCHEDULED',
+                                player1=host,
+                                player2=guest,
+                                round_number=actual_round_number
+                            )
+
+                    current_rotation.insert(1, current_rotation.pop())
+
+        return True, "Schedule regenerated successfully."
+
 
 class KnockoutStage(Stage):
     # --- KONFIGURACJA DRABINKI ---

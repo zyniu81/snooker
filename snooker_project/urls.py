@@ -74,6 +74,8 @@ urlpatterns = [
     path('end-group-stage/<int:stage_id>/', views.end_group_stage, name='end_group_stage'),
     path('end-knockout-stage/<int:stage_id>/', views.end_knockout_stage, name='end_knockout_stage'),
     path('end-competition/<int:competition_id>/', views.end_competition, name='end_competition'),
+    path('stage/<int:stage_id>/substitute/', views.substitute_player, name='substitute_player'),
+    path('stage/<int:stage_id>/manage-groups/', views.manage_groups, name='manage_groups'),
 ]
 
 

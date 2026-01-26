@@ -17,6 +17,7 @@ from django.dispatch import receiver
 from datetime import timedelta
 from django.utils.safestring import mark_safe
 from django.urls import reverse
+from django.db import transaction
 
 import os
 from openai import OpenAI
@@ -25,9 +26,10 @@ import json
 
 from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueForm,
                                MatchForm, CompetitionForm, AddMatchesToCompetitionForm,
-                               GroupStageForm, SignUpForm, KnockoutStageForm, MassMatchEditForm, ExtraMatchForm)
+                               GroupStageForm, SignUpForm, KnockoutStageForm, MassMatchEditForm, ExtraMatchForm,
+                               SubstitutePlayerForm, GroupAssignmentForm, AddPlayerToGroupForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
-                                MatchPlayer, Frame)
+                                MatchPlayer, Frame, GroupStanding)
 
 
 # --- FUNKCJE POMOCNICZE ---
@@ -1463,3 +1465,132 @@ def claim_temporary_match(sender, user, request, **kwargs):
 
         except Match.DoesNotExist:
             pass
+
+
+@login_required
+def substitute_player(request, stage_id):
+    stage = get_object_or_404(GroupStage, pk=stage_id)
+    competition = stage.competition
+
+    if competition.owner != request.user:
+        raise PermissionDenied
+
+    # Blokada dla zakończonego etapu
+    if stage.is_finished:
+        messages.error(request, "Cannot substitute players in a finished stage.")
+        return redirect('competition_detail', pk=competition.id)
+
+    if request.method == 'POST':
+        form = SubstitutePlayerForm(request.POST, stage=stage, owner=request.user)
+        if form.is_valid():
+            player_out = form.cleaned_data['player_out']
+            player_in = form.cleaned_data['player_in']
+
+            # --- OPERACJA PODMIANY (Transakcja atomowa dla bezpieczeństwa) ---
+            with transaction.atomic():
+                # 1. Dodaj nowego gracza do turnieju (jeśli go nie ma)
+                competition.players.add(player_in)
+
+                # 2. Podmień w TABELI (GroupStanding)
+                # Szukamy wpisu starego gracza w tym etapie
+                standing = GroupStanding.objects.filter(
+                    group__stage=stage,
+                    player=player_out
+                ).first()
+
+                if standing:
+                    standing.player = player_in
+                    standing.save()
+
+                # 3. Podmień w MECZACH (Player 1)
+                matches_p1 = Match.objects.filter(group_stage=stage, player1=player_out)
+                matches_p1.update(player1=player_in)
+
+                # 4. Podmień w MECZACH (Player 2)
+                matches_p2 = Match.objects.filter(group_stage=stage, player2=player_out)
+                matches_p2.update(player2=player_in)
+
+            messages.success(request, f"Successfully substituted {player_out} with {player_in}.")
+            return redirect('competition_detail', pk=competition.id)
+    else:
+        form = SubstitutePlayerForm(stage=stage, owner=request.user)
+
+    return render(request, 'substitute_player.html', {
+        'form': form,
+        'stage': stage,
+        'competition': competition
+    })
+
+
+@login_required
+def manage_groups(request, stage_id):
+    stage = get_object_or_404(GroupStage, pk=stage_id)
+    competition = stage.competition
+
+    if competition.owner != request.user:
+        raise PermissionDenied
+
+    # BLOKADA BEZPIECZEŃSTWA
+    if stage.matches.filter(status='FINISHED').exists():
+        messages.error(request, "Cannot edit groups because matches have already been played.")
+        return redirect('competition_detail', pk=competition.id)
+
+    # Definiujemy Formset (Tabela edycji dla wszystkich graczy)
+    StandingFormSet = modelformset_factory(
+        GroupStanding,
+        form=GroupAssignmentForm,
+        extra=0,  # Nie chcemy pustych wierszy automat
+        can_delete=True  # Włączamy obsługę usuwania
+    )
+    # Musimy przekazać 'stage' do formularza wewnątrz formsetu, więc używamy form_kwargs
+    formset_queryset = GroupStanding.objects.filter(group__stage=stage).order_by('group__name', 'player__last_name')
+
+    if request.method == 'POST':
+        # Sprawdzamy czy to akcja dodawania nowego gracza
+        if 'add_player_submit' in request.POST:
+            add_form = AddPlayerToGroupForm(request.POST, stage=stage, owner=request.user)
+            if add_form.is_valid():
+                new_player = add_form.cleaned_data['player']
+                target_group = add_form.cleaned_data['group']
+                competition.players.add(new_player)  # Upewniamy się, że jest w turnieju
+
+                # Tworzymy wpis w tabeli
+                GroupStanding.objects.create(
+                    group=target_group, player=new_player,
+                    matches_played=0, matches_won=0, matches_drawn=0, matches_lost=0,
+                    frames_won=0, frames_lost=0, points=0,
+                    small_points_scored=0, small_points_conceded=0, highest_break=0
+                )
+                messages.success(request, f"Added {new_player} to Group {target_group.name}.")
+                # Po dodaniu od razu regenerujemy mecze
+                stage.regenerate_schedule()
+                return redirect('manage_groups', stage_id=stage.id)
+
+        # Sprawdzamy czy to akcja zapisu zmian w grupach (Formset)
+        else:
+            formset = StandingFormSet(request.POST, queryset=formset_queryset, form_kwargs={'stage': stage})
+            if formset.is_valid():
+                formset.save()  # Zapisuje zmiany grup i usuwa zaznaczonych graczy
+
+                # REGENERACJA TERMINARZA
+                success, msg = stage.regenerate_schedule()
+                if success:
+                    messages.success(request, "Groups updated and schedule regenerated successfully.")
+                else:
+                    messages.error(request, msg)
+
+                return redirect('competition_detail', pk=competition.id)
+            else:
+                add_form = AddPlayerToGroupForm(stage=stage, owner=request.user)
+
+    else:
+        # GET request
+        formset = StandingFormSet(queryset=formset_queryset, form_kwargs={'stage': stage})
+        add_form = AddPlayerToGroupForm(stage=stage, owner=request.user)
+
+    return render(request, 'manage_groups.html', {
+        'stage': stage,
+        'formset': formset,
+        'add_form': add_form,
+        'competition': competition
+    })

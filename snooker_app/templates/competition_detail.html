@@ -79,9 +79,10 @@
 
                 <div class="d-flex gap-2">
                     {% if competition.status != 'FINISHED' %}
+
                         <div class="dropdown">
                             <button class="btn btn-primary dropdown-toggle fw-bold shadow-sm" type="button" id="nextStageDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-plus-circle-fill me-1"></i> Add Stage
+                                <i class="bi bi-plus-circle-fill me-1"></i> Add Stage & Extras
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="nextStageDropdown">
                                 <li><h6 class="dropdown-header text-uppercase small ls-1">Main Stages</h6></li>
@@ -95,8 +96,28 @@
                                         <i class="bi bi-trophy me-2 text-warning"></i> Create Knockout Stage
                                     </a>
                                 </li>
+
                                 <li><hr class="dropdown-divider"></li>
                                 <li><h6 class="dropdown-header text-uppercase small ls-1">Extras</h6></li>
+
+                                {# --- SUBSTITUTION (ZASTĘPSTWO) --- #}
+                                {# Pętla po etapach, żeby znaleźć aktywne grupy #}
+                                {% for stage in all_stages %}
+                                    {% if stage.groups and not stage.is_finished %}
+                                        <li>
+                                            <a class="dropdown-item" href="{% url 'manage_groups' stage.id %}">
+                                                <i class="bi bi-people me-2 text-primary"></i> Edit Groups ({{ stage.name }})
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="{% url 'substitute_player' stage.id %}">
+                                                <i class="bi bi-arrow-left-right me-2 text-warning"></i> Substitute ({{ stage.name }})
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                                {# --------------------------------- #}
+
                                 <li>
                                     <a class="dropdown-item" href="{% url 'add_matches_to_competition' competition.pk %}">
                                         <i class="bi bi-lightning-fill me-2 text-danger"></i> Add Single Match
