@@ -100,9 +100,10 @@
                                 <li><hr class="dropdown-divider"></li>
                                 <li><h6 class="dropdown-header text-uppercase small ls-1">Extras</h6></li>
 
-                                {# --- SUBSTITUTION (ZASTĘPSTWO) --- #}
-                                {# Pętla po etapach, żeby znaleźć aktywne grupy #}
+                                {# --- PĘTLA PO WSZYSTKICH ETAPACH --- #}
                                 {% for stage in all_stages %}
+
+                                    {# 1. Jeśli to GRUPA (ma atrybut groups) #}
                                     {% if stage.groups and not stage.is_finished %}
                                         <li>
                                             <a class="dropdown-item" href="{% url 'manage_groups' stage.id %}">
@@ -115,6 +116,16 @@
                                             </a>
                                         </li>
                                     {% endif %}
+
+                                    {# 2. Jeśli to PUCHAR (ma atrybut num_rounds - specyficzny dla Knockout) #}
+                                    {% if stage.num_rounds and not stage.is_finished %}
+                                        <li>
+                                            <a class="dropdown-item" href="{% url 'manage_knockout' stage.id %}">
+                                                <i class="bi bi-diagram-3 me-2 text-primary"></i> Edit Bracket ({{ stage.name }})
+                                            </a>
+                                        </li>
+                                    {% endif %}
+
                                 {% endfor %}
                                 {# --------------------------------- #}
 
@@ -465,6 +476,9 @@
                     {% if competition.status != 'FINISHED' and user == competition.owner %}
                         <a href="{{ add_players_url }}" class="btn btn-primary btn-sm fw-bold rounded-pill px-3">
                             <i class="bi bi-person-plus-fill me-1"></i> Manage Players
+                        </a>
+                        <a href="{% url 'import_players_to_competition' competition.id %}" class="btn btn-sm btn-warning fw-bold text-dark">
+                            <i class="bi bi-cloud-download-fill me-1"></i> Import Guest
                         </a>
                     {% endif %}
                 </div>

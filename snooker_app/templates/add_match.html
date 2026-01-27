@@ -87,7 +87,7 @@
                             <i class="bi bi-people-fill me-2"></i>Players
                         </h6>
 
-                        {# --- SEKCJA: GRACZ 1 vs GRACZ 2 --- #}
+                        {# --- SEKCJA: GRACZ 1 vs GRACZ 2 (POPRAWIONA) --- #}
                         {% if form.player1 and form.player2 %}
                         <div class="row">
                             <div class="col-md-6 mb-3">
@@ -107,6 +107,13 @@
                                 </label>
                                 {{ form.player2 }}
                                 {{ form.player2.errors }}
+
+                                <div class="mt-2 text-end">
+                                    <small class="text-muted">Not on list?</small>
+                                    <a href="{% url 'import_guest_for_match' %}" class="btn btn-sm btn-outline-primary ms-2">
+                                        <i class="bi bi-person-down"></i> Import via Code
+                                    </a>
+                                </div>
                             </div>
                         </div>
                         {% endif %}
@@ -151,4 +158,42 @@
         </div>
     </div>
 </div>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Lista pól, które chcemy zapamiętać
+        const fieldsToSave = ['id_date', 'id_time', 'id_venue', 'id_game_variant', 'id_number_of_frames', 'id_table_number', 'id_player1'];
+
+        // 1. PRZYWRACANIE DANYCH (Jeśli są w pamięci)
+        if (localStorage.getItem("match_draft_saved") === "true") {
+            fieldsToSave.forEach(id => {
+                const savedValue = localStorage.getItem(id);
+                const field = document.getElementById(id);
+                if (savedValue && field) {
+                    field.value = savedValue;
+                }
+            });
+            // Czyścimy flagę, żeby nie przywracało w nieskończoność przy nowych wejściach
+            // Ale uwaga: czyścimy tylko po skutecznym wysłaniu formularza,
+            // tutaj zostawiamy, żeby po imporcie zadziałało.
+        }
+
+        // 2. ZAPISYWANIE NA BIEŻĄCO (Auto-Save)
+        fieldsToSave.forEach(id => {
+            const field = document.getElementById(id);
+            if (field) {
+                field.addEventListener("change", function() {
+                    localStorage.setItem(id, this.value);
+                    localStorage.setItem("match_draft_saved", "true");
+                });
+            }
+        });
+
+        // 3. CZYSZCZENIE PO ZAPISIE MECZU (Żeby kolejny mecz był czysty)
+        const form = document.querySelector("form");
+        form.addEventListener("submit", function() {
+            localStorage.removeItem("match_draft_saved");
+            fieldsToSave.forEach(id => localStorage.removeItem(id));
+        });
+    });
+</script>
 {% endblock %}

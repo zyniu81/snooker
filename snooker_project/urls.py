@@ -59,10 +59,12 @@ urlpatterns = [
     path('user/settings/', views.user_settings, name='user_settings'),
     path('user/delete/', views.delete_user, name='delete_user'),
     path('', views.home, name='home'),
-    path('competitions/<int:competition_id>/create-group-stage/', views.create_group_stage, name='create_group_stage'),
+    path('competitions/<int:competition_id>/create-group-stage/', views.create_group_stage,
+         name='create_group_stage'),
     path('competitions/<int:competition_id>/create-knockout-stage/', views.create_knockout_stage,
          name='create_knockout_stage'),
-    path('competitions/<int:pk>/add-players/', views.add_players_to_competition, name='add_players_to_competition'),
+    path('competitions/<int:pk>/add-players/', views.add_players_to_competition,
+         name='add_players_to_competition'),
     path('achievements/', views.achievement_list, name='achievement_list'),
     path('gpt-analysis/', views.gpt_analysis, name='gpt_analysis'),
     path('matches/temporary/create/', views.create_temporary_match, name='create_temporary_match'),
@@ -76,6 +78,11 @@ urlpatterns = [
     path('end-competition/<int:competition_id>/', views.end_competition, name='end_competition'),
     path('stage/<int:stage_id>/substitute/', views.substitute_player, name='substitute_player'),
     path('stage/<int:stage_id>/manage-groups/', views.manage_groups, name='manage_groups'),
+    path('stage/<int:stage_id>/manage-knockout/', views.manage_knockout, name='manage_knockout'),
+    path('generate-token/', views.generate_token, name='generate_token'),
+    path('competition/<int:comp_id>/import/', views.import_players_to_competition,
+         name='import_players_to_competition'),
+    path('match/import-guest/', views.import_guest_for_match, name='import_guest_for_match'),
 ]
 
 

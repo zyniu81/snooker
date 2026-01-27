@@ -19,6 +19,9 @@ class Player(models.Model):
     user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='player_profile')
     is_public = models.BooleanField(default=False)
     is_temporary = models.BooleanField(default=False)
+    is_guest = models.BooleanField(default=False,
+                                   help_text="Is this a player imported only for the tournament "
+                                             "(not visible in the library)?")
 
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
@@ -1186,3 +1189,105 @@ def create_profile(sender, instance, created, **kwargs):
 @receiver(post_save, sender=User)
 def save_profile(sender, instance, **kwargs):
     instance.profile.save()
+
+
+# --- SYSTEM RANKINGOWY (Foundation) ---
+
+class Ranking(models.Model):
+    """
+    Definicja rankingu (np. 'Sezon 2026', 'Liga Wtorkowa', 'Ranking Wszechczasów').
+    To jest kontener na punkty graczy.
+    """
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rankings')
+    name = models.CharField(max_length=100, help_text="Nazwa rankingu, np. 'Sezon 2025/2026'")
+    description = models.TextField(blank=True, null=True)
+
+    # Czy ranking jest aktywny (czy pokazywać go na głównej liście)
+    is_active = models.BooleanField(default=True)
+
+    # Daty obowiązywania (opcjonalne, do archiwizacji)
+    start_date = models.DateField(blank=True, null=True)
+    end_date = models.DateField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.owner.username})"
+
+
+class RankingPosition(models.Model):
+    """
+    Pojedynczy wiersz w rankingu. Przypisuje gracza do rankingu i przechowuje jego statystyki.
+    """
+    ranking = models.ForeignKey(Ranking, on_delete=models.CASCADE, related_name='positions')
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='ranking_positions')
+
+    # --- GŁÓWNE KRYTERIA ---
+    points = models.IntegerField(default=0, help_text="Główne punkty rankingowe")
+    total_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0.00,
+                                         help_text="Suma wygranych nagród pieniężnych")
+
+    # --- HISTORIA POZYCJI (Do strzałek w górę/w dół) ---
+    current_rank = models.IntegerField(default=0, help_text="Aktualna pozycja (obliczana przy aktualizacji)")
+    previous_rank = models.IntegerField(default=0, help_text="Poprzednia pozycja (do pokazywania awansów/spadków)")
+
+    # --- STATYSTYKI TURNIEJOWE ---
+    tournaments_played = models.IntegerField(default=0, help_text="Liczba rozegranych turniejów w tym cyklu")
+    titles_won = models.IntegerField(default=0, help_text="Liczba wygranych turniejów")
+    finals_reached = models.IntegerField(default=0, help_text="Liczba finałów")
+
+    # --- STATYSTYKI MECZOWE ---
+    matches_played = models.IntegerField(default=0)
+    matches_won = models.IntegerField(default=0)
+    matches_lost = models.IntegerField(default=0)
+    matches_drawn = models.IntegerField(default=0)  # Dla lig z remisami
+
+    # --- STATYSTYKI FREJMOWE (SNOOKER SPECIFIC) ---
+    frames_won = models.IntegerField(default=0)
+    frames_lost = models.IntegerField(default=0)
+
+    # --- MAŁE PUNKTY (Small Points) ---
+    small_points_scored = models.IntegerField(default=0)
+    small_points_conceded = models.IntegerField(default=0)
+
+    # --- BREAKI (SNOOKER SPECIFIC) ---
+    highest_break = models.IntegerField(default=0)
+    centuries_count = models.IntegerField(default=0, help_text="Liczba breaków 100+")
+    fifties_count = models.IntegerField(default=0, help_text="Liczba breaków 50+")
+
+    class Meta:
+        # Jeden gracz może być tylko raz w danym rankingu
+        unique_together = ('ranking', 'player')
+        # Domyślne sortowanie: najpierw punkty, potem wygrane turnieje, potem mniej porażek
+        ordering = ['-points', '-titles_won', '-matches_won']
+
+    def __str__(self):
+        return f"{self.player.last_name} in {self.ranking.name}: {self.points} pts"
+
+    @property
+    def frame_difference(self):
+        return self.frames_won - self.frames_lost
+
+    @property
+    def win_percentage(self):
+        if self.matches_played == 0:
+            return 0
+        return round((self.matches_won / self.matches_played) * 100, 1)
+
+
+class SharingToken(models.Model):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sharing_tokens')
+    code = models.CharField(max_length=6, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Opcjonalnie: Jeśli kod ma dotyczyć tylko jednego konkretnego gracza
+    # Jeśli puste -> oznacza udostępnienie CAŁEJ stajni
+    specific_player = models.ForeignKey(Player, on_delete=models.CASCADE, null=True, blank=True)
+
+    def is_valid(self):
+        # Kod ważny tylko 90 sekund
+        return timezone.now() < self.created_at + timedelta(seconds=90)
+
+    def __str__(self):
+        return f"Token {self.code} ({self.owner.username})"

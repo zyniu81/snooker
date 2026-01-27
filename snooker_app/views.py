@@ -3,7 +3,7 @@ from django.urls import reverse_lazy, reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import DeleteView
 from django.contrib import messages
-from django.db.models import Count, Sum, F, Case, When, IntegerField, Q
+from django.db.models import Count, Sum, F, Case, When, IntegerField, Q, Max
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
@@ -18,6 +18,7 @@ from datetime import timedelta
 from django.utils.safestring import mark_safe
 from django.urls import reverse
 from django.db import transaction
+from django.utils.crypto import get_random_string
 
 import os
 from openai import OpenAI
@@ -27,9 +28,10 @@ import json
 from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueForm,
                                MatchForm, CompetitionForm, AddMatchesToCompetitionForm,
                                GroupStageForm, SignUpForm, KnockoutStageForm, MassMatchEditForm, ExtraMatchForm,
-                               SubstitutePlayerForm, GroupAssignmentForm, AddPlayerToGroupForm)
+                               SubstitutePlayerForm, GroupAssignmentForm, AddPlayerToGroupForm, KnockoutSwapForm,
+                               ImportCodeForm, SelectImportedPlayersForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
-                                MatchPlayer, Frame, GroupStanding)
+                                MatchPlayer, Frame, GroupStanding, SharingToken)
 
 
 # --- FUNKCJE POMOCNICZE ---
@@ -50,8 +52,11 @@ def check_ownership(request, obj):
 
 @login_required
 def player_list(request):
-    # Widzimy SWOJE + PUBLICZNE
-    players = Player.objects.filter(Q(owner=request.user) | Q(is_public=True))
+    # Logika: (Moi LUB Publiczni) ORAZ (Nie Goście)
+    players = Player.objects.filter(
+        (Q(owner=request.user) | Q(is_public=True)) & Q(is_guest=False)
+    ).order_by('-created_at')  # Warto dodać sortowanie
+
     return render(request, 'player_list.html', {'players': players})
 
 
@@ -85,7 +90,6 @@ def player_edit(request, pk):
         return redirect('player_list')
 
     if request.method == 'POST':
-        # ZMIANA: Dodano request.FILES
         form = PlayerEditForm(request.POST, request.FILES, instance=player, request=request)
 
         was_temporary = player.is_temporary
@@ -97,11 +101,15 @@ def player_edit(request, pk):
 
             # --- Logika konwersji (Tymczasowy -> Stały) ---
             if was_temporary and not is_now_temporary:
-                matches_qs = Match.objects.filter(players=saved_player, is_temporary=True)
+                # POPRAWKA 1: Używamy Q dla player1/player2
+                matches_qs = Match.objects.filter(
+                    (Q(player1=saved_player) | Q(player2=saved_player)) & Q(is_temporary=True)
+                )
 
+                # POPRAWKA 2: Szukanie przeciwników po poprawnych relacjach (matches_as_p1 / matches_as_p2)
                 opponents_list = list(Player.objects.filter(
-                    match__in=matches_qs,
-                    is_temporary=True
+                    (Q(matches_as_p1__in=matches_qs) | Q(matches_as_p2__in=matches_qs)) &
+                    Q(is_temporary=True)
                 ).exclude(id=saved_player.id).distinct())
 
                 matches_count = matches_qs.update(is_temporary=False)
@@ -126,12 +134,14 @@ def player_edit(request, pk):
             else:
                 messages.success(request, "Player updated successfully.")
 
-            # --- Aktualizacja nazw w meczach ---
-            player_matches = Match.objects.filter(players=saved_player)
+            # --- Aktualizacja nazw w meczach (Cache) ---
+            # POPRAWKA 3: Tutaj też używamy Q dla player1/player2
+            player_matches = Match.objects.filter(
+                Q(player1=saved_player) | Q(player2=saved_player)
+            )
             for m in player_matches:
-                m.save()
+                m.save() # To wywoła metodę save() modelu, która zaktualizuje player_names
 
-            # Powrót do szczegółów gracza po edycji jest zazwyczaj lepszy niż do listy
             return redirect('player_detail', pk=player.pk)
     else:
         form = PlayerEditForm(instance=player, request=request)
@@ -142,21 +152,23 @@ def player_edit(request, pk):
 @login_required
 def player_detail(request, pk):
     # Możemy podglądać publiczne lub swoje
+    # Tutaj mała uwaga: Jeśli wchodzisz na "Gościa" (is_guest=True),
+    # to on technicznie jest Twój (owner=request.user), więc ten warunek zadziała poprawnie.
     player = get_object_or_404(Player, pk=pk)
 
     if not (player.is_public or player.owner == request.user):
         raise PermissionDenied("You do not have access to this player.")
 
-    # --- POBIERANIE HISTORII MECZÓW ---
-    # Szukamy meczów, w których ten gracz jest na liście 'players'
-    # Sortujemy: najpierw data malejąco (-date), potem czas malejąco (-time)
-    # [:5] ogranicza listę do 5 ostatnich wyników (żeby nie zapchać profilu)
-    recent_matches = Match.objects.filter(players=player).order_by('-date', '-time')[:5]
-    # -------------------------------------------
+    # --- POBIERANIE HISTORII MECZÓW (POPRAWIONE) ---
+    # Używamy Q, żeby sprawdzić czy gracz jest w player1 LUB w player2
+    recent_matches = Match.objects.filter(
+        Q(player1=player) | Q(player2=player)
+    ).order_by('-date', '-time')[:5]
+    # -----------------------------------------------
 
     return render(request, 'player_detail.html', {
         'player': player,
-        'matches': recent_matches  # Przekazujemy mecze do szablonu
+        'matches': recent_matches
     })
 
 
@@ -310,33 +322,60 @@ def match_list(request):
 
 @login_required
 def add_match(request):
+    # 1. Sprawdzamy, czy wracamy z importu z konkretnym gościem
+    guest_id = request.GET.get('guest_id')
+
+    # 2. Budujemy QuerySet graczy dostępnych w tym formularzu
+    # Logika: (Moi Zwykli Gracze) LUB (Ten Jeden Konkretny Gość, jeśli istnieje)
+    # Dzięki temu normalnie nie widzisz gości, ale tego jednego teraz zobaczysz.
+
+    # Bazowi gracze (Twoi, nietymczasowi)
+    base_players = Player.objects.filter(owner=request.user, is_guest=False)
+
+    if guest_id:
+        # Jeśli jest guest_id, dodajemy go do puli (upewniając się, że należy do Ciebie)
+        specific_guest = Player.objects.filter(owner=request.user, pk=guest_id)
+        players_queryset = (base_players | specific_guest).distinct().order_by('last_name')
+    else:
+        players_queryset = base_players.order_by('last_name')
+
     if request.method == 'POST':
         form = MatchForm(request.POST, request=request)
+
+        # WAŻNE: Musimy nadpisać queryset w polach formularza PRZED walidacją.
+        # Inaczej Django powie "Wybrany gracz jest nieprawidłowy", bo gość jest ukryty w domyślnym QuerySecie formularza.
+        form.fields['player1'].queryset = players_queryset
+        form.fields['player2'].queryset = players_queryset
+
         if form.is_valid():
             match = form.save(commit=False)
             match.owner = request.user
 
             # ZAPISUJEMY MECZ
-            # Ponieważ formularz ma teraz pola 'player1' i 'player2', one są już przypisane do obiektu 'match'.
-            # Wywołanie .save() uruchomi nasz "Most" w models.py, który sam stworzy obiekty MatchPlayer.
             match.save()
 
-            # Zapisujemy sędziów (relacja ManyToMany)
+            # Zapisujemy sędziów
             form.save_m2m()
 
-            # Obsługa graczy tymczasowych
-            # Jeśli zaznaczono checkbox, ta metoda nadpisze player1/player2 i zaktualizuje bazę.
+            # Obsługa graczy tymczasowych (stworzonych ręcznie z inputa, a nie z kodu)
             form.create_temp_players_if_needed(match)
-
-            # --- CZYSZCZENIE ---
-            # Usunęliśmy stąd cały blok "NOWOŚĆ: OBSŁUGA ZWYKŁYCH GRACZY",
-            # bo teraz dzieje się to automatycznie w modelu Match.
 
             return redirect('match_detail', pk=match.pk)
     else:
         form = MatchForm(request=request)
 
-    return render(request, 'add_match.html', {'form': form})
+        # Nadpisujemy queryset, żeby gracz pojawił się na liście rozwijanej
+        form.fields['player1'].queryset = players_queryset
+        form.fields['player2'].queryset = players_queryset
+
+        # UX: Jeśli mamy gościa, ustawiamy go automatycznie w polu Player 2
+        if guest_id:
+            form.fields['player2'].initial = guest_id
+
+    return render(request, 'add_match.html', {
+        'form': form,
+        'guest_id': guest_id  # Przekazujemy do template'u (żeby obsłużyć przycisk Import)
+    })
 
 
 def match_detail(request, pk):
@@ -944,13 +983,13 @@ def add_players_to_competition(request, pk):
 
     if request.method == 'POST':
         player_ids = request.POST.getlist('players')
-        players = Player.objects.filter(id__in=player_ids)
+        players = Player.objects.filter(id__in=player_ids, is_guest=False)
         competition.players.add(*players)
         return redirect('competition_detail', pk=competition.id)
     else:
         # Pokaż tylko moich + publicznych graczy, którzy nie są w tym turnieju
         available_players = Player.objects.filter(
-            Q(owner=request.user) | Q(is_public=True)
+            (Q(owner=request.user) | Q(is_public=True)) & Q(is_guest=False)
         ).exclude(competitions=competition)
 
         return render(request, 'add_players_to_competition.html', {
@@ -1349,8 +1388,8 @@ def get_sorted_players_for_stage(competition, user):
     knockout_stages = list(competition.knockoutstage_stages.all())
     all_stages = sorted(group_stages + knockout_stages, key=lambda x: x.order)
 
-    # 2. BAZA GRACZY: Pobieramy WSZYSTKICH Twoich graczy (bez tymczasowych)
-    all_user_players = set(Player.objects.filter(owner=user, is_temporary=False))
+    # Pobieramy tylko tych graczy, którzy są uczestnikami TEGO turnieju
+    all_user_players = set(competition.players.all())
 
     # Jeśli to pierwszy etap (brak historii etapów), wszyscy Twoi gracze trafiają do 'others'
     if not all_stages:
@@ -1593,4 +1632,277 @@ def manage_groups(request, stage_id):
         'formset': formset,
         'add_form': add_form,
         'competition': competition
+    })
+
+
+@login_required
+def manage_knockout(request, stage_id):
+    stage = get_object_or_404(KnockoutStage, pk=stage_id)
+    competition = stage.competition
+
+    if competition.owner != request.user:
+        raise PermissionDenied
+
+    # Pobieramy mecze 1. rundy do wyświetlenia (żebyś widział kogo zamieniasz)
+    matches_r1 = Match.objects.filter(knockout_stage=stage, round_number=1).order_by('id')
+
+    if request.method == 'POST':
+        form = KnockoutSwapForm(request.POST, stage=stage)
+        if form.is_valid():
+            p1 = form.cleaned_data['player_1']
+            p2 = form.cleaned_data['player_2']
+
+            # --- LOGIKA SWAP (ZAMIANA) ---
+            # Musimy znaleźć mecze, w których Ci gracze są
+            # Uwaga: Mogą być w tym samym meczu (zamiana gospodarz/gość) lub w różnych
+
+            # Szukamy meczu dla P1
+            m1 = matches_r1.filter(player1=p1).first() or matches_r1.filter(player2=p1).first()
+            # Szukamy meczu dla P2
+            m2 = matches_r1.filter(player1=p2).first() or matches_r1.filter(player2=p2).first()
+
+            if m1 and m2:
+                # Jeśli to ten sam mecz -> prosta zamiana stron
+                if m1 == m2:
+                    m1.player1, m1.player2 = m1.player2, m1.player1
+                    m1.save()
+                else:
+                    # Różne mecze -> Krzyżowa zamiana
+                    # 1. Gdzie w m1 jest p1?
+                    if m1.player1 == p1:
+                        m1.player1 = p2
+                    else:
+                        m1.player2 = p2
+
+                    # 2. Gdzie w m2 jest p2?
+                    if m2.player1 == p2:
+                        m2.player1 = p1
+                    else:
+                        m2.player2 = p1
+
+                    m1.save()
+                    m2.save()
+
+                messages.success(request, f"Swapped {p1} with {p2}.")
+                return redirect('manage_knockout', stage_id=stage.id)
+            else:
+                messages.error(request, "Could not find matches for selected players.")
+    else:
+        form = KnockoutSwapForm(stage=stage)
+
+    return render(request, 'manage_knockout.html', {
+        'stage': stage,
+        'competition': competition,
+        'matches': matches_r1,
+        'form': form
+    })
+
+
+# 1. GENEROWANIE KODU (Dla Gościa)
+@login_required
+def generate_token(request):
+    """Generuje 6-cyfrowy kod ważny 90 sekund i odsyła go (np. do modala)."""
+    # Usuwamy stare tokeny usera, żeby nie śmiecić
+    SharingToken.objects.filter(owner=request.user).delete()
+
+    # Generujemy cyfry
+    new_code = get_random_string(length=6, allowed_chars='0123456789')
+
+    SharingToken.objects.create(
+        owner=request.user,
+        code=new_code
+    )
+
+    # Jeśli to żądanie AJAX, można zwrócić JSON, ale tutaj proste przekierowanie/message
+    # W praktyce najlepiej zrobić to jako API, ale na razie zróbmy prosto:
+    messages.success(request, f"Your Code: {new_code} (Valid for 90 seconds)")
+    # Przekieruj tam skąd przyszedł (np. do profilu)
+    return redirect(request.META.get('HTTP_REFERER', 'player_list'))
+
+
+# 2. IMPORTOWANIE GRACZY (Dla Organizatora)
+
+
+@login_required
+def import_players_to_competition(request, comp_id):
+    competition = get_object_or_404(Competition, pk=comp_id)
+
+    code_form = ImportCodeForm(request.POST or None)
+    select_form = None
+    token_owner = None
+
+    if request.method == 'POST':
+        # --- KROK 1: Sprawdzenie kodu ---
+        if 'check_code' in request.POST and code_form.is_valid():
+            code = code_form.cleaned_data['code']
+            try:
+                token = SharingToken.objects.get(code=code)
+                if token.is_valid():
+                    token_owner = token.owner
+                    # Szukamy graczy u właściciela tokena
+                    found_players = Player.objects.filter(owner=token_owner)
+
+                    if not found_players.exists():
+                        messages.warning(request, "Code valid, but user has no players.")
+                    else:
+                        select_form = SelectImportedPlayersForm(found_players=found_players)
+                else:
+                    code_form.add_error('code', "Code expired.")
+            except SharingToken.DoesNotExist:
+                code_form.add_error('code', "Invalid code.")
+
+        # --- KROK 2: Import (Klonowanie jako GOŚĆ) ---
+        elif 'confirm_import' in request.POST:
+            player_ids = request.POST.getlist('selected_players')
+            if player_ids:
+                source_players = Player.objects.filter(id__in=player_ids)
+                count = 0
+
+                for source in source_players:
+                    suffix = f" ({source.owner.username})"
+
+                    # Logika nazwy (żeby była unikalna i czytelna)
+                    new_last_name = source.last_name + suffix if source.last_name else ""
+                    new_first_name = source.first_name
+                    new_nickname = source.nickname
+
+                    if not new_last_name:
+                        if new_nickname:
+                            new_nickname += suffix
+                        else:
+                            new_first_name += suffix
+
+                    # Sprawdzenie konfliktu w turnieju (czy taki gracz już tu jest?)
+                    # Sprawdzamy po nazwisku/imieniu LUB po relacji OneToOne z Userem (jeśli istnieje)
+                    is_conflict = False
+                    if source.user:
+                        is_conflict = competition.players.filter(user=source.user).exists()
+
+                    # Możesz tu dodać sprawdzenie po nazwach stringowych, jeśli chcesz być bardzo ścisły
+
+                    if not is_conflict:
+                        # TWORZYMY KLONA-GOŚCIA
+                        new_guest = Player.objects.create(
+                            owner=request.user,
+                            user=source.user,
+                            is_guest=True,  # <--- KLUCZOWA ZMIANA: To jest Gość
+                            first_name=new_first_name,
+                            last_name=new_last_name,
+                            nickname=new_nickname,
+                            # photo=source.photo
+                        )
+                        # Dodajemy go do turnieju
+                        competition.players.add(new_guest)
+                        count += 1
+
+                messages.success(request, f"Imported {count} guests to the tournament.")
+                return redirect('competition_detail', pk=competition.id)
+            else:
+                messages.error(request, "No players selected.")
+
+    return render(request, 'import_players.html', {
+        'competition': competition,  # Ważne dla przycisku Cancel
+        'code_form': code_form,
+        'select_form': select_form,
+        'token_owner': token_owner
+    })
+
+
+@login_required
+def import_guest_for_match(request):
+    """
+    Importuje gościa specjalnie dla pojedynczego meczu.
+    Po sukcesie wraca do add_match z parametrem ?guest=ID
+    """
+    code_form = ImportCodeForm(request.POST or None)
+
+    # Jeśli wejście GET (wyświetlenie formularza)
+    if request.method == 'GET':
+        return render(request, 'import_players.html', {
+            'code_form': code_form,
+            'is_match_import': True  # Flaga dla template'u
+        })
+
+    # Jeśli wejście POST (zatwierdzenie kodu)
+    if request.method == 'POST':
+        if 'check_code' in request.POST and code_form.is_valid():
+            code = code_form.cleaned_data['code']
+            try:
+                token = SharingToken.objects.get(code=code)
+                if token.is_valid():
+                    # Pokaż formularz wyboru (ten sam mechanizm co wcześniej)
+                    found_players = Player.objects.filter(owner=token.owner)
+                    select_form = SelectImportedPlayersForm(found_players=found_players)
+                    return render(request, 'import_players.html', {
+                        'code_form': code_form,
+                        'select_form': select_form,
+                        'token_owner': token.owner,
+                        'is_match_import': True
+                    })
+                else:
+                    code_form.add_error('code', "Code expired.")
+            except SharingToken.DoesNotExist:
+                code_form.add_error('code', "Invalid code.")
+
+        elif 'confirm_import' in request.POST:
+            player_ids = request.POST.getlist('selected_players')
+            if player_ids:
+                # Bierzemy pierwszego zaznaczonego (do meczu zazwyczaj 1 vs 1)
+                # Ale pętla obsłuży, jakbyś zaznaczył kilku, weźmiemy ostatniego jako "Active"
+                last_created_id = None
+
+                source_players = Player.objects.filter(id__in=player_ids)
+                for source in source_players:
+                    suffix = f" ({source.owner.username})"
+
+                    new_last_name = source.last_name + suffix if source.last_name else ""
+                    new_first_name = source.first_name
+                    new_nickname = source.nickname
+
+                    if not new_last_name:
+                        if new_nickname:
+                            new_nickname += suffix
+                        else:
+                            new_first_name += suffix
+
+                    # Tworzymy Gościa (is_guest=True)
+                    new_guest = Player.objects.create(
+                        owner=request.user,
+                        user=source.user,
+                        is_guest=True,
+                        first_name=new_first_name,
+                        last_name=new_last_name,
+                        nickname=new_nickname,
+                    )
+                    last_created_id = new_guest.id
+
+                messages.success(request, "Guest imported for the match.")
+                # WRACAMY DO ADD MATCH Z ID GRACZA
+                return redirect(f"{reverse('add_match')}?guest_id={last_created_id}")
+            else:
+                messages.error(request, "No players selected.")
+
+    return render(request, 'import_players.html', {'code_form': code_form})
+
+
+@login_required
+def my_global_stats(request):
+    """
+    Sumuje statystyki ze wszystkich 'wcieleń' gracza (Oryginał + Klony u innych).
+    """
+    # Znajdź wszystkie instancje graczy powiązane z Twoim kontem User
+    my_avatars = Player.objects.filter(user=request.user)
+
+    # Agregacja danych
+    stats = my_avatars.aggregate(
+        total_wins=Sum('matches_won'),
+        total_matches=Sum('matches_played'),
+        global_max_break=Max('highest_break'),
+        total_centuries=Sum('centuries_count'),
+        total_points=Sum('total_career_points')
+    )
+
+    return render(request, 'global_stats.html', {
+        'stats': stats,
+        'avatars_count': my_avatars.count()  # Ile razy zostałeś sklonowany/użyty
     })

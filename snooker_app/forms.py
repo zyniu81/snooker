@@ -404,8 +404,8 @@ class GroupStageForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if self.competition:
-            owner = self.competition.owner
-            self.fields['players'].queryset = Player.objects.filter(owner=owner, is_temporary=False)
+            # ZMIANA: Pobieramy tylko graczy z tego turnieju (zamiast wszystkich z bazy)
+            self.fields['players'].queryset = self.competition.players.all()
 
             # Domyślne zaznaczanie (logika bez zmian)
             if self.winner_list:
@@ -442,8 +442,8 @@ class KnockoutStageForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if self.competition:
-            owner = self.competition.owner
-            self.fields['players'].queryset = Player.objects.filter(owner=owner, is_temporary=False)
+            # ZMIANA: Pobieramy tylko graczy z tego turnieju
+            self.fields['players'].queryset = self.competition.players.all()
 
             if self.winner_list:
                 self.fields['players'].initial = [p.id for p in self.winner_list]
@@ -691,3 +691,69 @@ class AddPlayerToGroupForm(forms.Form):
             ).exclude(id__in=players_in_stage.values('id'))
 
             self.fields['group'].queryset = Group.objects.filter(stage=self.stage)
+
+
+class KnockoutSwapForm(forms.Form):
+    player_1 = forms.ModelChoiceField(
+        queryset=Player.objects.none(),
+        label="Player A",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    player_2 = forms.ModelChoiceField(
+        queryset=Player.objects.none(),
+        label="Swap with Player B",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    def __init__(self, *args, **kwargs):
+        stage = kwargs.pop('stage', None)
+        super().__init__(*args, **kwargs)
+        if stage:
+            # Pobieramy graczy TYLKO z 1. rundy tego etapu
+            # (Tylko w 1. rundzie są "żywi" gracze na starcie)
+            r1_matches = Match.objects.filter(knockout_stage=stage, round_number=1)
+
+            p_ids = set()
+            for m in r1_matches:
+                if m.player1: p_ids.add(m.player1.id)
+                if m.player2: p_ids.add(m.player2.id)
+
+            self.fields['player_1'].queryset = Player.objects.filter(id__in=p_ids).order_by('last_name')
+            self.fields['player_2'].queryset = Player.objects.filter(id__in=p_ids).order_by('last_name')
+
+    def clean(self):
+        cleaned_data = super().clean()
+        p1 = cleaned_data.get("player_1")
+        p2 = cleaned_data.get("player_2")
+
+        if p1 == p2:
+            raise forms.ValidationError("Please select two different players to swap.")
+
+        return cleaned_data
+
+
+# Formularz wpisywania kodu
+class ImportCodeForm(forms.Form):
+    code = forms.CharField(
+        label="Enter 6-digit Code",
+        max_length=6,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg text-center letter-spacing-2',
+            'placeholder': '######',
+            'style': 'letter-spacing: 5px; font-size: 1.5rem;'
+        })
+    )
+
+# Formularz wyboru graczy (z checkboxami)
+class SelectImportedPlayersForm(forms.Form):
+    selected_players = forms.ModelMultipleChoiceField(
+        queryset=Player.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        label="Select players to import"
+    )
+
+    def __init__(self, *args, **kwargs):
+        found_players = kwargs.pop('found_players', None)
+        super().__init__(*args, **kwargs)
+        if found_players:
+            self.fields['selected_players'].queryset = found_players
