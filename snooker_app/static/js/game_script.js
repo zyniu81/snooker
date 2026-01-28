@@ -1288,6 +1288,7 @@ function finalizeFrameEnd() {
     .then(data => {
         if (data.status === 'success') {
             console.log("Frame saved successfully!");
+            isUnsafeToLeave = false;
             updateVisualsAndReset(winnerPosition);
             if (data.match_over) {
                 setTimeout(() => {

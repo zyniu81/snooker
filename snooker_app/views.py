@@ -19,6 +19,7 @@ from django.utils.safestring import mark_safe
 from django.urls import reverse
 from django.db import transaction
 from django.utils.crypto import get_random_string
+from .services import update_career_stats
 
 import os
 from openai import OpenAI
@@ -1001,8 +1002,9 @@ def add_players_to_competition(request, pk):
 @login_required
 def achievement_list(request):
     # Sortujemy np. po najwyższym breaku malejąco
+    # ZMIANA: Dodano warunek & Q(is_guest=False)
     players = Player.objects.filter(
-        Q(owner=request.user) | Q(is_public=True)
+        (Q(owner=request.user) | Q(is_public=True)) & Q(is_guest=False)
     ).order_by('-highest_break')
 
     # Przekazujemy listę graczy do szablonu (zamiast achievements)
@@ -1212,6 +1214,8 @@ def save_frame_result(request):
         last_frame.total_shots_player2 = p2_shots
         last_frame.misses_player1 = p1_misses
         last_frame.misses_player2 = p2_misses
+        last_frame.potted_balls_player1 = p1_pots
+        last_frame.potted_balls_player2 = p2_pots
         last_frame.pot_success_percentage_player1 = p1_success_rate
         last_frame.pot_success_percentage_player2 = p2_success_rate
         last_frame.safety_shot_player1 = p1_safeties
@@ -1249,6 +1253,11 @@ def save_frame_result(request):
                 winner_name = str(match_winner_obj)
             else:
                 winner_name = "Draw"
+
+            players_in_match = [mp.player for mp in match_players]
+            for p in players_in_match:
+                if p:
+                    update_career_stats(p)
 
         if not match_over:
             new_frame_number = last_frame.frame_number + 1

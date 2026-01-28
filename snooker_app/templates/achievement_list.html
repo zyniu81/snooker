@@ -1,46 +1,285 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block content %}
-{% load static %}
-<div class="container">
-    <h2>Achievements</h2>
-    <div class="row mt-5">
-        <div class="col-md-12">
-            <table id="achievements-table" class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Player</th>
-                        <th><a href="#" class="column-chart" data-column="tournaments_won">Tournaments Won</a></th>
-                        <th><a href="#" class="column-chart" data-column="matches_won">Matches Won</a></th>
-                        <th><a href="#" class="column-chart" data-column="frames_won">Frames Won</a></th>
-                        <th><a href="#" class="column-chart" data-column="frames_lost">Frames Lost</a></th>
-                        <th><a href="#" class="column-chart" data-column="fastest_frame_won">Fastest Frame Won</a></th>
-                        <th><a href="#" class="column-chart" data-column="longest_frame_won">Longest Frame Won</a></th>
-                        <th><a href="#" class="column-chart" data-column="consecutive_frames_won">Consecutive Frames Won</a></th>
-                        <th><a href="#" class="column-chart" data-column="consecutive_matches_won">Consecutive Matches Won</a></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for achievement in achievements %}
-                    <tr>
-                        <td>{{ achievement.player }}</td>
-                        <td>{{ achievement.tournaments_won }}</td>
-                        <td>{{ achievement.matches_won }}</td>
-                        <td>{{ achievement.frames_won }}</td>
-                        <td>{{ achievement.frames_lost }}</td>
-                        <td>{{ achievement.fastest_frame_won }}</td>
-                        <td>{{ achievement.longest_frame_won }}</td>
-                        <td>{{ achievement.consecutive_frames_won }}</td>
-                        <td>{{ achievement.consecutive_matches_won }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            <canvas id="myChart" width="800" height="400"></canvas>
+<div class="container-fluid mt-4 mb-5 px-4"> <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0"><i class="bi bi-trophy-fill text-warning me-2"></i>Hall of Fame</h2>
+            <p class="text-muted">Ranking based on local statistics.</p>
+        </div>
+    </div>
+
+    <div class="card shadow border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle caption-top" id="statsTable">
+                    <thead class="table-dark text-uppercase small align-middle" style="position: sticky; top: 0; z-index: 100;">
+                        <tr class="text-center border-bottom border-secondary">
+                            <th class="ps-4 text-start py-3" onclick="sortTable(0)" style="cursor: pointer;">#</th>
+                            <th class="text-start py-3" onclick="sortTable(1)" style="cursor: pointer;">Player</th>
+
+                            <th class="border-start border-secondary py-3" onclick="sortTable(2)" style="cursor: pointer;">Matches</th>
+                            <th class="py-3" onclick="sortTable(3)" style="cursor: pointer;">Won</th>
+                            <th class="py-3" onclick="sortTable(4)" style="cursor: pointer;">Lost</th>
+                            <th class="py-3 text-info" onclick="sortTable(5)" style="cursor: pointer;">% Win</th>
+
+                            <th class="border-start border-secondary py-3" onclick="sortTable(6)" style="cursor: pointer;">Frames</th>
+                            <th class="py-3" onclick="sortTable(7)" style="cursor: pointer;">Won</th>
+                            <th class="py-3" onclick="sortTable(8)" style="cursor: pointer;">Lost</th>
+                            <th class="py-3 text-info" onclick="sortTable(9)" style="cursor: pointer;">% Win</th>
+
+                            <th class="border-start border-secondary py-3 text-white-50" title="Fastest Frame" onclick="sortTable(10)" style="cursor: pointer;">Fastest</th>
+                            <th class="py-3 text-white-50" title="Longest Frame" onclick="sortTable(11)" style="cursor: pointer;">Longest</th>
+                            <th class="py-3 text-white-50" title="Average Frame Time" onclick="sortTable(12)" style="cursor: pointer;">Avg Frame</th>
+
+                            <th class="border-start border-secondary py-3" title="Deciding frames" onclick="sortTable(13)" style="cursor: pointer;">Deciders</th>
+                            <th class="py-3" onclick="sortTable(14)" style="cursor: pointer;">Whitewash</th>
+
+                            <th class="border-start border-secondary py-3" title="Longest Winning Streak" onclick="sortTable(15)" style="cursor: pointer;">Streak (M)</th>
+                            <th class="py-3" title="Consecutive Frames Won" onclick="sortTable(16)" style="cursor: pointer;">Streak (F)</th>
+
+                            <th class="border-start border-secondary py-3" onclick="sortTable(17)" style="cursor: pointer;">Pot %</th>
+                            <th class="py-3" onclick="sortTable(18)" style="cursor: pointer;">Safe %</th>
+                            <th class="py-3" onclick="sortTable(19)" style="cursor: pointer;" title="Average Shot Time">AST</th>
+
+                            <th class="border-start border-secondary py-3 text-warning" onclick="sortTable(20)" style="cursor: pointer;">Max</th>
+                            <th class="py-3 text-warning" onclick="sortTable(21)" style="cursor: pointer;">100+</th>
+                            <th class="py-3 text-warning" onclick="sortTable(22)" style="cursor: pointer;">50+</th>
+
+                            <th class="py-3 text-warning pe-4">Other</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for player in players %}
+                        <tr class="text-center">
+                            <td class="ps-4 text-start fw-bold text-muted">{{ forloop.counter }}</td>
+
+                            <td class="text-start">
+                                <div class="d-flex align-items-center">
+                                    <div class="rounded-circle flex-shrink-0 overflow-hidden bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center me-2"
+                                         style="width: 35px; height: 35px; font-weight: bold;">
+                                        {% if player.photo %}
+                                            <img src="{{ player.photo.url }}" alt="{{ player }}" style="width: 100%; height: 100%; object-fit: cover;">
+                                        {% else %}
+                                            <span class="small">
+                                            {% firstof player.first_name player.last_name player.nickname "?" as name_source %}
+                                            {{ name_source|first }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                    <a href="{% url 'player_detail' player.id %}" class="text-decoration-none fw-bold text-dark">
+                                        {{ player }}
+                                    </a>
+                                </div>
+                            </td>
+
+                            <td class="border-start fw-bold">{{ player.matches_played }}</td>
+                            <td class="text-success">{{ player.matches_won }}</td>
+                            <td class="text-danger">{{ player.matches_lost }}</td>
+                            <td>
+                                {% if player.matches_played > 0 %}
+                                    <span class="badge bg-light text-dark border">
+                                        {% widthratio player.matches_won player.matches_played 100 %}%
+                                    </span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+
+                            <td class="border-start fw-bold">{{ player.frames_played }}</td>
+                            <td class="text-success">{{ player.frames_won }}</td>
+                            <td class="text-danger">{{ player.frames_lost }}</td>
+                            <td>
+                                {% if player.frames_played > 0 %}
+                                    <span class="badge bg-light text-dark border">
+                                        {% widthratio player.frames_won player.frames_played 100 %}%
+                                    </span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+
+                            <td class="border-start small">{{ player.formatted_fastest_frame }}</td>
+                            <td class="small">{{ player.formatted_longest_frame }}</td>
+                            <td class="small fw-bold">{{ player.formatted_avg_frame }}</td>
+
+                            <td class="border-start">
+                                {% if player.deciders_played > 0 %}
+                                    <span class="fw-bold">{{ player.deciders_won }}</span>/<span class="text-muted small">{{ player.deciders_played }}</span>
+                                    <br>
+                                    <small class="text-muted">
+                                        ({% widthratio player.deciders_won player.deciders_played 100 %}%)
+                                    </small>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if player.whitewashes_count > 0 %}
+                                    <span class="fw-bold text-primary">{{ player.whitewashes_count }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+
+                            <td class="border-start fw-bold text-dark">{{ player.consecutive_matches_won }}</td>
+                            <td class="text-muted">{{ player.consecutive_frames_won }}</td>
+
+                            <td class="border-start">{{ player.global_pot_success|floatformat:0 }}%</td>
+                            <td>{{ player.global_safety_success|floatformat:0 }}%</td>
+                            <td class="small">{{ player.formatted_avg_shot_time }}</td>
+
+                            <td class="border-start bg-warning bg-opacity-10">
+                                {% if player.max_breaks_count > 0 %}
+                                    <span class="badge bg-danger rounded-pill">{{ player.max_breaks_count }}</span>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="bg-warning bg-opacity-10">
+                                {% if player.centuries_count > 0 %}
+                                    <span class="fw-bold text-dark">{{ player.centuries_count }}</span>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="bg-warning bg-opacity-10">
+                                {% if player.fifties_count > 0 %}
+                                    <span class="text-dark">{{ player.fifties_count }}</span>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="bg-warning bg-opacity-10 pe-4">
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-link text-dark p-0"
+                                            type="button"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false">
+                                        <i class="bi bi-caret-down-fill"></i>
+                                    </button>
+
+                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0"
+                                        style="min-width: 160px;">
+                                        <li><h6 class="dropdown-header text-uppercase small fw-bold text-warning">Break Stats</h6></li>
+                                        <li><hr class="dropdown-divider my-1"></li>
+
+                                        {% for key, value in player.career_break_stats.items %}
+                                            {% if value > 0 %}
+                                            <li class="d-flex justify-content-between align-items-center px-3 py-1 hover-bg-light">
+                                                <span class="text-muted small">{{ key }}:</span>
+                                                <span class="fw-bold text-dark">{{ value }}</span>
+                                            </li>
+                                            {% endif %}
+                                        {% endfor %}
+
+                                        {% if player.highest_break == 0 %}
+                                            <li class="px-3 py-2 text-center text-muted small fst-italic">No breaks yet</li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </td>
+
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="16" class="text-center py-5 text-muted">
+                                No statistics available yet. Play some matches!
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="{% static 'js/chart.js' %}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // Automatyczne sortowanie po kolumnie 5 (% Win Matches)
+    sortTable(5, true);
+});
+
+function sortTable(n, forceDesc = false) {
+  var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+  // UPEWNIJ SIĘ ŻE TABELA MA ID="statsTable"
+  table = document.getElementById("statsTable");
+  switching = true;
+  dir = "desc";
+
+  while (switching) {
+    switching = false;
+    rows = table.rows;
+    for (i = 1; i < (rows.length - 1); i++) {
+      shouldSwitch = false;
+      x = rows[i].getElementsByTagName("TD")[n];
+      y = rows[i + 1].getElementsByTagName("TD")[n];
+
+      var xContent = parseContent(x.innerText);
+      var yContent = parseContent(y.innerText);
+
+      if (forceDesc) dir = "desc";
+
+      if (dir == "asc") {
+        if (xContent > yContent) { shouldSwitch = true; break; }
+      } else if (dir == "desc") {
+        if (xContent < yContent) { shouldSwitch = true; break; }
+      }
+    }
+    if (shouldSwitch) {
+      rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+      switching = true;
+      switchcount ++;
+    } else {
+      if (switchcount == 0 && dir == "desc" && !forceDesc) {
+        dir = "asc";
+        switching = true;
+      }
+    }
+  }
+}
+
+function parseContent(content) {
+    content = content.trim();
+    if (content === "-" || content === "" || content === "N/A") return -1;
+
+    // Obsługa czasów (np. 1:05:20)
+    if (content.includes(":")) {
+        var parts = content.split(":").reverse();
+        var seconds = 0;
+        if (parts[0]) seconds += parseInt(parts[0]);
+        if (parts[1]) seconds += parseInt(parts[1]) * 60;
+        if (parts[2]) seconds += parseInt(parts[2]) * 3600;
+        return seconds;
+    }
+    // Obsługa procentów
+    if (content.includes("%")) return parseFloat(content.replace("%", ""));
+    // Obsługa Deciderów "1/2" -> bierzemy 1
+    if (content.includes("/")) return parseFloat(content.split("/")[0]);
+
+    var parsed = parseFloat(content);
+    return isNaN(parsed) ? content.toLowerCase() : parsed;
+}
+</script>
+
+<style>
+    /* Drobne poprawki, żeby tabela była czytelna */
+    #statsTable th {
+        font-size: 0.85rem;
+        vertical-align: middle;
+    }
+    #statsTable td {
+        font-size: 0.95rem;
+    }
+    .popover-body {
+        padding: 0.5rem 1rem;
+    }
+    /* --- Dopisz to wewnątrz znacznika <style> --- */
+    thead th:hover {
+        background-color: #343a40 !important; /* Jaśniejszy szary przy najechaniu */
+        transition: background-color 0.2s;
+    }
+</style>
 {% endblock %}

@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.auth.models import User
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
 from datetime import timedelta
@@ -20,31 +20,29 @@ class Player(models.Model):
     is_public = models.BooleanField(default=False)
     is_temporary = models.BooleanField(default=False)
     is_guest = models.BooleanField(default=False,
-                                   help_text="Is this a player imported only for the tournament "
-                                             "(not visible in the library)?")
+                                   help_text="Is this a player imported only for the tournament (not visible in the library)?")
 
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
     nickname = models.CharField(max_length=30, blank=True, null=True)
-
     photo = models.ImageField(upload_to='players_photos/', blank=True, null=True)
 
     # --- 2. STATYSTYKI MECZOWE (Kariera) ---
     matches_played = models.IntegerField(default=0)
     matches_won = models.IntegerField(default=0)
-    matches_drawn = models.IntegerField(default=0)  # Nowość
+    matches_drawn = models.IntegerField(default=0)
     matches_lost = models.IntegerField(default=0)
 
     # --- 3. STATYSTYKI FRAME'ÓW (Kariera) ---
-    # To jest kluczowe do tabel ligowych (bilans małych punktów/framów)
     frames_played = models.IntegerField(default=0)
     frames_won = models.IntegerField(default=0)
     frames_lost = models.IntegerField(default=0)
+    fastest_frame_time = models.DurationField(blank=True, null=True, help_text="Najkrótsza rozegrana partia")
+    longest_frame_time = models.DurationField(blank=True, null=True, help_text="Najdłuższa rozegrana partia")
+    avg_frame_time = models.DurationField(blank=True, null=True, help_text="Średni czas trwania partii")
 
     # --- 4. PUNKTY I TECHNIKA ---
     total_career_points = models.BigIntegerField(default=0, help_text="Suma wszystkich wbitych punktów")
-
-    # Średnie statystyki (aktualizowane po każdym meczu)
     global_pot_success = models.FloatField(default=0.0, help_text="Średnia skuteczność wbić z kariery (%)")
     global_safety_success = models.FloatField(default=0.0, help_text="Średnia skuteczność odstawnych z kariery (%)")
     avg_shot_time = models.DurationField(blank=True, null=True, help_text="Średni czas na uderzenie")
@@ -53,9 +51,22 @@ class Player(models.Model):
     highest_break = models.IntegerField(default=0)
     centuries_count = models.IntegerField(default=0, help_text="Liczba breaków 100+")
     fifties_count = models.IntegerField(default=0, help_text="Liczba breaków 50+")
+    max_breaks_count = models.IntegerField(default=0, help_text="Liczba breaków maksymalnych (147, 155, 167)")
 
     # Histogram breaków kariery (np. {"10-19": 150, "20-29": 40...})
     career_break_stats = models.JSONField(default=dict, blank=True)
+
+    # --- 6. SPECJALNE OSIĄGNIĘCIA (Nowość) ---
+    deciders_played = models.IntegerField(default=0, help_text="Liczba rozegranych partii rozstrzygających")
+    deciders_won = models.IntegerField(default=0, help_text="Liczba wygranych partii rozstrzygających")
+    whitewashes_count = models.IntegerField(default=0, help_text="Liczba meczów wygranych do zera")
+
+    # --- 7. SERIE (Streaks) ---
+    consecutive_matches_won = models.IntegerField(default=0, help_text="Rekordowa seria wygranych meczów z rzędu")
+    current_match_streak = models.IntegerField(default=0, help_text="Aktualna seria wygranych meczów (robocze)")
+
+    consecutive_frames_won = models.IntegerField(default=0, help_text="Rekordowa seria wygranych frame'ów z rzędu")
+    current_frame_streak = models.IntegerField(default=0, help_text="Aktualna seria wygranych frame'ów (robocze)")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -82,8 +93,6 @@ class Player(models.Model):
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         super().save(*args, **kwargs)
-
-        # Automatyczne nadawanie nazwy jeśli pusta
         if is_new and not (self.first_name or self.last_name or self.nickname):
             self.first_name = f'Player {self.id}'
             super().save(update_fields=['first_name'])
@@ -93,7 +102,28 @@ class Player(models.Model):
             total_seconds = int(self.avg_shot_time.total_seconds())
             minutes, seconds = divmod(total_seconds, 60)
             return f'{minutes}:{seconds:02}'
-        return "N/A"
+        return "-"
+
+    def formatted_fastest_frame(self):
+        return self._format_duration(self.fastest_frame_time)
+
+    def formatted_longest_frame(self):
+        return self._format_duration(self.longest_frame_time)
+
+    def formatted_avg_frame(self):
+        return self._format_duration(self.avg_frame_time)
+
+    def _format_duration(self, duration):
+        """Pomocnicza funkcja do formatowania czasu MM:SS"""
+        if duration:
+            total_seconds = int(duration.total_seconds())
+            minutes, seconds = divmod(total_seconds, 60)
+            # Jeśli gra trwała ponad godzinę, dodaj godziny (opcjonalnie)
+            hours, minutes = divmod(minutes, 60)
+            if hours > 0:
+                return f'{hours}:{minutes:02}:{seconds:02}'
+            return f'{minutes}:{seconds:02}'
+        return "-"
 
 
 class Venue(models.Model):
@@ -280,30 +310,13 @@ class Match(models.Model):
     final_score_player1 = models.IntegerField(default=0, help_text="Wygrane frame'y P1")
     final_score_player2 = models.IntegerField(default=0, help_text="Wygrane frame'y P2")
 
-    total_points_player1 = models.IntegerField(default=0, help_text="Suma małych punktów P1")
-    total_points_player2 = models.IntegerField(default=0, help_text="Suma małych punktów P2")
-
     # --- 5. STATYSTYKI CZASOWE ---
     total_duration = models.DurationField(blank=True, null=True, help_text="Suma czasu gry netto")
     avg_frame_time = models.DurationField(blank=True, null=True)
     min_frame_time = models.DurationField(blank=True, null=True)
     max_frame_time = models.DurationField(blank=True, null=True)
 
-    # --- 6. STATYSTYKI TECHNICZNE (Średnie/Sumy) ---
-    pot_success_p1 = models.FloatField(default=0.0)
-    pot_success_p2 = models.FloatField(default=0.0)
-
-    safety_success_p1 = models.FloatField(default=0.0)
-    safety_success_p2 = models.FloatField(default=0.0)
-
-    total_fouls_p1 = models.IntegerField(default=0)
-    total_fouls_p2 = models.IntegerField(default=0)
-    foul_points_conceded_p1 = models.IntegerField(default=0)
-    foul_points_conceded_p2 = models.IntegerField(default=0)
-
     # --- 7. BREAKI I SERIE ---
-    highest_break_p1 = models.IntegerField(default=0)
-    highest_break_p2 = models.IntegerField(default=0)
 
     highest_break_frame_p1 = models.ForeignKey('Frame', on_delete=models.SET_NULL, null=True, blank=True,
                                                related_name='hb_match_p1')
@@ -343,6 +356,16 @@ class Match(models.Model):
         # Formatujemy tak, aby sortowanie tekstowe działało chronologicznie
         # Np. "2023-10-20 14:00:00 125"
         return f"{self.date} {self.time} {self.id}"
+
+    def formatted_duration(self):
+        if self.total_duration:
+            total_seconds = int(self.total_duration.total_seconds())
+            minutes, seconds = divmod(total_seconds, 60)
+            hours, minutes = divmod(minutes, 60)
+            if hours > 0:
+                return f'{hours}:{minutes:02}:{seconds:02}'
+            return f'{minutes}:{seconds:02}'
+        return "-"
 
     class Meta:
         indexes = [
@@ -541,6 +564,82 @@ class Match(models.Model):
 
             if (p1_count + p2_count) == 0:
                 player.delete()
+
+    # --- WIRTUALNE STATYSTYKI MECZU (Poprawione: pobieranie przez MatchPlayer) ---
+
+    # 1. SUMA PUNKTÓW
+    @property
+    def total_points_player1(self):
+        # Używamy globalnego obiektu Frame (tak jak w Twoim get_game_status)
+        return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('points_scored_player1'))[
+            'total'] or 0
+
+    @property
+    def total_points_player2(self):
+        return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('points_scored_player2'))[
+            'total'] or 0
+
+    # 2. NAJWYŻSZY BREAK W MECZU
+    @property
+    def highest_break_p1(self):
+        return Frame.objects.filter(match_player__match=self).aggregate(top=models.Max('max_break_player1'))[
+            'top'] or 0
+
+    @property
+    def highest_break_p2(self):
+        return Frame.objects.filter(match_player__match=self).aggregate(top=models.Max('max_break_player2'))[
+            'top'] or 0
+
+    # 3. SUMA FAULI
+    @property
+    def total_fouls_p1(self):
+        return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('player1_fouls'))[
+            'total'] or 0
+
+    @property
+    def total_fouls_p2(self):
+        return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('player2_fouls'))[
+            'total'] or 0
+
+    # 4. PUNKTY ODDAJĄCE (Z FAULI)
+    @property
+    def foul_points_conceded_p1(self):
+        return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('foul_points_player1'))[
+            'total'] or 0
+
+    @property
+    def foul_points_conceded_p2(self):
+        return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('foul_points_player2'))[
+            'total'] or 0
+
+    # 5. POT SUCCESS
+    @property
+    def pot_success_p1(self):
+        data = Frame.objects.filter(match_player__match=self).aggregate(
+            pots=models.Sum('potted_balls_player1'),
+            misses=models.Sum('misses_player1')
+        )
+        pots = data['pots'] or 0
+        misses = data['misses'] or 0
+        total_shots = pots + misses
+
+        if total_shots == 0:
+            return 0
+        return (pots / total_shots) * 100
+
+    @property
+    def pot_success_p2(self):
+        data = Frame.objects.filter(match_player__match=self).aggregate(
+            pots=models.Sum('potted_balls_player2'),
+            misses=models.Sum('misses_player2')
+        )
+        pots = data['pots'] or 0
+        misses = data['misses'] or 0
+        total_shots = pots + misses
+
+        if total_shots == 0:
+            return 0
+        return (pots / total_shots) * 100
 
 
 class MatchPlayer(models.Model):
@@ -1291,3 +1390,21 @@ class SharingToken(models.Model):
 
     def __str__(self):
         return f"Token {self.code} ({self.owner.username})"
+
+
+# Ten dekorator mówi: "Uruchom mnie, gdy usunięto obiekt Match"
+@receiver(post_delete, sender='snooker_app.Match')
+def update_stats_on_delete(sender, instance, **kwargs):
+    """
+    Automatycznie aktualizuje statystyki graczy po usunięciu meczu.
+    """
+    # Importujemy tutaj, żeby uniknąć błędu "circular import" (pętli importów)
+    from .services import update_career_stats
+
+    print(f"--- USUNIĘTO MECZ! Aktualizuję graczy: {instance.player1} i {instance.player2} ---")
+
+    if instance.player1:
+        update_career_stats(instance.player1)
+
+    if instance.player2:
+        update_career_stats(instance.player2)

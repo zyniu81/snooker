@@ -119,9 +119,9 @@
                         <td class="font-weight-bold">{{ match.total_points_player2 }}</td>
                     </tr>
                     <tr>
-                        <td>{{ match.pot_success_p1|floatformat:1 }}%</td>
+                        <td>{{ match.pot_success_p1|floatformat:0 }}%</td>
                         <td>Pot Success</td>
-                        <td>{{ match.pot_success_p2|floatformat:1 }}%</td>
+                        <td>{{ match.pot_success_p2|floatformat:0 }}%</td>
                     </tr>
                      <tr>
                         <td>{{ match.highest_break_p1 }}</td>
@@ -252,7 +252,7 @@
 
                         <td>
                             {% if frame.winner %}
-                                <span class="badge badge-light border">Finished</span>
+                                <span class="badge badge-light text-dark border">Finished</span>
                             {% else %}
                                 <span class="badge badge-success">In Progress</span>
                             {% endif %}
@@ -275,15 +275,15 @@
                                             </thead>
                                             <tbody>
                                                 <tr>
-                                                    <td class="text-center">{{ frame.pot_success_percentage_player1|floatformat:1 }}%</td>
+                                                    <td class="text-center">{{ frame.pot_success_percentage_player1|floatformat:0 }}%</td>
                                                     <td class="text-center text-muted">Pot Success</td>
-                                                    <td class="text-center">{{ frame.pot_success_percentage_player2|floatformat:1 }}%</td>
+                                                    <td class="text-center">{{ frame.pot_success_percentage_player2|floatformat:0 }}%</td>
                                                 </tr>
                                                 <tr>
                                                     {# Safety Shot to metoda modelu Frame, więc działa #}
-                                                    <td class="text-center">{% widthratio frame.safety_shot_success_rate_player1 1 100 %}%</td>
+                                                    <td class="text-center">{{ frame.safety_shot_success_rate_player1|floatformat:0 }}%</td>
                                                     <td class="text-center text-muted">Safety Success</td>
-                                                    <td class="text-center">{% widthratio frame.safety_shot_success_rate_player2 1 100 %}%</td>
+                                                    <td class="text-center">{{ frame.safety_shot_success_rate_player2|floatformat:0 }}%</td>
                                                 </tr>
                                                 <tr>
                                                     <td class="text-center">{{ frame.max_break_player1|default:0 }}</td>
