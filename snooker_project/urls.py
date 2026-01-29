@@ -83,6 +83,7 @@ urlpatterns = [
     path('competition/<int:comp_id>/import/', views.import_players_to_competition,
          name='import_players_to_competition'),
     path('match/import-guest/', views.import_guest_for_match, name='import_guest_for_match'),
+    path('competition/<int:competition_id>/ranking/', views.competition_ranking, name='competition_ranking'),
 ]
 
 

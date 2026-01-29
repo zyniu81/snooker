@@ -1,6 +1,7 @@
 from django.db.models import Sum, Min, Max, Avg
-from .models import Player, MatchPlayer, Frame
+from .models import Player, MatchPlayer, Frame, CompetitionResult, KnockoutStage, GroupStage, Match
 from datetime import timedelta
+from django.db import transaction
 
 
 def update_career_stats(player):
@@ -214,3 +215,147 @@ def update_career_stats(player):
     player.avg_frame_time = time_stats['average']
 
     player.save()
+
+
+def calculate_competition_results(competition):
+    """
+    Główna funkcja generująca ranking turnieju (CompetitionResult).
+    Obsługuje hybrydy (Grupy -> Puchar) i sam Puchar.
+    """
+
+    # 1. Wyczyść stare wyniki (żeby nie było dubli przy przeliczaniu)
+    CompetitionResult.objects.filter(competition=competition).delete()
+
+    # Zbiór ID graczy, którzy już mają przydzielone miejsce (żeby nie dać im gorszego z wcześniejszego etapu)
+    processed_player_ids = set()
+
+    # 2. Pobierz etapy i ODWRÓĆ kolejność (zaczynamy od Finału, kończymy na Kwalifikacjach)
+    stages = competition.get_stages()  # To Twoja metoda sorted()
+    reversed_stages = list(reversed(stages))
+
+    with transaction.atomic():
+        for stage in reversed_stages:
+
+            # --- SCENARIUSZ A: PUCHAR (KNOCKOUT) ---
+            if isinstance(stage, KnockoutStage):
+                process_knockout_stage(competition, stage, processed_player_ids)
+
+            # --- SCENARIUSZ B: GRUPY (GROUP STAGE) ---
+            elif isinstance(stage, GroupStage):
+                process_group_stage(competition, stage, processed_player_ids)
+
+
+def process_knockout_stage(competition, stage, processed_players):
+    """
+    Analizuje drabinkę.
+    W Twoim modelu: round_number rośnie (1=1/4, 2=1/2, 3=Finał).
+    """
+    # Sprawdź czy był mecz o 3 miejsce (round_number=99)
+    third_place_match = Match.objects.filter(
+        knockout_stage=stage,
+        round_number=99,
+        status='FINISHED'
+    ).first()
+
+    if third_place_match and third_place_match.winner:
+        # Zwycięzca meczu o 3 miejsce
+        create_result(competition, third_place_match.winner, 'THIRD_PLACE', 3, processed_players)
+        # Przegrany meczu o 3 miejsce -> 4 miejsce
+        loser = third_place_match.player1 if third_place_match.winner == third_place_match.player2 else third_place_match.player2
+        create_result(competition, loser, 'FOURTH_PLACE', 4, processed_players)
+
+    # Iterujemy od Finału w dół (np. runda 3, potem 2, potem 1)
+    # stage.num_rounds to np. 3 (dla ćwierćfinałów)
+    for r in range(stage.num_rounds, 0, -1):
+        matches = Match.objects.filter(
+            knockout_stage=stage,
+            round_number=r,
+            status='FINISHED'
+        )
+
+        is_final = (r == stage.num_rounds)
+
+        for match in matches:
+            if not match.winner: continue
+
+            loser = match.player1 if match.winner == match.player2 else match.player2
+
+            if is_final:
+                # ZWYCIĘZCA TURNIEJU (lub tego etapu)
+                create_result(competition, match.winner, 'WINNER', 1, processed_players)
+                # FINALISTA (2 miejsce)
+                create_result(competition, loser, 'RUNNER_UP', 2, processed_players)
+            else:
+                # PRZEGRANI W WCZEŚNIEJSZYCH RUNDACH
+                # Obliczanie miejsca:
+                # Finał (Runda Max) = miejsca 1-2
+                # Półfinał (Runda Max-1) = miejsca 3-4 (czyli rank 3)
+                # Ćwierćfinał (Runda Max-2) = miejsca 5-8 (czyli rank 5)
+                # Last 16 = miejsca 9-16 (czyli rank 9)
+
+                rounds_from_final = stage.num_rounds - r
+                # Wzór: rank = 2^(rounds_from_final) + 1
+                # np. półfinał (1 runda od finału): 2^1 + 1 = 3
+                # np. ćwierćfinał (2 rundy od finału): 2^2 + 1 = 5
+                rank = (2 ** rounds_from_final) + 1
+
+                # Ustalenie nazwy etapu (Last 16, Last 32)
+                # Last X to po prostu rank * 2 - 2 (matematyka drabinki jest piękna)
+                # Ale prościej:
+                # Półfinał -> Top 4
+                # Ćwierćfinał -> Top 8
+                # Last 16 -> Top 16
+                top_x = 2 ** (rounds_from_final + 1)
+
+                create_result(
+                    competition,
+                    loser,
+                    'KNOCKOUT_ROUND',
+                    rank,
+                    processed_players,
+                    detail_number=top_x
+                )
+
+
+def process_group_stage(competition, stage, processed_players):
+    """
+    Analizuje grupy. Daje wyniki tym, którzy NIE wyszli z grup (nie są w processed_players).
+    """
+    for group in stage.groups.all():
+        # Sortujemy: punkty malejąco, bilans, itd.
+        standings = group.standings.all()
+
+        position_in_group = 1
+        for standing in standings:
+            player = standing.player
+
+            # Jeśli gracz nie został przetworzony (czyli nie awansował wyżej w hierarchii turnieju)
+            if player.id not in processed_players:
+                # Obliczamy "wirtualny rank". Trudno o globalny rank w grupach,
+                # więc damy odległy (np. 100 + pozycja w grupie)
+                rank = 100 + position_in_group
+
+                create_result(
+                    competition,
+                    player,
+                    'GROUP_STAGE',
+                    rank,
+                    processed_players,
+                    detail_number=position_in_group  # Tu zapiszemy które miejsce zajął w grupie
+                )
+
+            position_in_group += 1
+
+
+def create_result(competition, player, result_code, rank, processed_set, detail_number=None):
+    if not player: return
+    if player.id in processed_set: return  # Już ma lepszy wynik
+
+    CompetitionResult.objects.create(
+        competition=competition,
+        player=player,
+        result=result_code,
+        rank=rank,
+        detail_number=detail_number
+    )
+    processed_set.add(player.id)

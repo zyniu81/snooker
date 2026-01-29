@@ -145,8 +145,9 @@
                                 <div class="stat-box border-end">
                                     <div class="stat-label">Pot Success</div>
                                     <div class="stat-value text-success">
-                                        {% if player.pot_success_percentage %}
-                                            {{ player.pot_success_percentage }}%
+                                        {# Sprawdzamy czy > 0, bo default w modelu to 0.0 #}
+                                        {% if player.global_pot_success > 0 %}
+                                            {{ player.global_pot_success|floatformat:0 }}%
                                         {% else %}
                                             -
                                         {% endif %}
@@ -156,11 +157,8 @@
                                 <div class="stat-box">
                                     <div class="stat-label">AST</div>
                                     <div class="stat-value">
-                                        {% if player.avg_shot_time %}
-                                            {{ player.avg_shot_time }}s
-                                        {% else %}
-                                            -
-                                        {% endif %}
+                                        {# Używamy gotowej metody z modelu, która sama robi "0:15" albo "-" #}
+                                        {{ player.formatted_avg_shot_time }}
                                     </div>
                                 </div>
 

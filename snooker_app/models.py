@@ -478,7 +478,7 @@ class Match(models.Model):
     def save(self, *args, **kwargs):
         is_new = self.pk is None
 
-        # 1. Aktualizacja cache nazw (To już mieliśmy)
+        # 1. Aktualizacja cache nazw
         names = []
         ids = []
         if self.player1:
@@ -640,6 +640,68 @@ class Match(models.Model):
         if total_shots == 0:
             return 0
         return (pots / total_shots) * 100
+
+    # 6. AST (Average Shot Time) - Średnia meczowa per gracz
+    @property
+    def match_ast_p1(self):
+        # Pobieramy sumę czasu i sumę uderzeń ze wszystkich framów
+        data = Frame.objects.filter(match_player__match=self).aggregate(
+            total_time=models.Sum('time_shots_player1'),
+            total_shots=models.Sum('total_shots_player1')
+        )
+
+        time_sum = data['total_time']
+        shots_sum = data['total_shots'] or 0
+
+        # Zabezpieczenie przed dzieleniem przez zero
+        if not time_sum or shots_sum == 0:
+            return "-"
+
+        # Obliczenie średniej w sekundach
+        avg_seconds = time_sum.total_seconds() / shots_sum
+
+        # Zwracamy format np. "24s"
+        return f"{int(avg_seconds)}s"
+
+    @property
+    def match_ast_p2(self):
+        data = Frame.objects.filter(match_player__match=self).aggregate(
+            total_time=models.Sum('time_shots_player2'),
+            total_shots=models.Sum('total_shots_player2')
+        )
+
+        time_sum = data['total_time']
+        shots_sum = data['total_shots'] or 0
+
+        if not time_sum or shots_sum == 0:
+            return "-"
+
+        avg_seconds = time_sum.total_seconds() / shots_sum
+        return f"{int(avg_seconds)}s"
+
+    # --- CZAS MECZU ---
+
+    @property
+    def match_total_duration(self):
+        # Sumujemy czasy wszystkich framów podpiętych do tego meczu
+        total = Frame.objects.filter(match_player__match=self).aggregate(
+            t=models.Sum('time_duration')
+        )['t']
+        return total  # Zwraca obiekt czasu (timedelta) lub None
+
+    @property
+    def formatted_match_duration(self):
+        # Ta metoda robi ładny napis np. "2h 15m"
+        d = self.match_total_duration
+        if d:
+            total_seconds = int(d.total_seconds())
+            hours, remainder = divmod(total_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+
+            if hours > 0:
+                return f"{hours}h {minutes}m"
+            return f"{minutes}m {seconds}s"
+        return "-"
 
 
 class MatchPlayer(models.Model):
@@ -813,6 +875,12 @@ class Competition(models.Model):
             stages.extend(list(self.knockoutstage_stages.all()))
 
         return sorted(stages, key=lambda x: x.order)
+
+    @property
+    def winner(self):
+        # Pobieramy wynik z CompetitionResult gdzie result to WINNER
+        res = self.results.filter(result='WINNER').first()
+        return res.player if res else None
 
 
 class Stage(models.Model):

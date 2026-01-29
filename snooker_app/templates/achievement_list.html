@@ -281,5 +281,40 @@ function parseContent(content) {
         background-color: #343a40 !important; /* Jaśniejszy szary przy najechaniu */
         transition: background-color 0.2s;
     }
+
+    /* --- STICKY COLUMNS (Blokowanie kolumn) --- */
+
+    /* 1. Kolumna z numerem (#) */
+    #statsTable th:nth-child(1),
+    #statsTable td:nth-child(1) {
+        position: sticky;
+        left: 0;
+        z-index: 10;
+        background-color: #fff; /* Tło musi być, żeby tekst nie prześwitywał */
+    }
+
+    /* 2. Kolumna z Graczem */
+    #statsTable th:nth-child(2),
+    #statsTable td:nth-child(2) {
+        position: sticky;
+        left: 40px; /* Tyle mniej więcej ma pierwsza kolumna. Jak się nakłada, zwiększ tę liczbę */
+        z-index: 10;
+        background-color: #fff;
+        border-right: 2px solid #dee2e6; /* Linia oddzielająca zablokowane od reszty */
+    }
+
+    /* Poprawka dla nagłówka (czarne tło dla zablokowanych nagłówków) */
+    #statsTable thead th:nth-child(1),
+    #statsTable thead th:nth-child(2) {
+        z-index: 100 !important; /* Musi być nad resztą tabeli */
+        background-color: #212529; /* Kolor table-dark */
+        color: white;
+    }
+
+    /* Opcjonalnie: Obsługa hovera (żeby podświetlało się też pod zablokowaną kolumną) */
+    #statsTable tbody tr:hover td:nth-child(1),
+    #statsTable tbody tr:hover td:nth-child(2) {
+        background-color: #e9ecef; /* Kolor podświetlenia bootstrapa */
+    }
 </style>
 {% endblock %}

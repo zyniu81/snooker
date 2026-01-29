@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+            <i class="bi bi-trophy text-warning"></i>
+            {{ competition.name }} - Final Standings
+        </h2>
+        <a href="{% url 'competition_detail' competition.id %}" class="btn btn-secondary">
+            Back to Tournament
+        </a>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Rank</th>
+                        <th>Player</th>
+                        <th>Result</th>
+                        <th class="text-end pe-4">Prize</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for res in results %}
+                    <tr class="{% if res.rank == 1 %}table-warning bg-opacity-25{% elif res.rank == 2 %}table-secondary bg-opacity-25{% endif %}">
+
+                        <td class="ps-4 fw-bold text-secondary" style="width: 80px;">
+                            {% if res.rank == 1 %}
+                                <i class="bi bi-trophy-fill text-warning fs-4"></i>
+                            {% elif res.rank == 2 %}
+                                <span class="badge bg-secondary rounded-pill">2nd</span>
+                            {% elif res.rank == 3 %}
+                                <span class="badge bg-warning text-dark rounded-pill" style="background-color: #cd7f32 !important;">3rd</span>
+                            {% else %}
+                                {{ res.rank }}
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <a href="{% url 'player_detail' res.player.id %}" class="text-decoration-none fw-bold text-dark">
+                                {{ res.player }}
+                            </a>
+                        </td>
+
+                        <td>
+                            {% if res.result == 'WINNER' %}
+                                <span class="fw-bold text-success">Winner</span>
+                            {% elif res.result == 'RUNNER_UP' %}
+                                Runner-up
+                            {% elif res.result == 'THIRD_PLACE' %}
+                                3rd Place
+                            {% elif res.result == 'KNOCKOUT_ROUND' %}
+                                <span class="text-muted">Last {{ res.detail_number }}</span>
+                            {% elif res.result == 'GROUP_STAGE' %}
+                                <span class="text-muted">Group Stage (Pos: {{ res.detail_number }})</span>
+                            {% else %}
+                                {{ res.get_result_display }}
+                            {% endif %}
+                        </td>
+
+                        <td class="text-end pe-4 font-monospace">
+                            {% if res.prize_money %}
+                                ${{ res.prize_money }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            Ranking not available yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

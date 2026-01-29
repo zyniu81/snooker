@@ -41,6 +41,13 @@
             </div>
 
             <div class="d-flex gap-2">
+                {% if competition.status != 'SCHEDULED' %}
+                    {# ZMIANA: Styl dopasowany do Settings/Delete (outline + btn-sm) #}
+                    <a href="{% url 'competition_ranking' competition.id %}" class="btn btn-outline-dark btn-sm">
+                        <i class="bi bi-trophy-fill me-1"></i> Ranking
+                    </a>
+                {% endif %}
+
                 {% if user == competition.owner %}
                 <a href="{% url 'edit_competition' competition.pk %}" class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-gear-fill"></i> Settings

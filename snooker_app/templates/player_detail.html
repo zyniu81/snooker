@@ -25,7 +25,7 @@
         font-size: 3.5rem;
         font-weight: 800;
         margin: 0 auto;
-        border: 5px solid #fff; /* Biała ramka */
+        border: 5px solid #fff;
         box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
         overflow: hidden;
     }
@@ -40,8 +40,11 @@
     .stat-card {
         border: none;
         border-radius: 12px;
-        background-color: #f8f9fa; /* Lekko szary */
+        background-color: #f8f9fa;
         transition: transform 0.2s;
+        height: 100%;
+        padding: 1rem;
+        text-align: center;
     }
 
     .stat-card:hover {
@@ -51,26 +54,28 @@
     }
 
     .stat-title {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         text-transform: uppercase;
         letter-spacing: 1px;
         color: #6c757d;
         font-weight: 600;
+        margin-bottom: 0.5rem;
     }
 
     .stat-number {
-        font-size: 2rem;
+        font-size: 1.8rem;
         font-weight: 800;
         color: #212529;
+        line-height: 1.2;
     }
 
     .stat-subtext {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         color: #adb5bd;
     }
 </style>
 
-<div class="container mt-4">
+<div class="container mt-4 mb-5">
 
     <div class="mb-3">
         <a href="{% url 'player_list' %}" class="text-decoration-none text-muted">
@@ -133,13 +138,26 @@
         {# --- PRAWA KOLUMNA: STATYSTYKI I HISTORIA --- #}
         <div class="col-lg-8">
 
-            <h4 class="fw-bold mb-3">Performance Stats</h4>
+            <h4 class="fw-bold mb-3"><i class="bi bi-bar-chart-line-fill text-primary me-2"></i>Performance Stats</h4>
 
-            <div class="row g-3 mb-4">
+            {# WIERSZ 1: Mecze, Break, AST #}
+            <div class="row g-3 mb-3">
 
-                <div class="col-md-4 col-sm-6">
-                    <div class="card stat-card h-100 p-3 text-center">
-                        <div class="stat-title mb-2">High Break</div>
+                <div class="col-md-4">
+                    <div class="card stat-card d-flex flex-column justify-content-center">
+                        <div class="stat-title">Match Record</div>
+                        <div class="stat-number">
+                            <span class="text-success">{{ player.matches_won }}</span>
+                            <span class="text-muted fs-6 mx-1">/</span>
+                            <span class="text-danger">{{ player.matches_lost }}</span>
+                        </div>
+                        <div class="stat-subtext">Won / Lost ({{ player.matches_played }} Total)</div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card stat-card">
+                        <div class="stat-title">High Break</div>
                         <div class="stat-number text-primary">
                             {{ player.highest_break|default:"-" }}
                         </div>
@@ -147,102 +165,118 @@
                     </div>
                 </div>
 
-                <div class="col-md-4 col-sm-6">
-                    <div class="card stat-card h-100 p-3 text-center">
-                        <div class="stat-title mb-2">Pot Success</div>
-                        <div class="stat-number text-success">
-                            {% if player.pot_success_percentage %}
-                                {{ player.pot_success_percentage|floatformat:1 }}<span class="fs-6">%</span>
-                            {% else %}
-                                -
-                            {% endif %}
-                        </div>
-                        {% if player.pot_success_percentage %}
-                        <div class="progress mt-2" style="height: 6px;">
-                            <div class="progress-bar bg-success" role="progressbar"
-                                 style="width: {{ player.pot_success_percentage }}%"></div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="col-md-4 col-sm-12">
-                    <div class="card stat-card h-100 p-3 text-center">
-                        <div class="stat-title mb-2">Avg Shot Time</div>
+                <div class="col-md-4">
+                    <div class="card stat-card">
+                        <div class="stat-title">Avg Shot Time</div>
                         <div class="stat-number">
-                            {% if player.avg_shot_time %}
-                                {{ player.avg_shot_time }}<span class="fs-6">s</span>
-                            {% else %}
-                                -
-                            {% endif %}
+                            {{ player.formatted_avg_shot_time }}
                         </div>
                         <div class="stat-subtext">Seconds</div>
                     </div>
                 </div>
             </div>
 
-            <div class="card shadow-sm border-0 p-3 mb-4">
-                <div class="row text-center align-items-center">
-                    <div class="col-6 border-end">
-                        <div class="text-muted small text-uppercase">Avg Fouls / Match</div>
-                        <div class="fw-bold fs-5">{{ player.avg_fouls_per_match|default:"0" }}</div>
+            {# WIERSZ 2: Pot Success & Safety Success #}
+            <div class="row g-3 mb-4">
+
+                <div class="col-md-6">
+                    <div class="card stat-card">
+                        <div class="d-flex justify-content-between align-items-end mb-2">
+                            <div class="stat-title mb-0">Pot Success</div>
+                            <div class="fw-bold fs-4 text-success">
+                                {{ player.global_pot_success|floatformat:1 }}<small>%</small>
+                            </div>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-success" role="progressbar"
+                                 style="width: {{ player.global_pot_success|stringformat:'f' }}%"></div>
+                        </div>
                     </div>
-                    <div class="col-6">
-                        <div class="text-muted small text-uppercase">Avg Foul Points</div>
-                        <div class="fw-bold fs-5">{{ player.avg_foul_points_per_match|default:"0" }}</div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card stat-card">
+                        <div class="d-flex justify-content-between align-items-end mb-2">
+                            <div class="stat-title mb-0">Safety Success</div>
+                            <div class="fw-bold fs-4 text-warning">
+                                {{ player.global_safety_success|floatformat:1 }}<small>%</small>
+                            </div>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-warning" role="progressbar"
+                                 style="width: {{ player.global_safety_success|stringformat:'f' }}%"></div>
+                        </div>
                     </div>
                 </div>
             </div>
 
+            {# HISTORIA MECZÓW #}
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="fw-bold mb-0">Recent Matches</h5>
-                {# Opcjonalnie: link do pełnej historii #}
-                </div>
+            </div>
 
             <div class="card shadow-sm border-0">
                 <div class="card-body p-0">
                     {% if matches %}
                         <div class="list-group list-group-flush">
                             {% for match in matches %}
-                                <a href="{% url 'match_detail' match.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <div class="small text-muted" style="font-size: 0.75rem;">
-                                            {{ match.date|date:"d.m.Y" }}
-                                        </div>
-                                        <div class="fw-bold text-dark">
-                                            <span class="text-muted fw-normal small">vs</span>
+                                <a href="{% url 'match_detail' match.pk %}?next={{ request.path }}" class="list-group-item list-group-item-action py-3">
+                                    <div class="row align-items-center">
 
-                                            {# --- TUTAJ BYŁA GŁÓWNA ZMIANA --- #}
-                                            {# Sprawdzamy: Jeśli ja to Player1, pokaż Player2. W przeciwnym razie na odwrót. #}
-                                            {% if match.player1 == player %}
-                                                {{ match.player2 }}
-                                            {% else %}
-                                                {{ match.player1 }}
-                                            {% endif %}
-                                            {# --------------------------------- #}
+                                        {# 1. DATA #}
+                                        <div class="col-3 col-sm-2 text-muted small border-end text-center">
+                                            <div class="fw-bold">{{ match.date|date:"d.m" }}</div>
+                                            <div>{{ match.time|time:"H:i" }}</div>
                                         </div>
-                                    </div>
 
-                                    <div>
-                                        {% if match.status == 'FINISHED' %}
-                                            {# UWAGA: match.final_score_player1 może nie istnieć w modelu Match #}
-                                            {# Jeśli nie masz tych pól, wyświetlamy po prostu 'Finished' #}
-                                            <span class="badge bg-light text-dark border">
-                                                Finished
-                                            </span>
-                                        {% elif match.status == 'IN_PROGRESS' %}
-                                            <span class="badge bg-warning text-dark">LIVE</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary opacity-50">Plan</span>
-                                        {% endif %}
+                                        {# 2. PRZECIWNIK I WYNIK #}
+                                        <div class="col-9 col-sm-10">
+                                            <div class="d-flex justify-content-between align-items-center">
+
+                                                <div class="d-flex align-items-center">
+                                                    <span class="text-muted me-2 small">vs</span>
+                                                    <span class="fw-bold text-dark fs-5">
+                                                        {# Wyświetlamy rywala #}
+                                                        {% if match.player1 == player %}
+                                                            {{ match.player2 }}
+                                                        {% else %}
+                                                            {{ match.player1 }}
+                                                        {% endif %}
+                                                    </span>
+                                                </div>
+
+                                                {# WYNIK / STATUS #}
+                                                <div class="text-end">
+                                                    {% if match.status == 'FINISHED' %}
+                                                        {# Logika wyświetlania wyniku: Mój Wynik - Wynik Rywala #}
+                                                        <div class="fs-5 fw-bold font-monospace">
+                                                            {% if match.player1 == player %}
+                                                                <span class="{% if match.winner == player %}text-success{% else %}text-danger{% endif %}">{{ match.final_score_player1 }}</span>
+                                                                <span class="text-muted mx-1">:</span>
+                                                                <span>{{ match.final_score_player2 }}</span>
+                                                            {% else %}
+                                                                <span class="{% if match.winner == player %}text-success{% else %}text-danger{% endif %}">{{ match.final_score_player2 }}</span>
+                                                                <span class="text-muted mx-1">:</span>
+                                                                <span>{{ match.final_score_player1 }}</span>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% elif match.status == 'IN_PROGRESS' %}
+                                                        <span class="badge bg-warning text-dark animate-pulse">LIVE</span>
+                                                    {% else %}
+                                                        <span class="badge bg-light text-muted border">Plan</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+
                                     </div>
                                 </a>
                             {% endfor %}
                         </div>
                     {% else %}
-                        <div class="text-center py-4 text-muted">
-                            <i class="bi bi-calendar-x mb-2" style="font-size: 1.5rem;"></i>
-                            <p class="mb-0 small">No recent match history found.</p>
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-calendar-x mb-2 opacity-50" style="font-size: 2rem;"></i>
+                            <p class="mb-0">No matches played yet.</p>
                         </div>
                     {% endif %}
                 </div>

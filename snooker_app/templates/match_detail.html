@@ -112,32 +112,53 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {# TERAZ POBIERAMY DANE Z MODELU MATCH, NIE Z MATCHPLAYER #}
+                    {# 1. PUNKTY #}
                     <tr>
                         <td class="font-weight-bold">{{ match.total_points_player1 }}</td>
                         <td>Total Points</td>
                         <td class="font-weight-bold">{{ match.total_points_player2 }}</td>
                     </tr>
+
+                    {# 2. POT SUCCESS #}
                     <tr>
                         <td>{{ match.pot_success_p1|floatformat:0 }}%</td>
                         <td>Pot Success</td>
                         <td>{{ match.pot_success_p2|floatformat:0 }}%</td>
                     </tr>
-                     <tr>
+
+                    {# 3. SAFETY SUCCESS #}
+                    <tr>
+                        <td>{{ match.safety_success_p1|floatformat:0 }}%</td>
+                        <td>Safety Success</td>
+                        <td>{{ match.safety_success_p2|floatformat:0 }}%</td>
+                    </tr>
+
+                    {# 4. HIGHEST BREAK #}
+                    <tr>
                         <td>{{ match.highest_break_p1 }}</td>
                         <td>Highest Break</td>
                         <td>{{ match.highest_break_p2 }}</td>
                     </tr>
-                    {# Opcjonalnie: Average Frame Time zamiast AST, bo to mamy w modelu Match #}
-                    <tr>
-                        <td colspan="3" class="text-muted small">
-                           {% if match.avg_frame_time %} Avg Frame Time: {{ match.avg_frame_time|stringformat:"s"|slice:":7" }} {% endif %}
-                        </td>
-                    </tr>
+
+                    {# 5. FAULE #}
                     <tr>
                         <td>{{ match.total_fouls_p1 }} <span class="text-muted small">({{ match.foul_points_conceded_p1 }} pts)</span></td>
                         <td>Fouls (Points Conceded)</td>
                         <td>{{ match.total_fouls_p2 }} <span class="text-muted small">({{ match.foul_points_conceded_p2 }} pts)</span></td>
+                    </tr>
+
+                    {# 6. AST (Nowe - po faulach) #}
+                    <tr>
+                        <td>{{ match.match_ast_p1 }}</td>
+                        <td>AST (Avg Shot Time)</td>
+                        <td>{{ match.match_ast_p2 }}</td>
+                    </tr>
+
+                    {# 7. CZAS MECZU (Nowe - "Łączny czas meczu" na środku) #}
+                    <tr>
+                        <td colspan="3" class="text-muted small py-2">
+                            Total Match Time: <span class="fw text-dark">{{ match.formatted_match_duration }}</span>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -156,7 +177,12 @@
                         Winner: <strong>{{ winner }}</strong>
                     </div>
                     <div class="mt-3">
-                        {% if match.group_stage %}
+                        {% if request.GET.next %}
+                            {# INTELIGENTNY POWRÓT (Np. do gracza) #}
+                            <a href="{{ request.GET.next }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Back
+                            </a>
+                        {% elif match.group_stage %}
                             <a href="{% url 'competition_detail' match.group_stage.competition.id %}" class="btn btn-secondary">
                                 <i class="bi bi-arrow-left"></i> Back to Tournament
                             </a>
@@ -194,7 +220,11 @@
                             <a href="{% url 'delete_match' match.pk %}" class="btn btn-sm btn-danger">Delete</a>
                         {% endif %}
 
-                        {% if match.group_stage %}
+                        {% if request.GET.next %}
+                            <a href="{{ request.GET.next }}" class="btn btn-sm btn-secondary">
+                                Back
+                            </a>
+                        {% elif match.group_stage %}
                             <a href="{% url 'competition_detail' match.group_stage.competition.id %}" class="btn btn-sm btn-secondary">
                                 Back to Tournament
                             </a>
@@ -274,29 +304,36 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
+                                                {# 1. POT SUCCESS #}
                                                 <tr>
                                                     <td class="text-center">{{ frame.pot_success_percentage_player1|floatformat:0 }}%</td>
                                                     <td class="text-center text-muted">Pot Success</td>
                                                     <td class="text-center">{{ frame.pot_success_percentage_player2|floatformat:0 }}%</td>
                                                 </tr>
+
+                                                {# 2. SAFETY SUCCESS #}
                                                 <tr>
-                                                    {# Safety Shot to metoda modelu Frame, więc działa #}
                                                     <td class="text-center">{{ frame.safety_shot_success_rate_player1|floatformat:0 }}%</td>
                                                     <td class="text-center text-muted">Safety Success</td>
                                                     <td class="text-center">{{ frame.safety_shot_success_rate_player2|floatformat:0 }}%</td>
                                                 </tr>
+
+                                                {# 3. HIGHEST BREAK #}
                                                 <tr>
                                                     <td class="text-center">{{ frame.max_break_player1|default:0 }}</td>
                                                     <td class="text-center text-muted">Highest Break</td>
                                                     <td class="text-center">{{ frame.max_break_player2|default:0 }}</td>
                                                 </tr>
+
+                                                {# 5. FAULE #}
                                                  <tr>
                                                     <td class="text-center">{{ frame.player1_fouls }} ({{ frame.foul_points_player1 }} pts)</td>
                                                     <td class="text-center text-muted">Fouls</td>
                                                     <td class="text-center">{{ frame.player2_fouls }} ({{ frame.foul_points_player2 }} pts)</td>
                                                 </tr>
+
+                                                {# 6. AST #}
                                                 <tr>
-                                                    {# AST frame'a zostaje, bo Frame je liczy #}
                                                     <td class="text-center">{{ frame.average_shot_time_player1|stringformat:"s"|slice:":7"|default:"-" }}</td>
                                                     <td class="text-center text-muted">AST</td>
                                                     <td class="text-center">{{ frame.average_shot_time_player2|stringformat:"s"|slice:":7"|default:"-" }}</td>

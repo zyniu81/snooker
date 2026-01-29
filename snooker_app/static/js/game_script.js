@@ -1116,6 +1116,15 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
         // Zapisujemy obecny break ZANIM go wyzerujemy
         const breakBeforeFoul = currentBreak;
 
+        // Jeśli gracz zbudował breaka >= 10, a potem sfaulował, to break nadal się liczy do statystyk!
+        if (currentBreak >= 10) {
+            if (activePlayer === 1) {
+                p1BreaksHistory.push(currentBreak);
+            } else {
+                p2BreaksHistory.push(currentBreak);
+            }
+        }
+
         recordAction({
             type: "foul",
             opponentId: opponentId,

@@ -19,12 +19,13 @@ from django.utils.safestring import mark_safe
 from django.urls import reverse
 from django.db import transaction
 from django.utils.crypto import get_random_string
-from .services import update_career_stats
 
 import os
 from openai import OpenAI
 import sys
 import json
+
+from .services import update_career_stats, calculate_competition_results
 
 from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueForm,
                                MatchForm, CompetitionForm, AddMatchesToCompetitionForm,
@@ -32,7 +33,7 @@ from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueFor
                                SubstitutePlayerForm, GroupAssignmentForm, AddPlayerToGroupForm, KnockoutSwapForm,
                                ImportCodeForm, SelectImportedPlayersForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
-                                MatchPlayer, Frame, GroupStanding, SharingToken)
+                                MatchPlayer, Frame, GroupStanding, SharingToken, CompetitionResult)
 
 
 # --- FUNKCJE POMOCNICZE ---
@@ -1914,4 +1915,20 @@ def my_global_stats(request):
     return render(request, 'global_stats.html', {
         'stats': stats,
         'avatars_count': my_avatars.count()  # Ile razy zostałeś sklonowany/użyty
+    })
+
+
+@login_required
+def competition_ranking(request, competition_id):
+    competition = get_object_or_404(Competition, pk=competition_id)
+
+    # Opcjonalnie: Przeliczaj tylko jeśli turniej zakończony lub na żądanie.
+    # Ale dla bezpieczeństwa przeliczmy zawsze przy wejściu (lub dodaj przycisk "Recalculate")
+    calculate_competition_results(competition)
+
+    results = CompetitionResult.objects.filter(competition=competition).order_by('rank', 'player__last_name')
+
+    return render(request, 'competition_ranking.html', {
+        'competition': competition,
+        'results': results
     })
