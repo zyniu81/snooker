@@ -10,6 +10,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, HttpResponseForbidden
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.forms import modelformset_factory
 from django.utils import timezone
 from django.contrib.auth.signals import user_logged_in
@@ -19,6 +20,7 @@ from django.utils.safestring import mark_safe
 from django.urls import reverse
 from django.db import transaction
 from django.utils.crypto import get_random_string
+from django.template.loader import render_to_string
 
 import os
 from openai import OpenAI
@@ -168,9 +170,23 @@ def player_detail(request, pk):
     ).order_by('-date', '-time')[:5]
     # -----------------------------------------------
 
+    # --- POBIERANIE WYNIKÓW TURNIEJOWYCH ---
+    comp_results = CompetitionResult.objects.filter(player=player).select_related('competition').order_by(
+        '-competition__end_date')
+
+    # Liczniki do "Gabloty"
+    trophies = {
+        'gold': comp_results.filter(result='WINNER').count(),
+        'silver': comp_results.filter(result='RUNNER_UP').count(),
+        'bronze': comp_results.filter(result='THIRD_PLACE').count(),
+    }
+    # -----------------------------------------------
+
     return render(request, 'player_detail.html', {
         'player': player,
-        'matches': recent_matches
+        'matches': recent_matches,
+        'competition_results': comp_results,
+        'trophies': trophies
     })
 
 
@@ -1476,7 +1492,7 @@ def end_competition(request, competition_id):
     competition.save()
 
     messages.success(request, f"Tournament '{competition.name}' has been officially closed! 🏆")
-    return redirect('competition_detail', pk=competition.id)
+    return redirect('competition_ranking', competition_id=competition.pk)
 
 
 @receiver(user_logged_in)
@@ -1931,4 +1947,73 @@ def competition_ranking(request, competition_id):
     return render(request, 'competition_ranking.html', {
         'competition': competition,
         'results': results
+    })
+
+
+@login_required
+def player_match_history(request, pk):
+    player = get_object_or_404(Player, pk=pk)
+
+    # 1. Pobieramy WSZYSTKIE mecze gracza
+    matches_qs = Match.objects.filter(
+        Q(player1=player) | Q(player2=player)
+    ).order_by('-date', '-time')
+
+    # --- FILTR H2H (Head-to-Head) ---
+    opponent_id = request.GET.get('opponent')
+    opponent = None
+    stats = {}
+
+    if opponent_id:
+        opponent = get_object_or_404(Player, pk=opponent_id)
+        # Filtrujemy tylko mecze z tym rywalem
+        matches_qs = matches_qs.filter(Q(player1=opponent) | Q(player2=opponent))
+
+        # Obliczamy szybkie statystyki H2H
+        total = matches_qs.count()
+        wins = 0
+        for m in matches_qs:
+            if m.winner == player:
+                wins += 1
+
+        stats = {
+            'total': total,
+            'wins': wins,
+            'losses': total - wins,
+            'win_rate': (wins / total * 100) if total > 0 else 0
+        }
+
+    # 2. Lista wszystkich rywali do listy rozwijanej (dla filtra)
+    # Pobieramy ID wszystkich przeciwników z meczów gracza
+    # To zapytanie może być trochę ciężkie przy tysiącach graczy, ale na razie OK
+    p1_ids = Match.objects.filter(player2=player).values_list('player1', flat=True)
+    p2_ids = Match.objects.filter(player1=player).values_list('player2', flat=True)
+    all_opponent_ids = list(set(list(p1_ids) + list(p2_ids)))
+
+    possible_opponents = Player.objects.filter(id__in=all_opponent_ids).order_by('last_name')
+
+    # --- PAGINACJA (LOAD MORE) ---
+    paginator = Paginator(matches_qs, 10)  # 10 meczów na "stronę" (kliknięcie)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # 3. Jeśli to zapytanie AJAX (Load More), zwracamy tylko wiersze tabeli
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        html = render_to_string('partials/match_rows.html', {
+            'matches': page_obj,
+            'player': player
+        }, request=request)
+
+        return JsonResponse({
+            'html': html,
+            'has_next': page_obj.has_next()
+        })
+
+    # 4. Standardowe wyświetlenie strony
+    return render(request, 'player_match_history.html', {
+        'player': player,
+        'matches': page_obj,  # Pierwsza strona
+        'possible_opponents': possible_opponents,
+        'selected_opponent': opponent,
+        'stats': stats
     })

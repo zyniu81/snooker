@@ -3,44 +3,58 @@
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>
-            <i class="bi bi-trophy text-warning"></i>
-            {{ competition.name }} - Final Standings
-        </h2>
-        <a href="{% url 'competition_detail' competition.id %}" class="btn btn-secondary">
-            Back to Tournament
-        </a>
+        <div>
+            <h2 class="fw-bold mb-0">
+                <i class="bi bi-trophy text-warning me-2"></i>
+                {{ competition.name }}
+            </h2>
+            <p class="text-muted mb-0 ms-1">Final Standings</p>
+        </div>
+
+        {# --- INTELIGENTNY PRZYCISK POWROTU --- #}
+        {% if request.GET.next %}
+            <a href="{{ request.GET.next }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Back
+            </a>
+        {% else %}
+            <a href="{% url 'competition_detail' competition.id %}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Back to Tournament
+            </a>
+        {% endif %}
     </div>
 
     <div class="card shadow-sm border-0">
         <div class="card-body p-0">
             <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
+                <thead class="bg-light text-muted text-uppercase small">
                     <tr>
-                        <th class="ps-4">Rank</th>
-                        <th>Player</th>
-                        <th>Result</th>
-                        <th class="text-end pe-4">Prize</th>
+                        <th class="ps-4 py-3">Rank</th>
+                        <th class="py-3">Player</th>
+                        <th class="py-3">Result</th>
+                        <th class="text-end pe-4 py-3">Prize</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for res in results %}
-                    <tr class="{% if res.rank == 1 %}table-warning bg-opacity-25{% elif res.rank == 2 %}table-secondary bg-opacity-25{% endif %}">
-
-                        <td class="ps-4 fw-bold text-secondary" style="width: 80px;">
+                    {# Usunąłem klasy kolorujące cały wiersz (tr) #}
+                    <tr>
+                        {# KOLUMNA RANKINGU - TYLKO TU DAJEMY WYRÓŻNIENIA #}
+                        <td class="ps-4 fw-bold" style="width: 80px;">
                             {% if res.rank == 1 %}
-                                <i class="bi bi-trophy-fill text-warning fs-4"></i>
+                                <i class="bi bi-trophy-fill text-warning fs-3" title="Winner"></i>
                             {% elif res.rank == 2 %}
-                                <span class="badge bg-secondary rounded-pill">2nd</span>
+                                <i class="bi bi-award-fill text-secondary fs-3" title="Runner-up"></i>
                             {% elif res.rank == 3 %}
-                                <span class="badge bg-warning text-dark rounded-pill" style="background-color: #cd7f32 !important;">3rd</span>
+                                {# Kolor brązowy musimy wymusić stylem, bo Bootstrap go nie ma #}
+                                <i class="bi bi-award-fill fs-3" style="color: #cd7f32;" title="3rd Place"></i>
                             {% else %}
-                                {{ res.rank }}
+                                <span class="text-muted ms-1 fs-5">{{ res.rank }}</span>
                             {% endif %}
                         </td>
 
                         <td>
-                            <a href="{% url 'player_detail' res.player.id %}" class="text-decoration-none fw-bold text-dark">
+                            {# Dodaliśmy ?next={{ request.path }} żeby powrót z gracza prowadził tu #}
+                            <a href="{% url 'player_detail' res.player.id %}?next={{ request.path }}" class="text-decoration-none fw-bold text-dark">
                                 {{ res.player }}
                             </a>
                         </td>
@@ -49,21 +63,21 @@
                             {% if res.result == 'WINNER' %}
                                 <span class="fw-bold text-success">Winner</span>
                             {% elif res.result == 'RUNNER_UP' %}
-                                Runner-up
+                                <span class="text-dark">Runner-up</span>
                             {% elif res.result == 'THIRD_PLACE' %}
-                                3rd Place
+                                <span class="text-muted">3rd Place</span>
                             {% elif res.result == 'KNOCKOUT_ROUND' %}
-                                <span class="text-muted">Last {{ res.detail_number }}</span>
+                                <span class="text-muted small">Last {{ res.detail_number }}</span>
                             {% elif res.result == 'GROUP_STAGE' %}
-                                <span class="text-muted">Group Stage (Pos: {{ res.detail_number }})</span>
+                                <span class="text-muted small">Group Stage <span class="text-secondary">(Pos: {{ res.detail_number }})</span></span>
                             {% else %}
                                 {{ res.get_result_display }}
                             {% endif %}
                         </td>
 
-                        <td class="text-end pe-4 font-monospace">
+                        <td class="text-end pe-4 font-monospace text-muted">
                             {% if res.prize_money %}
-                                ${{ res.prize_money }}
+                                <span class="text-dark fw-bold">${{ res.prize_money }}</span>
                             {% else %}
                                 -
                             {% endif %}
@@ -72,6 +86,7 @@
                     {% empty %}
                     <tr>
                         <td colspan="4" class="text-center py-5 text-muted">
+                            <i class="bi bi-clipboard-x fs-1 mb-3 d-block opacity-50"></i>
                             Ranking not available yet.
                         </td>
                     </tr>
