@@ -499,38 +499,45 @@ class Match(models.Model):
             self.referee_ids = ', '.join([str(referee.id) for referee in self.referees.all()])
             super().save(update_fields=['referee_names', 'referee_ids', 'player_names', 'player_ids'])
 
-        # --- NOWOŚĆ: MOST DO STAREGO SYSTEMU (MatchPlayer Sync) ---
-        # Importujemy wewnątrz, żeby uniknąć problemów, jeśli MatchPlayer jest niżej w pliku
-        # Jeśli są w tym samym pliku, Python sobie poradzi, ale to jest bezpieczniejsze.
+        # --- NOWOŚĆ: MOST DO STAREGO SYSTEMU (MatchPlayer Sync) - POPRAWKA 2 ---
         from .models import MatchPlayer
+        from django.db import transaction
 
-        # Synchronizacja Gracza 1 (Gospodarz)
-        if self.player1:
-            mp1, created = MatchPlayer.objects.get_or_create(
-                match=self,
-                position=1,
-                defaults={'player': self.player1}
-            )
-            # Jeśli gracz się zmienił (np. edycja meczu), aktualizujemy go
-            if mp1.player != self.player1:
-                mp1.player = self.player1
-                mp1.save()
-        else:
-            # Jeśli usunięto gracza 1 z formularza, usuwamy też jego bilet
-            MatchPlayer.objects.filter(match=self, position=1).delete()
+        with transaction.atomic():
+            # 1. Lista aktualnych ID
+            current_player_ids = []
+            if self.player1: current_player_ids.append(self.player1.id)
+            if self.player2: current_player_ids.append(self.player2.id)
 
-        # Synchronizacja Gracza 2 (Gość)
-        if self.player2:
-            mp2, created = MatchPlayer.objects.get_or_create(
-                match=self,
-                position=2,
-                defaults={'player': self.player2}
-            )
-            if mp2.player != self.player2:
-                mp2.player = self.player2
-                mp2.save()
-        else:
-            MatchPlayer.objects.filter(match=self, position=2).delete()
+            # 2. USUWANIE: Usuń wpisy graczy, których już nie ma
+            MatchPlayer.objects.filter(match=self).exclude(player_id__in=current_player_ids).delete()
+
+            # 3. ZROBIENIE MIEJSCA (Fix dla SWAP):
+            # Zamiast liczb ujemnych (których baza nie lubi), używamy dużych liczb dodatnich.
+            # Przesuwamy 1 -> 101, 2 -> 102.
+            for mp in MatchPlayer.objects.filter(match=self):
+                # Zmieniamy tylko jeśli to są "normalne" pozycje (poniżej 100)
+                if mp.position < 50:
+                    mp.position = 100 + mp.position
+                    mp.save()
+
+            # 4. USTAWIANIE: Przypisz właściwe pozycje
+            # System znajdzie gracza na pozycji 101 i zmieni mu na 1.
+            # System znajdzie gracza na pozycji 102 i zmieni mu na 2.
+
+            if self.player1:
+                MatchPlayer.objects.update_or_create(
+                    match=self,
+                    player=self.player1,
+                    defaults={'position': 1}
+                )
+
+            if self.player2:
+                MatchPlayer.objects.update_or_create(
+                    match=self,
+                    player=self.player2,
+                    defaults={'position': 2}
+                )
 
     def is_expired(self):
         return self.is_temporary and self.created_at < timezone.now() - timedelta(days=30)

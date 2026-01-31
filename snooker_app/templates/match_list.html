@@ -81,6 +81,52 @@
         </a>
     </div>
 
+    {# --- PASEK FILTRÓW START --- #}
+    <div class="card bg-light border-0 mb-4 shadow-sm">
+        <div class="card-body py-3">
+            <form method="get" class="row g-2 align-items-center">
+
+                <div class="col-auto text-muted small fw-bold text-uppercase">
+                    <i class="bi bi-funnel-fill me-1"></i> Filter:
+                </div>
+
+                {# 1. ROK (YEAR) #}
+                <div class="col-auto">
+                    <select name="year" class="form-select form-select-sm border-0 shadow-sm" onchange="this.form.submit()">
+                        <option value="">All Years</option>
+                        {% for y in available_years %}
+                            {# Porównujemy rok (int) ze stringiem z URL, dlatego używamy stringformat #}
+                            <option value="{{ y.year }}" {% if selected_year == y.year|stringformat:"i" %}selected{% endif %}>
+                                {{ y.year }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {# 2. STATUS #}
+                <div class="col-auto">
+                    <select name="status" class="form-select form-select-sm border-0 shadow-sm" onchange="this.form.submit()">
+                        <option value="">All Statuses</option>
+                        <option value="SCHEDULED" {% if selected_status == 'SCHEDULED' %}selected{% endif %}>Scheduled</option>
+                        <option value="IN_PROGRESS" {% if selected_status == 'IN_PROGRESS' %}selected{% endif %}>Live (In Progress)</option>
+                        <option value="FINISHED" {% if selected_status == 'FINISHED' %}selected{% endif %}>Finished</option>
+                    </select>
+                </div>
+
+                {# PRZYCISK RESET (Pokaż tylko jeśli filtry są aktywne) #}
+                {% if selected_year or selected_status %}
+                    <div class="col-auto ms-auto">
+                        <a href="{% url 'match_list' %}" class="btn btn-sm btn-link text-decoration-none text-muted">
+                            <i class="bi bi-x-circle"></i> Clear
+                        </a>
+                    </div>
+                {% endif %}
+
+            </form>
+        </div>
+    </div>
+    {# --- PASEK FILTRÓW KONIEC --- #}
+
     <div class="row">
         <div class="col-md-12">
             {% for match in matches %}

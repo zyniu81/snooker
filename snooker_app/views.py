@@ -333,9 +333,30 @@ def venue_detail(request, pk):
 
 @login_required
 def match_list(request):
-    # Sortujemy: Najpierw data (od najnowszej), potem godzina (od najnowszej)
+    # 1. BAZA: Twoje oryginalne zapytanie
     matches = Match.objects.filter(owner=request.user).order_by('-date', '-time')
-    return render(request, 'match_list.html', {'matches': matches})
+
+    # 2. Pobieramy lata do listy rozwijanej (zanim przefiltrujemy listę!)
+    # Metoda .dates() zwraca unikalne daty (lata) z QuerySetu
+    available_years = matches.dates('date', 'year', order='DESC')
+
+    # 3. FILTR: ROK
+    selected_year = request.GET.get('year')
+    if selected_year:
+        matches = matches.filter(date__year=selected_year)
+
+    # 4. FILTR: STATUS
+    selected_status = request.GET.get('status')
+    if selected_status:
+        matches = matches.filter(status=selected_status)
+
+    return render(request, 'match_list.html', {
+        'matches': matches,
+        # Przekazujemy dane do formularza filtrów
+        'available_years': available_years,
+        'selected_year': selected_year,
+        'selected_status': selected_status,
+    })
 
 
 @login_required
