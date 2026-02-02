@@ -1158,7 +1158,7 @@ class KnockoutStage(Stage):
                     owner=comp_owner,
                     is_public=self.competition.is_public,
                     date=self.competition.start_date + timedelta(days=round_num),
-                    time=timezone.now().time(),
+                    time=timezone.now().replace(second=0, microsecond=0).time(),
                     venue=self.competition.venue,
                     number_of_frames=self.frames_per_match,
                     game_variant=self.competition.game_variant,

@@ -21,6 +21,7 @@ from django.urls import reverse
 from django.db import transaction
 from django.utils.crypto import get_random_string
 from django.template.loader import render_to_string
+from collections import defaultdict
 
 import os
 from openai import OpenAI
@@ -33,7 +34,7 @@ from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueFor
                                MatchForm, CompetitionForm, AddMatchesToCompetitionForm,
                                GroupStageForm, SignUpForm, KnockoutStageForm, MassMatchEditForm, ExtraMatchForm,
                                SubstitutePlayerForm, GroupAssignmentForm, AddPlayerToGroupForm, KnockoutSwapForm,
-                               ImportCodeForm, SelectImportedPlayersForm)
+                               ImportCodeForm, SelectImportedPlayersForm, MatchFormSetValidating)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
                                 MatchPlayer, Frame, GroupStanding, SharingToken, CompetitionResult)
 
@@ -503,6 +504,20 @@ class MatchDeleteView(DeleteView):
     def get_queryset(self):
         return Match.objects.filter(owner=self.request.user)
 
+    # --- NOWE ZABEZPIECZENIE ---
+    # Zamiast def delete(...), użyj tego:
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+
+        # WARUNEK BLOKADY
+        if self.object.group_stage or self.object.knockout_stage:
+            messages.error(request, "You cannot delete a match that is part of a tournament!")
+            # Wracamy na listę, zamiast kasować
+            return redirect(self.success_url)
+
+        # Jeśli warunek nie spełniony -> kasujemy
+        return self.delete(request, *args, **kwargs)
+
 
 def start_game(request, pk):
     # Pobieramy mecz
@@ -640,6 +655,7 @@ def competition_list(request):
 def competition_detail(request, pk):
     competition = get_object_or_404(Competition, pk=pk)
 
+    # 1. Pobieranie danych (bez zmian)
     group_stages_qs = competition.groupstage_stages.prefetch_related(
         'groups__standings__player',
         'groups__matches',
@@ -655,11 +671,37 @@ def competition_detail(request, pk):
         'matches__venue'
     )
 
+    # 2. Logika widoku Drabinki (NOWOŚĆ)
+    view_mode = request.GET.get('view', 'list')  # Domyślnie lista
+
+    for stage in knockout_stages_qs:
+        matches = stage.matches.all().order_by('round_number', 'id')
+
+        rounds_map = defaultdict(list)
+        stage.third_place_matches = []  # <--- Tworzymy listę na mecz o 3 miejsce
+
+        for m in matches:
+            if m.round_number < 99:
+                # Główne drzewo
+                rounds_map[m.round_number].append(m)
+            else:
+                # Mecz o 3 miejsce (lub inne specjalne)
+                stage.third_place_matches.append(m)
+
+        # Budowanie drzewa (bez zmian)
+        stage.bracket_tree = []
+        for r_num in sorted(rounds_map.keys()):
+            stage.bracket_tree.append({
+                'round_number': r_num,
+                'matches': rounds_map[r_num]
+            })
+
+    # 3. Łączenie etapów (bez zmian)
     from itertools import chain
     all_stages = sorted(
         chain(group_stages_qs, knockout_stages_qs),
         key=lambda s: s.order,
-        reverse=True  # Odwrócona kolejność: 3, 2, 1...
+        reverse=True
     )
 
     is_owner = (request.user == competition.owner)
@@ -667,9 +709,10 @@ def competition_detail(request, pk):
 
     return render(request, 'competition_detail.html', {
         'competition': competition,
-        'all_stages': all_stages,  # <--- Przekazujemy jedną wspólną listę
+        'all_stages': all_stages,
         'is_owner': is_owner,
-        'add_players_url': add_players_url
+        'add_players_url': add_players_url,
+        'view_mode': view_mode,
     })
 
 
@@ -1376,20 +1419,28 @@ def mass_edit_matches(request, competition_id):
     # --- WAŻNA ZMIANA SORTOWANIA ---
     # Musimy sortować najpierw po ETAPIE, potem po GRUPIE/RUNDZIE, a dopiero na końcu po CZASIE.
     # Dzięki temu w HTML tag {% ifchanged %} ładnie pogrupuje mecze belkami.
-    matches = Match.objects.filter(
+    matches = (Match.objects.filter(
         Q(group_stage__competition=competition) |
         Q(knockout_stage__competition=competition)
-    ).exclude(status='FINISHED').order_by(
+    ).exclude(status='FINISHED') \
+    .exclude(player1__isnull=True) \
+    .exclude(player2__isnull=True) \
+    .order_by(
         'group_stage',  # Najpierw etap grupowy
         'group',  # Potem konkretna grupa (1, 2, 3...)
         'knockout_stage',  # Potem etap pucharowy
         'round_number',  # Potem numer kolejki/rundy (TO JEST KLUCZOWE!)
         'date',  # Dopiero teraz data
         'time'  # I godzina
-    )
+    ))
 
     # Tworzymy klasę Formsetu
-    MatchFormSet = modelformset_factory(Match, form=MassMatchEditForm, extra=0)
+    MatchFormSet = modelformset_factory(
+        Match,
+        form=MassMatchEditForm,
+        formset=MatchFormSetValidating,
+        extra=0
+        )
 
     if request.method == 'POST':
         formset = MatchFormSet(request.POST, queryset=matches)
@@ -1403,15 +1454,32 @@ def mass_edit_matches(request, competition_id):
 
     # --- FILTROWANIE DROPDOWNÓW ---
     my_referees = Referee.objects.filter(Q(owner=request.user) | Q(is_public=True))
-    tournament_players = competition.players.all()
+
+    # Pobieramy bazową listę wszystkich graczy w turnieju
+    all_tournament_players = competition.players.all()
 
     for form in formset:
+        # 1. Sędziowie (bez zmian)
         form.fields['referees'].queryset = my_referees
 
+        # 2. Pobieramy instancję meczu dla tego wiersza
+        match = form.instance
+
+        # 3. Ustalamy, kogo można wybrać w tym wierszu
+        # Domyślnie: Wszyscy z turnieju (dla Play-off)
+        allowed_players = all_tournament_players
+
+        # Jeśli mecz należy do GRUPY -> zawężamy listę tylko do członków tej grupy
+        if match.group:
+            # Pobieramy ID graczy z tabeli tej konkretnej grupy
+            group_ids = match.group.standings.values_list('player_id', flat=True)
+            allowed_players = all_tournament_players.filter(id__in=group_ids)
+
+        # 4. Przypisujemy "skrojoną na miarę" listę do pól
         if 'player1' in form.fields:
-            form.fields['player1'].queryset = tournament_players
+            form.fields['player1'].queryset = allowed_players
         if 'player2' in form.fields:
-            form.fields['player2'].queryset = tournament_players
+            form.fields['player2'].queryset = allowed_players
 
     return render(request, 'mass_edit_matches.html', {
         'formset': formset,
@@ -1590,11 +1658,15 @@ def substitute_player(request, stage_id):
 
                 # 3. Podmień w MECZACH (Player 1)
                 matches_p1 = Match.objects.filter(group_stage=stage, player1=player_out)
-                matches_p1.update(player1=player_in)
+                for match in matches_p1:
+                    match.player1 = player_in
+                    match.save()
 
                 # 4. Podmień w MECZACH (Player 2)
                 matches_p2 = Match.objects.filter(group_stage=stage, player2=player_out)
-                matches_p2.update(player2=player_in)
+                for match in matches_p2:
+                    match.player2 = player_in
+                    match.save()
 
             messages.success(request, f"Successfully substituted {player_out} with {player_in}.")
             return redirect('competition_detail', pk=competition.id)
@@ -1742,6 +1814,71 @@ def manage_knockout(request, stage_id):
         'competition': competition,
         'matches': matches_r1,
         'form': form
+    })
+
+
+@login_required
+def substitute_player_knockout(request, competition_id):
+    competition = get_object_or_404(Competition, pk=competition_id)
+
+    if competition.owner != request.user:
+        raise PermissionDenied
+
+    # 1. POBIERAMY ETAP PUCHAROWY
+    # Musimy znaleźć KnockoutStage przypisany do tego turnieju.
+    # Używamy .first(), zakładając że jest jeden (standard w turniejach).
+    knockout_stage = competition.knockoutstage_stages.first()
+
+    if not knockout_stage:
+        messages.error(request, "Knockout stage not found!")
+        return redirect('competition_detail', pk=competition.id)
+
+    if request.method == 'POST':
+        # ZMIANA: Przekazujemy 'stage', a nie 'competition'
+        form = SubstitutePlayerForm(request.POST, stage=knockout_stage, owner=request.user)
+
+        if form.is_valid():
+            p_out = form.cleaned_data['player_out']
+            p_in = form.cleaned_data['player_in']
+
+            with transaction.atomic():
+                # A. Aktualizacja listy uczestników turnieju (M2M na modelu Competition)
+                competition.players.remove(p_out)
+                competition.players.add(p_in)
+
+                # B. Znalezienie meczów w fazie pucharowej
+                matches_to_fix = Match.objects.filter(
+                    knockout_stage=knockout_stage
+                ).filter(
+                    Q(player1=p_out) | Q(player2=p_out)
+                )
+
+                # C. Podmiana w meczach
+                count = 0
+                for match in matches_to_fix:
+                    changed = False
+                    if match.player1 == p_out:
+                        match.player1 = p_in
+                        changed = True
+
+                    if match.player2 == p_out:
+                        match.player2 = p_in
+                        changed = True
+
+                    if changed:
+                        match.save()  # Naprawa MatchPlayer
+                        count += 1
+
+                messages.success(request, f"Successfully substituted {p_out} with {p_in} in {count} matches.")
+                return redirect('competition_detail', pk=competition.id)
+    else:
+        # ZMIANA: Tutaj też przekazujemy 'stage'
+        form = SubstitutePlayerForm(stage=knockout_stage, owner=request.user)
+
+    return render(request, 'substitute_player.html', {
+        'form': form,
+        'competition': competition,
+        'stage_name': 'Knockout Stage'
     })
 
 

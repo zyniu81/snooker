@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.db.models import Q
-
+from django.forms import BaseModelFormSet
 from .models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Group, GroupStanding
 
 import math
@@ -188,7 +188,7 @@ class MatchForm(forms.ModelForm):
         ]
         widgets = {
             'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
+            'time': forms.TimeInput(format='%H:%M', attrs={'type': 'time', 'class': 'form-control'}),
             'game_variant': forms.Select(attrs={'class': 'form-select'}),
             'number_of_frames': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
             'table_number': forms.TextInput(attrs={'class': 'form-control'}),
@@ -204,17 +204,38 @@ class MatchForm(forms.ModelForm):
 
         if is_auth:
             user = self.request.user
-            # Filtrujemy graczy dla obu list
-            available_players = Player.objects.filter(Q(owner=user) | Q(is_public=True))
+            # 1. Baza: Wszyscy Twoi gracze + publiczni
+            base_players = Player.objects.filter(Q(owner=user) | Q(is_public=True))
 
-            self.fields['player1'].queryset = available_players
-            self.fields['player2'].queryset = available_players
+            # --- NOWOŚĆ: FILTROWANIE CONTEXTOWE (Turniejowe) ---
+            # Jeśli edytujemy istniejący mecz (self.instance.pk), sprawdzamy czy to turniej
+            if self.instance.pk:
+
+                # SCENARIUSZ A: Mecz w Grupie
+                if self.instance.group:
+                    # Pobieramy ID graczy, którzy są w tabeli (standings) tej konkretnej grupy
+                    allowed_ids = self.instance.group.standings.values_list('player_id', flat=True)
+                    # Zawężamy listę tylko do tych graczy
+                    base_players = base_players.filter(id__in=allowed_ids)
+
+                # SCENARIUSZ B: Mecz Pucharowy (Knockout)
+                elif self.instance.knockout_stage:
+                    # Pobieramy graczy z całego turnieju
+                    competition = self.instance.knockout_stage.competition
+                    allowed_ids = competition.players.values_list('id', flat=True)
+                    base_players = base_players.filter(id__in=allowed_ids)
+
+            # Przypisujemy przefiltrowaną listę do pól
+            self.fields['player1'].queryset = base_players
+            self.fields['player2'].queryset = base_players
+            # ----------------------------------------------------
 
             self.fields['referees'].queryset = Referee.objects.filter(Q(owner=user) | Q(is_public=True))
             self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
 
-            if not available_players.exists():
-                msg = "No players found. Please add players in your profile first."
+            if not base_players.exists():
+                # Tutaj mała zmiana komunikatu, żeby pasował też do pustej grupy
+                msg = "No eligible players found."
                 self.fields['player1'].help_text = msg
                 self.fields['player1'].disabled = True
                 self.fields['player2'].disabled = True
@@ -229,7 +250,7 @@ class MatchForm(forms.ModelForm):
             self.fields['allow_draws'].initial = False
 
         else:
-            # Dla niezalogowanych usuwamy wybór konkretnych graczy
+            # Dla niezalogowanych (bez zmian)
             del self.fields['venue']
             del self.fields['referees']
             del self.fields['player1']
@@ -253,17 +274,50 @@ class MatchForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
 
-        # Pobieramy dane z formularza
         p1 = cleaned_data.get('player1')
         p2 = cleaned_data.get('player2')
         create_temp = cleaned_data.get('create_temporary_players')
+        match_instance = self.instance
 
-        # Walidacja dla zalogowanych (kiedy pola player1/2 istnieją)
+        # 1. Walidacja podstawowa (Wymagani gracze i różni przeciwnicy)
         if 'player1' in self.fields:
             if not create_temp:
-                # 1. Czy wybrano obu graczy? (To zostawiamy, bo chcemy wymusić wybór)
                 if not p1 or not p2:
                     raise ValidationError("Please select both Player 1 and Player 2.")
+
+        if p1 and p2 and p1 == p2:
+            raise ValidationError("Player 1 and Player 2 cannot be the same person.")
+
+        # --- WALIDACJA TURNIEJOWA ---
+
+        # A. WALIDACJA DLA PUCHARÓW (Knockout) - "Czy gracz jest zajęty w CAŁEJ drabince?"
+        # ZMIANA: Nie patrzymy na rundę, tylko na to, czy gracz ma jakikolwiek niezakończony mecz w tym etapie.
+        if match_instance.knockout_stage and (p1 or p2):
+            other_matches = Match.objects.filter(
+                knockout_stage=match_instance.knockout_stage
+            ).exclude(status='FINISHED').exclude(pk=match_instance.pk)
+
+            if p1 and other_matches.filter(Q(player1=p1) | Q(player2=p1)).exists():
+                raise ValidationError(
+                    f"Player '{p1}' is already playing in another active match in this Knockout Stage.")
+
+            if p2 and other_matches.filter(Q(player1=p2) | Q(player2=p2)).exists():
+                raise ValidationError(
+                    f"Player '{p2}' is already playing in another active match in this Knockout Stage.")
+
+        # B. WALIDACJA DLA GRUP (Group) - "Czy ta para już ze sobą grała?"
+        # Tutaj bez zmian - pilnujemy duplikatów par w grupie
+        if match_instance.group_stage and p1 and p2:
+            group_filter = Q(group_stage=match_instance.group_stage)
+            if match_instance.group:
+                group_filter &= Q(group=match_instance.group)
+
+            duplicate_exists = Match.objects.filter(group_filter).exclude(pk=match_instance.pk).filter(
+                (Q(player1=p1) & Q(player2=p2)) | (Q(player1=p2) & Q(player2=p1))
+            ).exists()
+
+            if duplicate_exists:
+                raise ValidationError(f"Match between '{p1}' and '{p2}' already exists in this Group.")
 
         return cleaned_data
 
@@ -506,7 +560,7 @@ class MassMatchEditForm(forms.ModelForm):
         fields = ['date', 'time', 'table_number', 'player1', 'player2', 'referees']
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}),
-            'time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control form-control-sm'}),
+            'time': forms.TimeInput(format='%H:%M', attrs={'type': 'time', 'class': 'form-control form-control-sm'}),
             'table_number': forms.TextInput(attrs={'class': 'form-control form-control-sm', 'style': 'width: 60px;'}),
             'referees': forms.SelectMultiple(attrs={'class': 'form-select form-select-sm', 'size': 1}),
             'player1': forms.Select(attrs={'class': 'form-select form-select-sm'}),
@@ -517,43 +571,18 @@ class MassMatchEditForm(forms.ModelForm):
         cleaned_data = super().clean()
         p1 = cleaned_data.get('player1')
         p2 = cleaned_data.get('player2')
-        instance = self.instance  # Edytowany mecz
 
-        # 1. BLOKADA: Ten sam gracz przeciwko sobie
+        # 1. ZABEZPIECZENIE PRZED PUSTYM POLEM (Gamma vs None)
+        # Jeśli brakuje p1 lub p2 -> zgłoś błąd przy konkretnym polu
+        if not p1:
+            self.add_error('player1', "Player 1 is required.")
+
+        if not p2:
+            self.add_error('player2', "Player 2 is required.")
+
+        # 2. ZABEZPIECZENIE: Ten sam gracz przeciwko sobie
         if p1 and p2 and p1 == p2:
             self.add_error('player2', "Player cannot play against themselves.")
-
-        # 2. INTELIGENTNA BLOKADA (KOLIZJA W KOLEJCE)
-        # Sprawdzamy czy gracze nie są zajęci w INNYM meczu tej samej KOLEJKI (round_number)
-        if p1 and p2:
-            query_filter = Q()
-            context_name = ""
-
-            # Rozróżniamy Grupy od Pucharu
-            if instance.group_stage:
-                # Szukamy w tym samym etapie grupowym
-                query_filter = Q(group_stage=instance.group_stage)
-                context_name = f"Round {instance.round_number}"
-            elif instance.knockout_stage:
-                # Szukamy w tym samym etapie pucharowym
-                query_filter = Q(knockout_stage=instance.knockout_stage)
-                context_name = instance.knockout_name or f"Round {instance.round_number}"
-
-            # Wykonujemy sprawdzenie tylko, jeśli mecz należy do jakiegoś etapu
-            if query_filter:
-                # Znajdź inne mecze w tym etapie i w TEJ SAMEJ RUNDZIE (kolejce)
-                conflicting_matches = Match.objects.filter(
-                    query_filter,
-                    round_number=instance.round_number
-                ).exclude(pk=instance.pk)
-
-                # Czy P1 jest zajęty?
-                if conflicting_matches.filter(Q(player1=p1) | Q(player2=p1)).exists():
-                    self.add_error('player1', f"{p1} is already playing in another match in {context_name}.")
-
-                # Czy P2 jest zajęty?
-                if conflicting_matches.filter(Q(player1=p2) | Q(player2=p2)).exists():
-                    self.add_error('player2', f"{p2} is already playing in another match in {context_name}.")
 
         return cleaned_data
 
@@ -613,29 +642,44 @@ class SubstitutePlayerForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         if self.stage and self.owner:
-            # 1. Znajdź graczy, którzy JUŻ GRALI w tym etapie (mają status FINISHED)
-            # Musimy ich wykluczyć, bo nie wolno fałszować historii meczy
-            finished_matches = Match.objects.filter(
-                group_stage=self.stage,
-                status='FINISHED'
-            )
+
+            # === ZMIANA: ROZPOZNAWANIE TYPU ETAPU ===
+
+            # Sprawdzamy, czy to etap GRUPOWY (czy model ma pole 'groups')
+            if hasattr(self.stage, 'groups'):
+                # --- LOGIKA DLA GRUP (STARA) ---
+                finished_matches = Match.objects.filter(
+                    group_stage=self.stage,
+                    status='FINISHED'
+                )
+                # Gracze są wyciągani z tabeli grupowej (GroupStanding)
+                players_in_stage_ids = list(Player.objects.filter(
+                    groupstanding__group__stage=self.stage
+                ).values_list('id', flat=True))
+
+            else:
+                # --- LOGIKA DLA PLAY-OFF (NOWA) ---
+                # Tutaj szukamy po knockout_stage
+                finished_matches = Match.objects.filter(
+                    knockout_stage=self.stage,
+                    status='FINISHED'
+                )
+                # Gracze są wyciągani bezpośrednio z Turnieju (bo w Play-off grają wszyscy, którzy zostali)
+                # Zakładamy: self.stage.competition.players
+                players_in_stage_ids = list(self.stage.competition.players.values_list('id', flat=True))
+
+            # ========================================
+
+            # Reszta kodu bez zmian - działa tak samo dla obu wersji
             busy_ids = set()
             for m in finished_matches:
                 if m.player1: busy_ids.add(m.player1.id)
                 if m.player2: busy_ids.add(m.player2.id)
 
-            # 2. Lista "OUT": Wszyscy z grup w tym etapie MINUS ci co grali
-            # Pobieramy ID graczy, którzy mają wpis w tabeli (GroupStanding) tego etapu
-            players_in_stage_ids = list(Player.objects.filter(
-                groupstanding__group__stage=self.stage
-            ).values_list('id', flat=True))
-
             self.fields['player_out'].queryset = Player.objects.filter(
                 id__in=players_in_stage_ids
-            ).exclude(id__in=busy_ids)  # <--- TU JEST BLOKADA HISTORII
+            ).exclude(id__in=busy_ids)
 
-            # 3. Lista "IN": Wszyscy moi gracze MINUS ci co już są w tym etapie
-            # (żeby nie wstawić gracza, który już gra w innej grupie tego samego etapu)
             self.fields['player_in'].queryset = Player.objects.filter(
                 owner=self.owner,
                 is_temporary=False
@@ -757,3 +801,55 @@ class SelectImportedPlayersForm(forms.Form):
         super().__init__(*args, **kwargs)
         if found_players:
             self.fields['selected_players'].queryset = found_players
+
+
+class MatchFormSetValidating(BaseModelFormSet):
+    def clean(self):
+        super().clean()
+
+        if any(self.errors):
+            return
+
+        # Słownik: Klucz to (ID etapu, Numer Rundy) -> Wartość to zbiór ID graczy w tej rundzie
+        usage_map = {}
+
+        for form in self.forms:
+            if not form.is_valid() or not form.cleaned_data or self._should_delete_form(form):
+                continue
+
+            # Pobieramy dane, które Ty wpisałeś w formularzu (NOWY STAN)
+            match = form.instance
+            p1 = form.cleaned_data.get('player1')
+            p2 = form.cleaned_data.get('player2')
+
+            # Określamy klucz (Gdzie jesteśmy? Jaki etap, jaka runda?)
+            stage_key = None
+            context_name = ""
+
+            if match.group_stage:
+                # Grupy: Kluczem jest Etap + Numer Kolejki
+                stage_key = ('group', match.group_stage.id, match.round_number)
+                context_name = f"Group Stage - Round {match.round_number}"
+            elif match.knockout_stage:
+                # Puchar: Kluczem jest Etap + Numer Rundy
+                stage_key = ('knockout', match.knockout_stage.id, match.round_number)
+                context_name = f"Knockout - Round {match.round_number}"
+
+            # Jeśli mecz należy do jakiegoś etapu, sprawdzamy unikalność graczy
+            if stage_key:
+                if stage_key not in usage_map:
+                    usage_map[stage_key] = set()
+
+                # Sprawdzamy gracza 1
+                if p1:
+                    if p1.id in usage_map[stage_key]:
+                        raise forms.ValidationError(
+                            f"Player '{p1}' appears twice in {context_name}. You cannot assign the same player to multiple matches in one round.")
+                    usage_map[stage_key].add(p1.id)
+
+                # Sprawdzamy gracza 2
+                if p2:
+                    if p2.id in usage_map[stage_key]:
+                        raise forms.ValidationError(
+                            f"Player '{p2}' appears twice in {context_name}. You cannot assign the same player to multiple matches in one round.")
+                    usage_map[stage_key].add(p2.id)

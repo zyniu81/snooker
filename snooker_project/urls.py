@@ -85,6 +85,8 @@ urlpatterns = [
     path('match/import-guest/', views.import_guest_for_match, name='import_guest_for_match'),
     path('competition/<int:competition_id>/ranking/', views.competition_ranking, name='competition_ranking'),
     path('player/<int:pk>/matches/', views.player_match_history, name='player_match_history'),
+    path('competition/<int:competition_id>/substitute/knockout/', views.substitute_player_knockout,
+         name='substitute_player_knockout'),
 ]
 
 

@@ -1,70 +1,71 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-5">
+
+    {# --- NAGŁÓWEK I PRZYCISK POWROTU --- #}
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-diagram-3 me-2"></i>Edit Bracket: {{ stage.name }}</h2>
-        <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">Back to Tournament</a>
+        <h2>
+            <i class="bi bi-person-lines-fill me-2"></i>Substitute Player (Knockout)
+        </h2>
+        <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Tournament
+        </a>
     </div>
 
-    <div class="row">
-        <div class="col-md-4 order-md-2 mb-4">
-            <div class="card shadow border-warning sticky-top" style="top: 20px; z-index: 1;">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow border-warning">
                 <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-left-right me-2"></i>Swap Players</h5>
+                    <h5 class="mb-0 fw-bold">
+                        <i class="bi bi-arrow-left-right me-2"></i>Global Substitution
+                    </h5>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-3">
-                        Select two players to swap their positions in the bracket (Round 1 only).
-                    </p>
+
+                    <div class="alert alert-info border-info">
+                        <h6 class="alert-heading fw-bold"><i class="bi bi-info-circle-fill me-2"></i>How this works:</h6>
+                        <p class="mb-0">
+                            This action will replace the player in <strong>the entire tournament roster</strong> and update all their matches in the <strong>Knockout Stage</strong>.
+                        </p>
+                    </div>
 
                     <form method="post">
                         {% csrf_token %}
+
+                        {# --- BŁĘDY GLOBALNE --- #}
                         {% if form.non_field_errors %}
-                            <div class="alert alert-danger small">{{ form.non_field_errors }}</div>
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                         {% endif %}
 
-                        <div class="mb-3">
-                            {{ form.player_1 }}
-                        </div>
-                        <div class="text-center mb-3">
-                            <i class="bi bi-arrow-down-up fs-4 text-muted"></i>
-                        </div>
-                        <div class="mb-3">
-                            {{ form.player_2 }}
-                        </div>
+                        <div class="row g-3 mt-2">
+                            {# --- POLE: GRACZ WYCHODZĄCY --- #}
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-danger">Player OUT (To remove)</label>
+                                {{ form.player_out }}
+                                {% if form.player_out.errors %}
+                                    <div class="text-danger small mt-1">{{ form.player_out.errors }}</div>
+                                {% endif %}
+                            </div>
 
-                        <button type="submit" class="btn btn-warning w-100 fw-bold">
-                            Swap Positions
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-8 order-md-1">
-            <div class="card shadow-sm">
-                <div class="card-header bg-dark text-white">
-                    <h5 class="mb-0">Round 1 Pairings (Bracket Preview)</h5>
-                </div>
-                <div class="list-group list-group-flush">
-                    {% for match in matches %}
-                        <div class="list-group-item d-flex align-items-center justify-content-between py-3">
-                            <span class="badge bg-secondary me-3">Match {{ match.id }}</span>
-
-                            <div class="d-flex w-100 justify-content-center align-items-center">
-                                <div class="text-end fw-bold" style="width: 40%;">
-                                    {{ match.player1|default:"(Bye)" }}
-                                </div>
-                                <div class="mx-3 text-muted small">vs</div>
-                                <div class="text-start fw-bold" style="width: 40%;">
-                                    {{ match.player2|default:"(Bye)" }}
-                                </div>
+                            {# --- POLE: GRACZ WCHODZĄCY --- #}
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-success">Player IN (New player)</label>
+                                {{ form.player_in }}
+                                {% if form.player_in.errors %}
+                                    <div class="text-danger small mt-1">{{ form.player_in.errors }}</div>
+                                {% endif %}
                             </div>
                         </div>
-                    {% empty %}
-                        <div class="p-4 text-center text-muted">No matches found in Round 1.</div>
-                    {% endfor %}
+
+                        <hr class="my-4">
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-warning btn-lg fw-bold">
+                                <i class="bi bi-check-circle-fill me-2"></i>Confirm Substitution
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
