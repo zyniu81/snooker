@@ -5,7 +5,7 @@ from django.views.generic import DeleteView
 from django.contrib import messages
 from django.db.models import Count, Sum, F, Case, When, IntegerField, Q, Max
 from django.contrib.auth import login, logout, update_session_auth_hash
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.forms import PasswordChangeForm
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse
@@ -22,7 +22,9 @@ from django.db import transaction, models
 from django.utils.crypto import get_random_string
 from django.template.loader import render_to_string
 from collections import defaultdict
+from django.core.management import call_command
 
+from io import StringIO
 from openai import OpenAI
 import os, json, openpyxl, sys
 
@@ -2458,4 +2460,32 @@ def export_data_excel(request):
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename={filename}'
     workbook.save(response)
+    return response
+
+
+@user_passes_test(lambda u: u.is_superuser)  # Tylko dla Superusera!
+def admin_backup_json(request):
+    # Tworzymy bufor w pamięci (taki wirtualny plik)
+    output = StringIO()
+
+    # Wywołujemy komendę dumpdata (zrzut bazy)
+    # exclude: pomijamy sesje i logi admina, bo to śmieci, które tylko zajmują miejsce
+    # indent: ładne wcięcia w pliku (czytelność)
+    call_command(
+        'dumpdata',
+        exclude=['contenttypes', 'sessions', 'admin.logentry'],
+        indent=2,
+        stdout=output
+    )
+
+    # Przewijamy bufor na początek, żeby móc go odczytać
+    output.seek(0)
+
+    # Przygotowujemy plik do pobrania
+    now_str = timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M')
+    filename = f"FULL_DB_BACKUP_{now_str}.json"
+
+    response = HttpResponse(output.read(), content_type='application/json')
+    response['Content-Disposition'] = f'attachment; filename={filename}'
+
     return response

@@ -154,11 +154,21 @@
                 <div class="card border-0 shadow-sm">
                     <div class="card-body p-4">
 
-                        {# --- NOWOŚĆ: PRZYCISK EKSPORTU --- #}
-                        <div class="d-flex justify-content-end mb-4">
-                            <a href="{% url 'export_excel' %}" class="btn btn-success fw-bold shadow-sm">
-                                <i class="bi bi-file-earmark-excel-fill me-2"></i> Download Data Report
+                        {# --- SEKCJA NARZĘDZI --- #}
+                        <div class="d-flex justify-content-end mb-4 border-bottom pb-3 gap-2">
+
+                            {# 1. Przycisk Excela (DLA WSZYSTKICH) #}
+                            <a href="{% url 'export_excel' %}" class="btn btn-success fw-bold shadow-sm text-uppercase small ls-1">
+                                <i class="bi bi-file-earmark-excel-fill me-2"></i> Report (.xlsx)
                             </a>
+
+                            {# 2. Przycisk Backupu (TYLKO DLA ADMINA) #}
+                            {% if user.is_superuser %}
+                                <a href="{% url 'admin_backup' %}" class="btn btn-danger fw-bold shadow-sm text-uppercase small ls-1">
+                                    <i class="bi bi-database-fill-lock me-2"></i> FULL BACKUP (.json)
+                                </a>
+                            {% endif %}
+
                         </div>
 
                         {# SEKCJA 1: KLUB / ORGANIZACJA (reszta kodu bez zmian) #}

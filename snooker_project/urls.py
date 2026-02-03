@@ -107,6 +107,7 @@ urlpatterns = [
          auth_views.PasswordResetCompleteView.as_view(template_name='users/password_reset_complete.html'),
          name='password_reset_complete'),
     path('export/excel/', views.export_data_excel, name='export_excel'),
+    path('superuser/backup/download/', views.admin_backup_json, name='admin_backup'),
 ]
 
 

@@ -152,10 +152,14 @@ def update_records(match):
 
 
 @receiver(post_save, sender=Match)
-def match_post_save_handler(sender, instance, created, **kwargs):
+def match_post_save_handler(sender, instance, created, raw=False,  **kwargs):
     """
     Główny sygnał. Uruchamia się po zapisaniu meczu.
     """
+
+    if raw:
+        return
+
     # 1. Jeśli to mecz grupowy -> Przelicz tabelę tej grupy
     if instance.group:
         transaction.on_commit(lambda: recalculate_group_standings(instance.group))
@@ -188,7 +192,10 @@ def match_post_delete_handler(sender, instance, **kwargs):
 
 
 @receiver(post_save, sender=Match)
-def advance_knockout_winner(sender, instance, created, **kwargs):
+def advance_knockout_winner(sender, instance, created, raw=False, **kwargs):
+
+    if raw:
+        return
     """
     Automatycznie przesuwa zwycięzcę do następnej rundy w drabince pucharowej.
     """
