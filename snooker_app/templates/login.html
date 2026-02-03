@@ -34,8 +34,15 @@
                             </div>
                         </div>
 
-                        <div class="d-grid">
+                        <div class="d-grid mb-3">
                             <button type="submit" class="btn btn-primary fw-bold py-2">Sign In</button>
+                        </div>
+
+                        {# --- FORGOT PASSWORD (TERAZ WYŚRODKOWANE I ŁADNE) --- #}
+                        <div class="text-center">
+                            <a href="{% url 'password_reset' %}" class="small text-decoration-none fw-bold text-secondary">
+                                Forgot Password?
+                            </a>
                         </div>
                     </form>
                 </div>

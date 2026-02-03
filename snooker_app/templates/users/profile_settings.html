@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+
+{% block title %}Profile Settings{% endblock %}
+
+{% block content %}
+{# --- STYLE CSS DLA TEGO WIDOKU --- #}
+<style>
+    /* Nowoczesne Pola (Soft UI) - kopia stylu ze sprzętu */
+    .form-control, .form-select {
+        background-color: #f8f9fa !important;
+        border: 2px solid transparent !important;
+        border-radius: 12px !important;
+        padding: 10px 15px !important;
+        font-weight: 500 !important;
+        color: #495057 !important;
+        box-shadow: none !important;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .form-control:focus {
+        background-color: #ffffff !important;
+        border-color: #212529 !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+    }
+
+    /* Etykiety */
+    .form-label {
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: #adb5bd;
+        margin-left: 5px;
+        margin-bottom: 4px;
+    }
+
+    /* Awatar */
+    .profile-img-preview {
+        width: 150px;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 50%;
+        border: 4px solid #fff;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        margin-bottom: 1rem;
+    }
+
+    /* Input Group dla Social Media (Ikona + Pole) */
+    .social-group .input-group-text {
+        background-color: #fff;
+        border: none;
+        border-radius: 12px 0 0 12px;
+        padding-left: 15px;
+    }
+    .social-group .form-control {
+        border-radius: 0 12px 12px 0 !important;
+        padding-left: 10px !important;
+    }
+</style>
+
+<div class="container mt-5 mb-5">
+    <div class="row">
+            {# --- PRZYCISK POWROTU (NOWOŚĆ) --- #}
+        <div class="mb-3">
+            <a href="{% url 'home' %}" class="text-decoration-none text-secondary fw-bold small">
+                <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+            </a>
+        </div>
+
+        {# --- TYTUŁ --- #}
+        <div class="col-12 mb-4">
+            <h3 class="fw-bold text-dark"><i class="bi bi-gear-fill me-2 text-primary"></i>Profile Settings</h3>
+            <p class="text-muted small">Manage your personal account and club information.</p>
+        </div>
+
+        {# --- FORMULARZ (Jeden duży, obejmujący obie kolumny) --- #}
+        <form method="POST" enctype="multipart/form-data" class="row g-4">
+            {% csrf_token %}
+
+            {# === KOLUMNA LEWA: TOŻSAMOŚĆ (User Form) === #}
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center p-4">
+
+                        {# ZDJĘCIE PROFILOWE #}
+                        <div class="position-relative d-inline-block text-center">
+
+                            {# 1. Wyświetlanie aktualnego zdjęcia #}
+                            {% if user.profile.image %}
+                                <img src="{{ user.profile.image.url }}" alt="Profile Pic" class="profile-img-preview mb-3">
+                            {% else %}
+                                <div class="profile-img-preview d-flex align-items-center justify-content-center bg-light text-muted mb-3 mx-auto">
+                                    <i class="bi bi-person-fill display-1"></i>
+                                </div>
+                            {% endif %}
+
+                            {# 2. Nasz własny, ładny przycisk po angielsku #}
+                            <div>
+                                {# Ten Label "strzela" do ukrytego inputa dzięki for="real-file-input" #}
+                                <label for="real-file-input" class="btn btn-outline-dark btn-sm fw-bold shadow-sm">
+                                    <i class="bi bi-upload me-2"></i>Change Photo
+                                </label>
+
+                                {# Tutaj Django wyrenderuje ukryty input (dzięki klasie d-none w forms.py) #}
+                                {{ p_form.image }}
+
+                                {# Miejsce na wyświetlenie nazwy wybranego pliku #}
+                                <div id="file-name-display" class="small text-muted mt-2 fst-italic">
+                                    No file selected
+                                </div>
+                            </div>
+                        </div>
+
+                        {# Mały skrypt, żeby pokazać nazwę pliku po wybraniu #}
+                        <script>
+                            document.getElementById('real-file-input').addEventListener('change', function() {
+                                var fileName = this.files[0] ? this.files[0].name : "No file selected";
+                                document.getElementById('file-name-display').textContent = fileName;
+                            });
+                        </script>
+
+                        <hr class="my-4 opacity-10">
+
+                        {# DANE LOGOWANIA (User Update Form) #}
+                        <div class="text-start">
+                            <div class="mb-3">
+                                <label class="form-label">Username</label>
+                                {{ u_form.username }}
+                                <div class="form-text small">Used for login.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Email (Private)</label>
+                                {{ u_form.email }}
+                                <div class="form-text small">For password resets & notifications.</div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-6 mb-3">
+                                    <label class="form-label">First Name</label>
+                                    {{ u_form.first_name }}
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <label class="form-label">Last Name</label>
+                                    {{ u_form.last_name }}
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            {# === KOLUMNA PRAWA: DANE KLUBU (Profile Form) === #}
+            <div class="col-lg-8">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body p-4">
+
+                        {# SEKCJA 1: KLUB / ORGANIZACJA #}
+                        <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3">
+                            <i class="bi bi-building me-2"></i>Organization Details
+                        </h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-8">
+                                <label class="form-label">Club / Org Name</label>
+                                {{ p_form.club_name }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Founded Date</label>
+                                {{ p_form.founded_date }}
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Bio / Description</label>
+                                {{ p_form.bio }}
+                            </div>
+                        </div>
+
+                        {# SEKCJA 2: LOKALIZACJA I KONTAKT #}
+                        <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3 mt-4">
+                            <i class="bi bi-geo-alt-fill me-2"></i>Location & Contact
+                        </h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-7">
+                                <label class="form-label">Address</label>
+                                {{ p_form.address }}
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label">City</label>
+                                {{ p_form.city }}
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">Public Email</label>
+                                {{ p_form.public_email }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Main Phone</label>
+                                {{ p_form.phone_main }}
+                            </div>
+                        </div>
+
+                        {# SEKCJA 3: SOCIAL MEDIA (Z ładnymi ikonami) #}
+                        <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3 mt-4">
+                            <i class="bi bi-globe me-2"></i>Online Presence
+                        </h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Website</label>
+                                <div class="input-group social-group shadow-sm">
+                                    <span class="input-group-text text-muted"><i class="bi bi-link-45deg"></i></span>
+                                    {{ p_form.website }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Facebook</label>
+                                <div class="input-group social-group shadow-sm">
+                                    <span class="input-group-text text-primary"><i class="bi bi-facebook"></i></span>
+                                    {{ p_form.facebook }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Instagram</label>
+                                <div class="input-group social-group shadow-sm">
+                                    <span class="input-group-text text-danger"><i class="bi bi-instagram"></i></span>
+                                    {{ p_form.instagram }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">X (Twitter)</label>
+                                <div class="input-group social-group shadow-sm">
+                                    <span class="input-group-text text-dark"><i class="bi bi-twitter-x"></i></span>
+                                    {{ p_form.twitter }}
+                                </div>
+                            </div>
+                        </div>
+
+                        {# PRZYCISK ZAPISU #}
+                        <div class="mt-5 text-end border-top pt-4">
+                            <button type="submit" class="btn btn-dark fw-bold px-5 py-2 shadow">
+                                <i class="bi bi-check2-circle me-2"></i> Save Changes
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1389,14 +1389,25 @@ class Profile(models.Model):
     image = models.ImageField(default='default_profile.jpg', upload_to='profile_pics', blank=True, null=True)
 
     # 2. DANE ORGANIZATORA / KLUBU
-    club_name = models.CharField(max_length=150, blank=True, null=True, help_text="Name of club")
+    club_name = models.CharField(max_length=150, blank=True, null=True, help_text="Name of club or organization")
     founded_date = models.DateField(blank=True, null=True, help_text="Date of club foundation")
 
     # 3. LOKALIZACJA
     address = models.CharField(max_length=255, blank=True, null=True, help_text="Street and number")
     city = models.CharField(max_length=100, blank=True, null=True, help_text="City")
 
-    # 4. INNE
+    # 4. KONTAKT (Nowość)
+    public_email = models.EmailField(blank=True, null=True, help_text="Public contact email (visible to players)")
+    phone_main = models.CharField(max_length=20, blank=True, null=True, help_text="Main contact number")
+    phone_secondary = models.CharField(max_length=20, blank=True, null=True, help_text="Alternative number")
+
+    # 5. SOCIAL MEDIA & WEB (Nowość)
+    website = models.URLField(blank=True, null=True, help_text="Official website URL")
+    facebook = models.URLField(blank=True, null=True, help_text="Facebook profile URL")
+    instagram = models.URLField(blank=True, null=True, help_text="Instagram profile URL")
+    twitter = models.URLField(blank=True, null=True, help_text="X (Twitter) profile URL")
+
+    # 6. INNE
     bio = models.TextField(max_length=500, blank=True, null=True, help_text="A short description about you or the club")
 
     def __str__(self):

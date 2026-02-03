@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.forms import BaseModelFormSet
 
 from .models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Group, GroupStanding,
-                     Equipment, EquipmentPhoto)
+                     Equipment, EquipmentPhoto, Profile)
 
 import math
 
@@ -902,3 +902,51 @@ class EquipmentPhotoForm(forms.ModelForm):
     class Meta:
         model = EquipmentPhoto
         fields = ['image', 'is_main']
+
+
+# --- FORMULARZ UŻYTKOWNIKA (Login, Email, Imię) ---
+class UserUpdateForm(forms.ModelForm):
+    # POPRAWKA TU: Wymuszamy widget z klasą form-control bezpośrednio w definicji pola
+    email = forms.EmailField(widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Email'}))
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'first_name', 'last_name']
+        widgets = {
+            'username': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Username'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'First Name'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Last Name'}),
+        }
+
+
+# --- FORMULARZ PROFILU (Klub, Adres, Sociale) ---
+class ProfileUpdateForm(forms.ModelForm):
+    class Meta:
+        model = Profile
+        fields = [
+            'image', 'club_name', 'founded_date', 'bio',
+            'address', 'city',
+            'public_email', 'phone_main', 'phone_secondary',
+            'website', 'facebook', 'instagram', 'twitter'
+        ]
+        widgets = {
+            'image': forms.FileInput(attrs={'class': 'd-none', 'id': 'real-file-input'}),
+            'club_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Club Name'}),
+            'founded_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'bio': forms.Textarea(attrs={'rows': 3, 'class': 'form-control', 'placeholder': 'Short description...'}),
+
+            # Lokalizacja
+            'address': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Street and Number'}),
+            'city': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'City'}),
+
+            # Kontakt
+            'public_email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'contact@club.com'}),
+            'phone_main': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+48...'}),
+            'phone_secondary': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Alternative number'}),
+
+            # Social Media
+            'website': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://...'}),
+            'facebook': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://facebook.com/...'}),
+            'instagram': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://instagram.com/...'}),
+            'twitter': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://x.com/...'}),
+        }

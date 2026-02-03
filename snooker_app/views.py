@@ -35,7 +35,7 @@ from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueFor
                                GroupStageForm, SignUpForm, KnockoutStageForm, MassMatchEditForm, ExtraMatchForm,
                                SubstitutePlayerForm, GroupAssignmentForm, AddPlayerToGroupForm, KnockoutSwapForm,
                                ImportCodeForm, SelectImportedPlayersForm, MatchFormSetValidating, EquipmentForm,
-                               EquipmentPhotoForm)
+                               EquipmentPhotoForm, UserUpdateForm, ProfileUpdateForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
                                 MatchPlayer, Frame, GroupStanding, SharingToken, CompetitionResult, Equipment,
                                 EquipmentPhoto)
@@ -2286,3 +2286,26 @@ def manage_photos(request, pk):
         'equipment': equipment,
         'form': form
     })
+
+
+@login_required
+def profile_settings(request):
+    if request.method == 'POST':
+        u_form = UserUpdateForm(request.POST, instance=request.user)
+        p_form = ProfileUpdateForm(request.POST, request.FILES, instance=request.user.profile)
+
+        if u_form.is_valid() and p_form.is_valid():
+            u_form.save()
+            p_form.save()
+            messages.success(request, 'Your profile has been updated!')
+            return redirect('profile_settings')  # Przeładowanie strony (PRG pattern)
+
+    else:
+        u_form = UserUpdateForm(instance=request.user)
+        p_form = ProfileUpdateForm(instance=request.user.profile)
+
+    context = {
+        'u_form': u_form,
+        'p_form': p_form
+    }
+    return render(request, 'users/profile_settings.html', context)
