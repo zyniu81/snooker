@@ -34,9 +34,11 @@ from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueFor
                                MatchForm, CompetitionForm, AddMatchesToCompetitionForm,
                                GroupStageForm, SignUpForm, KnockoutStageForm, MassMatchEditForm, ExtraMatchForm,
                                SubstitutePlayerForm, GroupAssignmentForm, AddPlayerToGroupForm, KnockoutSwapForm,
-                               ImportCodeForm, SelectImportedPlayersForm, MatchFormSetValidating)
+                               ImportCodeForm, SelectImportedPlayersForm, MatchFormSetValidating, EquipmentForm,
+                               EquipmentPhotoForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
-                                MatchPlayer, Frame, GroupStanding, SharingToken, CompetitionResult)
+                                MatchPlayer, Frame, GroupStanding, SharingToken, CompetitionResult, Equipment,
+                                EquipmentPhoto)
 
 
 # --- FUNKCJE POMOCNICZE ---
@@ -2174,4 +2176,113 @@ def player_match_history(request, pk):
         'possible_opponents': possible_opponents,
         'selected_opponent': opponent,
         'stats': stats
+    })
+
+
+@login_required
+def equipment_list(request, player_id):
+    player = get_object_or_404(Player, pk=player_id)
+
+    # Podział na sprzęt AKTUALNY i HISTORYCZNY
+    current_gear = player.equipment.filter(end_date__isnull=True).order_by('item_type')
+    archive_gear = player.equipment.filter(end_date__isnull=False).order_by('-end_date')
+
+    return render(request, 'equipment/list.html', {
+        'player': player,
+        'current_gear': current_gear,
+        'archive_gear': archive_gear
+    })
+
+
+@login_required
+def add_equipment(request, player_id):
+    player = get_object_or_404(Player, pk=player_id)
+
+    if request.method == 'POST':
+        form = EquipmentForm(request.POST)
+        if form.is_valid():
+            new_eq = form.save(commit=False)
+            new_eq.owner = request.user
+            new_eq.player = player
+
+            # --- LOGIKA AUTO-ARCHIWIZACJI ---
+            # Jeśli nowy sprzęt jest AKTYWNY (brak end_date), zamknij stary tego samego typu
+            if new_eq.end_date is None:
+                old_active = Equipment.objects.filter(
+                    player=player,
+                    item_type=new_eq.item_type,
+                    end_date__isnull=True
+                )
+                # Ustaw datę końca starego na datę startu nowego
+                for old in old_active:
+                    old.end_date = new_eq.start_date
+                    old.save()
+                    messages.info(request, f"Auto-archived previous {new_eq.get_item_type_display()}: {old.name}")
+            # -------------------------------
+
+            new_eq.save()
+            messages.success(request, "New equipment added successfully!")
+            return redirect('equipment_list', player_id=player.id)
+    else:
+        form = EquipmentForm()
+
+    return render(request, 'equipment/form.html', {
+        'form': form,
+        'player': player,
+        'action': 'Add'
+    })
+
+
+@login_required
+def edit_equipment(request, pk):
+    equipment = get_object_or_404(Equipment, pk=pk)
+    if request.method == 'POST':
+        form = EquipmentForm(request.POST, instance=equipment)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Equipment updated.")
+            return redirect('equipment_list', player_id=equipment.player.id)
+    else:
+        form = EquipmentForm(instance=equipment)
+
+    return render(request, 'equipment/form.html', {
+        'form': form,
+        'player': equipment.player,
+        'action': 'Edit'
+    })
+
+
+@login_required
+def equipment_detail(request, pk):
+    item = get_object_or_404(Equipment, pk=pk)
+    return render(request, 'equipment/detail.html', {'item': item})
+
+
+@login_required
+def delete_equipment(request, pk):
+    equipment = get_object_or_404(Equipment, pk=pk)
+    player_id = equipment.player.id
+    equipment.delete()
+    messages.success(request, "Equipment deleted.")
+    return redirect('equipment_list', player_id=player_id)
+
+
+@login_required
+def manage_photos(request, pk):
+    equipment = get_object_or_404(Equipment, pk=pk)
+
+    if request.method == 'POST':
+        form = EquipmentPhotoForm(request.POST, request.FILES)
+        if form.is_valid():
+            photo = form.save(commit=False)
+            photo.equipment = equipment
+            photo.save()
+            messages.success(request, "Photo added.")
+            return redirect('manage_photos', pk=pk)
+    else:
+        form = EquipmentPhotoForm()
+
+    return render(request, 'equipment/photos.html', {
+        'equipment': equipment,
+        'form': form
     })

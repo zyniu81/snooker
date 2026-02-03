@@ -1218,8 +1218,9 @@ class KnockoutStage(Stage):
         verbose_name_plural = 'Knockout Stages'
 
 
-# --- 4. EQUIPMENT (Historia Sprzętu) ---
+# --- 4. EQUIPMENT (Historia Sprzętu - Wersja PRO) ---
 class Equipment(models.Model):
+    # Typy sprzętu
     TYPE_CHOICES = [
         ('CUE', 'Snooker Cue'),
         ('TIP', 'Cue Tip'),
@@ -1228,22 +1229,72 @@ class Equipment(models.Model):
         ('OTHER', 'Other'),
     ]
 
+    # Jednostki i Opcje
+    WEIGHT_UNITS = [('OZ', 'oz'), ('G', 'g')]
+    LENGTH_UNITS = [('INCH', 'inch'), ('CM', 'cm')]
+    JOINT_CHOICES = [('1PC', '1-piece'), ('3/4', '3/4'), ('2PC', '1/2 (Center)'), ('4/4', '4/4')]
+    HARDNESS_CHOICES = [
+        ('SS', 'Super Soft'), ('S', 'Soft'), ('M', 'Medium'),
+        ('H', 'Hard'), ('XH', 'Extra Hard')
+    ]
+    SHAFT_MATERIALS = [('ASH', 'Ash (Jesion)'), ('MAPLE', 'Maple (Klon)'), ('CARBON', 'Carbon'), ('OTHER', 'Other')]
+
+    # Relacje
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='equipment')
 
-    name = models.CharField(max_length=100, help_text="e.g. Parris Cues Ultimate")
+    # Podstawowe
     item_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='CUE')
+    brand = models.CharField(max_length=50, blank=True, null=True, verbose_name="Manufacturer/Brand")
+    name = models.CharField(max_length=100, help_text="Model name or custom name")
 
-    start_date = models.DateField(help_text="When did you start using this?")
+    # --- SPECYFIKACJA (Detale) ---
+    # Kij
+    shaft_material = models.CharField(max_length=10, choices=SHAFT_MATERIALS, blank=True, null=True)
+    joint_type = models.CharField(max_length=5, choices=JOINT_CHOICES, blank=True, null=True)
+
+    # Waga
+    weight_value = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, verbose_name="Weight")
+    weight_unit = models.CharField(max_length=4, choices=WEIGHT_UNITS, default='OZ', blank=True, null=True)
+
+    # Długość
+    length_value = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, verbose_name="Length")
+    length_unit = models.CharField(max_length=4, choices=LENGTH_UNITS, default='INCH', blank=True, null=True)
+
+    # Ferula
+    ferrule_material = models.CharField(max_length=30, blank=True, null=True, help_text="e.g. Brass, Titanium")
+    ferrule_size = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True,
+                                       help_text="Diameter in mm")
+
+    # Tip
+    tip_hardness = models.CharField(max_length=3, choices=HARDNESS_CHOICES, blank=True, null=True)
+    tip_diameter = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True,
+                                       verbose_name="Tip Size (mm)")
+
+    # Logika i Historia
+    start_date = models.DateField(help_text="Start date of usage")
     end_date = models.DateField(null=True, blank=True, help_text="Leave empty if currently in use")
-
     notes = models.TextField(blank=True, null=True)
 
     def is_active(self):
         return self.end_date is None
 
     def __str__(self):
-        return f"{self.name} ({self.get_item_type_display()})"
+        brand_str = f"{self.brand} " if self.brand else ""
+        return f"{brand_str}{self.name} ({self.get_item_type_display()})"
+
+
+class EquipmentPhoto(models.Model):
+    equipment = models.ForeignKey(Equipment, on_delete=models.CASCADE, related_name='photos')
+    image = models.ImageField(upload_to='equipment_photos/')
+    is_main = models.BooleanField(default=False, help_text="Is this the main photo for the list?")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        # Jeśli to zdjęcie jest główne, odznacz inne główne dla tego sprzętu
+        if self.is_main:
+            EquipmentPhoto.objects.filter(equipment=self.equipment).update(is_main=False)
+        super().save(*args, **kwargs)
 
 
 # --- 5. TRAINING SESSION (Dziennik Treningowy) ---

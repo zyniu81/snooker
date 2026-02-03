@@ -87,6 +87,12 @@ urlpatterns = [
     path('player/<int:pk>/matches/', views.player_match_history, name='player_match_history'),
     path('competition/<int:competition_id>/substitute/knockout/', views.substitute_player_knockout,
          name='substitute_player_knockout'),
+    path('player/<int:player_id>/equipment/', views.equipment_list, name='equipment_list'),
+    path('player/<int:player_id>/equipment/add/', views.add_equipment, name='add_equipment'),
+    path('equipment/<int:pk>/edit/', views.edit_equipment, name='edit_equipment'),
+    path('equipment/<int:pk>/delete/', views.delete_equipment, name='delete_equipment'),
+    path('equipment/<int:pk>/photos/', views.manage_photos, name='manage_photos'),
+    path('equipment/<int:pk>/', views.equipment_detail, name='equipment_detail'),
 ]
 
 

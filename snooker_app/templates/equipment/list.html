@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<style>
+    /* Nowoczesne Zakładki */
+    .nav-tabs {
+        border-bottom: 2px solid #e9ecef;
+    }
+    .nav-tabs .nav-link {
+        color: #adb5bd; /* Szary dla nieaktywnych */
+        font-weight: 600;
+        border: none;
+        border-bottom: 3px solid transparent;
+        padding-bottom: 12px;
+        transition: all 0.2s;
+    }
+    .nav-tabs .nav-link:hover {
+        color: #495057;
+        background: transparent;
+    }
+    .nav-tabs .nav-link.active {
+        color: #0d6efd; /* Niebieski (Primary) dla aktywnej */
+        background: transparent;
+        border-bottom: 3px solid #0d6efd; /* Podkreślenie zamiast ramki */
+    }
+</style>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="bi bi-backpack2-fill me-2"></i> {{ player }}'s Equipment</h3>
+        <a href="{% url 'add_equipment' player.id %}" class="btn btn-primary fw-bold shadow-sm">
+            <i class="bi bi-plus-lg"></i> Add New Gear
+        </a>
+    </div>
+
+    <ul class="nav nav-tabs mb-4" id="equipTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="current-tab" data-bs-toggle="tab" data-bs-target="#current" type="button">Current Setup</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="archive-tab" data-bs-toggle="tab" data-bs-target="#archive" type="button">Archive / Museum</button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+
+        {# --- ZAKŁADKA 1: AKTUALNE --- #}
+        <div class="tab-pane fade show active" id="current">
+            <div class="row g-4">
+                {% for item in current_gear %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100 shadow-sm border-0">
+                            <div class="card-header bg-white border-bottom-0 pt-3 pb-0 d-flex justify-content-between align-items-start">
+                                <span class="badge bg-primary bg-opacity-10 text-primary">{{ item.get_item_type_display }}</span>
+                                <small class="text-muted fw-bold" style="font-size: 0.7rem;">SINCE {{ item.start_date|date:"M Y"|upper }}</small>
+                            </div>
+
+                            <div class="card-body">
+                                <h5 class="card-title fw-bold mb-3 text-dark">{{ item.brand|default:"" }} {{ item.name }}</h5>
+
+                                {% with main_photo=item.photos.first %}
+                                <div class="ratio ratio-16x9 bg-light rounded overflow-hidden border">
+                                    {% if main_photo %}
+                                        <img src="{{ main_photo.image.url }}" class="object-fit-cover" alt="{{ item.name }}">
+                                    {% else %}
+                                        <div class="d-flex align-items-center justify-content-center text-muted">
+                                            <i class="bi bi-camera-fill fs-1 opacity-25"></i>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                {% endwith %}
+
+                                <div class="mt-3 small text-muted">
+                                    {% if item.weight_value %}
+                                        <span class="me-2"><i class="bi bi-speedometer2 me-1"></i>{{ item.weight_value }}{{ item.weight_unit }}</span>
+                                    {% endif %}
+                                    {% if item.tip_diameter %}
+                                        <span><i class="bi bi-circle me-1"></i>{{ item.tip_diameter }}mm</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="card-footer bg-white border-top-0 pb-3 text-end">
+                                <div class="btn-group">
+                                    <a href="{% url 'equipment_detail' item.pk %}" class="btn btn-sm btn-outline-dark" title="View Details">
+                                        <i class="bi bi-eye-fill"></i> View
+                                    </a>
+                                    <a href="{% url 'manage_photos' item.pk %}" class="btn btn-sm btn-outline-secondary" title="Photos">
+                                        <i class="bi bi-images"></i>
+                                    </a>
+                                    <a href="{% url 'edit_equipment' item.pk %}" class="btn btn-sm btn-outline-primary" title="Edit">
+                                        <i class="bi bi-pencil-fill"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="col-12 text-center text-muted py-5">
+                        <i class="bi bi-bag mb-3 d-block display-4 opacity-25"></i>
+                        <h4>Bag is empty!</h4>
+                        <p>Add the cue, tip or chalk currently in use.</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# --- ZAKŁADKA 2: ARCHIWUM --- #}
+        <div class="tab-pane fade" id="archive">
+            <div class="card shadow-sm border-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-4">Item</th>
+                            <th>Period</th>
+                            <th>Specs Summary</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in archive_gear %}
+                        <tr>
+                            <td class="ps-4">
+                                <div class="fw-bold text-dark">{{ item.brand|default:"" }} {{ item.name }}</div>
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary" style="font-size: 0.7rem;">{{ item.get_item_type_display }}</span>
+                            </td>
+                            <td class="small text-muted">
+                                {{ item.start_date|date:"d.m.Y" }} <i class="bi bi-arrow-right mx-1"></i> {{ item.end_date|date:"d.m.Y" }}
+                            </td>
+                            <td class="small text-muted">
+                                {% if item.weight_value %}{{ item.weight_value }}{{ item.weight_unit }}{% endif %}
+                                {% if item.tip_diameter %} / {{ item.tip_diameter }}mm{% endif %}
+                            </td>
+                            <td class="text-end pe-4">
+                                <a href="{% url 'equipment_detail' item.pk %}" class="btn btn-sm btn-outline-dark me-1" title="View">
+                                    <i class="bi bi-eye-fill"></i>
+                                </a>
+                                <a href="{% url 'edit_equipment' item.pk %}" class="btn btn-sm btn-light border text-muted" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var triggerTabList = [].slice.call(document.querySelectorAll('#equipTabs button'))
+    triggerTabList.forEach(function (triggerEl) {
+      var tabTrigger = new bootstrap.Tab(triggerEl)
+      triggerEl.addEventListener('click', function (event) {
+        event.preventDefault()
+        tabTrigger.show()
+      })
+    })
+</script>
+{% endblock %}

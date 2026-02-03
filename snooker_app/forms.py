@@ -5,7 +5,9 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.forms import BaseModelFormSet
-from .models import Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Group, GroupStanding
+
+from .models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Group, GroupStanding,
+                     Equipment, EquipmentPhoto)
 
 import math
 
@@ -853,3 +855,50 @@ class MatchFormSetValidating(BaseModelFormSet):
                         raise forms.ValidationError(
                             f"Player '{p2}' appears twice in {context_name}. You cannot assign the same player to multiple matches in one round.")
                     usage_map[stage_key].add(p2.id)
+
+
+class EquipmentForm(forms.ModelForm):
+    class Meta:
+        model = Equipment
+        exclude = ['owner', 'player']
+        widgets = {
+            # --- PODSTAWOWE ---
+            'item_type': forms.Select(attrs={'class': 'form-select'}),
+            'brand': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Manufacturer'}),
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Model name'}),
+
+            # --- SPECYFIKACJA (Tu brakowało klas!) ---
+            'shaft_material': forms.Select(attrs={'class': 'form-select'}),
+            'joint_type': forms.Select(attrs={'class': 'form-select'}),
+
+            'weight_value': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '0.0'}),
+            'weight_unit': forms.Select(attrs={'class': 'form-select'}),
+
+            'length_value': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '0.0'}),
+            'length_unit': forms.Select(attrs={'class': 'form-select'}),
+
+            'tip_hardness': forms.Select(attrs={'class': 'form-select'}),
+            'tip_diameter': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'mm'}),
+
+            'ferrule_material': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Material'}),
+            'ferrule_size': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'mm'}),
+
+            # --- DATY I NOTATKI ---
+            'start_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'notes': forms.Textarea(attrs={'rows': 3, 'class': 'form-control', 'placeholder': 'Additional info...'}),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start = cleaned_data.get('start_date')
+        end = cleaned_data.get('end_date')
+
+        if start and end and end < start:
+            raise forms.ValidationError("End date cannot be earlier than start date.")
+        return cleaned_data
+
+class EquipmentPhotoForm(forms.ModelForm):
+    class Meta:
+        model = EquipmentPhoto
+        fields = ['image', 'is_main']

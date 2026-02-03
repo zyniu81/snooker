@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="mb-0">
+                <i class="bi bi-images me-2"></i> Gallery
+            </h3>
+            <p class="text-muted mb-0">
+                {{ equipment.get_item_type_display }}: <strong>{{ equipment.brand|default:"" }} {{ equipment.name }}</strong>
+            </p>
+        </div>
+        <a href="{% url 'equipment_list' equipment.player.id %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Back to Equipment
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light fw-bold text-secondary">
+                    Uploaded Photos
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        {% for photo in equipment.photos.all %}
+                            <div class="col-6 col-md-4">
+                                <div class="card h-100 border-0 shadow-sm position-relative">
+
+                                    <div class="ratio ratio-1x1 bg-light rounded overflow-hidden border">
+                                        <a href="{{ photo.image.url }}" target="_blank">
+                                            <img src="{{ photo.image.url }}" class="object-fit-cover" alt="Gear Photo">
+                                        </a>
+                                    </div>
+
+                                    {% if photo.is_main %}
+                                        <span class="position-absolute top-0 start-0 badge bg-success m-2 shadow">
+                                            <i class="bi bi-star-fill me-1"></i> MAIN
+                                        </span>
+                                    {% endif %}
+
+                                    <div class="card-footer bg-white border-0 p-1 text-center">
+                                        <small class="text-muted" style="font-size: 0.7rem;">
+                                            {{ photo.created_at|date:"d M Y" }}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="col-12 text-center py-5 text-muted">
+                                <i class="bi bi-camera fs-1 mb-3 d-block"></i>
+                                <p>No photos uploaded for this item yet.</p>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow border-primary sticky-top" style="top: 20px;">
+                <div class="card-header bg-primary text-white fw-bold">
+                    <i class="bi bi-cloud-upload-fill me-2"></i> Add Photo
+                </div>
+                <div class="card-body">
+
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-uppercase">Select Image</label>
+                            <input type="file" name="image" class="form-control" accept="image/*" required id="id_image">
+                            </div>
+
+                        <div class="mb-4 form-check bg-light p-3 rounded border">
+                            {{ form.is_main }}
+                            <label class="form-check-label fw-bold" for="{{ form.is_main.id_for_label }}">
+                                Set as Main Photo?
+                            </label>
+                            <div class="form-text small mt-1">
+                                Checking this will uncheck any previous main photo.
+                            </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success fw-bold py-2">
+                                <i class="bi bi-upload me-2"></i> Upload Photo
+                            </button>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
