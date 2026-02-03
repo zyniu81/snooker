@@ -8,7 +8,7 @@ from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse, HttpResponseForbidden, HttpResponse
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.forms import modelformset_factory
@@ -18,15 +18,13 @@ from django.dispatch import receiver
 from datetime import timedelta
 from django.utils.safestring import mark_safe
 from django.urls import reverse
-from django.db import transaction
+from django.db import transaction, models
 from django.utils.crypto import get_random_string
 from django.template.loader import render_to_string
 from collections import defaultdict
 
-import os
 from openai import OpenAI
-import sys
-import json
+import os, json, openpyxl, sys
 
 from .services import update_career_stats, calculate_competition_results
 
@@ -2309,3 +2307,155 @@ def profile_settings(request):
         'p_form': p_form
     }
     return render(request, 'users/profile_settings.html', context)
+
+
+@login_required
+def export_data_excel(request):
+    workbook = openpyxl.Workbook()
+
+    # =========================================================
+    # ARKUSZ 1: GENERAL STATS (Dashboard)
+    # =========================================================
+    ws_dash = workbook.active
+    ws_dash.title = "General Stats"
+    ws_dash.append(['Metric', 'Value'])
+
+    # POPRAWKA 1: status='FINISHED' (Wielkie litery)
+    total_matches = Match.objects.filter(owner=request.user, status='FINISHED').count()
+    total_players = Player.objects.filter(owner=request.user).count()
+    total_tournaments = Competition.objects.filter(owner=request.user).count()
+
+    # --- POPRAWKA GLÓWNA: Club Highest Break ---
+    # Zamiast szukać w Turniejach, szukamy w Graczach (uwzględnia sparingi/quick match)
+    all_players = Player.objects.filter(owner=request.user)
+
+    all_breaks_values = []
+    for p in all_players:
+        # Sprawdzamy czy highest_break to metoda czy pole (dla bezpieczeństwa)
+        val = p.highest_break() if callable(getattr(p, 'highest_break', None)) else p.highest_break
+        all_breaks_values.append(val or 0)
+
+    # Wyciągamy max z listy wszystkich graczy
+    global_max_break = max(all_breaks_values) if all_breaks_values else 0
+
+    ws_dash.append(['Total Finished Matches', total_matches])
+    ws_dash.append(['Total Players Database', total_players])
+    ws_dash.append(['Total Tournaments', total_tournaments])
+    ws_dash.append(['Club Highest Break', global_max_break])  # Teraz pokaże 56!
+
+    # =========================================================
+    # ARKUSZ 2: FULL PLAYER STATISTICS
+    # =========================================================
+    ws_stats = workbook.create_sheet(title="Full Player Statistics")
+
+    headers = [
+        '#', 'Player',
+        'Matches', 'Won', 'Lost', '% Win',
+        'Frames', 'Won', 'Lost', '% Win',
+        'Fastest Frame', 'Longest Frame', 'Avg Frame',
+        'Deciders Won', 'Deciders Played', '% Deciders',
+        'Whitewash',
+        'Streak (Matches)', 'Streak (Frames)',
+        'Pot %', 'Safe %', 'AST',
+        'Max Break', '100+', '50+',
+        'Break Details'
+    ]
+    ws_stats.append(headers)
+
+    players = Player.objects.filter(owner=request.user)
+
+    for idx, p in enumerate(players, 1):
+        match_win_pct = round((p.matches_won / p.matches_played * 100), 1) if p.matches_played > 0 else 0.0
+        frame_win_pct = round((p.frames_won / p.frames_played * 100), 1) if p.frames_played > 0 else 0.0
+        decider_pct = round((p.deciders_won / p.deciders_played * 100), 1) if p.deciders_played > 0 else 0.0
+
+        # Metody czasowe (z zabezpieczeniem callable)
+        fastest = p.formatted_fastest_frame() if callable(
+            getattr(p, 'formatted_fastest_frame', None)) else p.formatted_fastest_frame
+        longest = p.formatted_longest_frame() if callable(
+            getattr(p, 'formatted_longest_frame', None)) else p.formatted_longest_frame
+        avg_frame = p.formatted_avg_frame() if callable(
+            getattr(p, 'formatted_avg_frame', None)) else p.formatted_avg_frame
+        ast = p.formatted_avg_shot_time() if callable(
+            getattr(p, 'formatted_avg_shot_time', None)) else p.formatted_avg_shot_time
+
+        # Breaki (Słownik -> Tekst)
+        stats_dict = p.career_break_stats() if callable(
+            getattr(p, 'career_break_stats', None)) else p.career_break_stats
+        break_details_str = ""
+        if isinstance(stats_dict, dict):
+            items = [f"{k}: {v}" for k, v in stats_dict.items() if v > 0]
+            break_details_str = " | ".join(items)
+
+        row = [
+            idx, str(p),
+            p.matches_played, p.matches_won, p.matches_lost, f"{match_win_pct}%",
+            p.frames_played, p.frames_won, p.frames_lost, f"{frame_win_pct}%",
+            str(fastest), str(longest), str(avg_frame),
+            p.deciders_won, p.deciders_played, f"{decider_pct}%",
+            p.whitewashes_count,
+            p.consecutive_matches_won, p.consecutive_frames_won,
+            f"{p.global_pot_success:.0f}%" if p.global_pot_success else "-",
+            f"{p.global_safety_success:.0f}%" if p.global_safety_success else "-",
+            str(ast),
+            p.max_breaks_count, p.centuries_count, p.fifties_count,
+            break_details_str
+        ]
+        ws_stats.append(row)
+
+    # =========================================================
+    # ARKUSZ 3: TOURNAMENTS ARCHIVE
+    # =========================================================
+    ws_tour = workbook.create_sheet(title="Tournaments Archive")
+    ws_tour.append(['Name', 'Start Date', 'Variant', 'Status', 'Winner', 'Max Break', 'Max Break Player'])
+
+    tournaments = Competition.objects.filter(owner=request.user).order_by('-start_date')
+    for t in tournaments:
+        winner_name = str(t.winner) if t.winner else "-"
+        max_break_val = t.highest_break_points if t.highest_break_points > 0 else "-"
+        max_break_player = str(t.highest_break_player) if t.highest_break_player else "-"
+
+        ws_tour.append([
+            t.name, t.start_date.strftime('%Y-%m-%d'), t.get_game_variant_display(),
+            t.get_status_display(), winner_name, max_break_val, max_break_player
+        ])
+
+    # =========================================================
+    # ARKUSZ 4: REFEREES
+    # =========================================================
+    ws_ref = workbook.create_sheet(title="Referees")
+    ws_ref.append(['Name', 'License', 'Matches Officiated', 'Last Match Date'])
+
+    referees = Referee.objects.filter(owner=request.user)
+    for r in referees:
+        # status='FINISHED'
+        ref_matches = Match.objects.filter(owner=request.user, status='FINISHED', referees=r).order_by('-date')
+        count = ref_matches.count()
+        last_match = ref_matches.first()
+        last_date = last_match.date.strftime('%Y-%m-%d') if last_match and last_match.date else "-"
+        ws_ref.append([str(r), r.license_number, count, last_date])
+
+    # =========================================================
+    # ARKUSZ 5: MATCH HISTORY
+    # =========================================================
+    ws_matches = workbook.create_sheet(title="Match History")
+    ws_matches.append(['Date', 'Player 1', 'Score', 'Player 2', 'Winner'])
+
+    # status='FINISHED'
+    matches = Match.objects.filter(owner=request.user, status='FINISHED').order_by('-date')
+
+    for m in matches:
+        date_str = m.date.strftime('%Y-%m-%d') if m.date else ""
+        score_str = f"{m.final_score_player1} - {m.final_score_player2}"
+        ws_matches.append([date_str, str(m.player1), score_str, str(m.player2), str(m.winner)])
+
+    # =========================================================
+    # ZAPIS
+    # =========================================================
+    now_str = timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M')
+    filename = f"snooker_report_{now_str}.xlsx"
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename={filename}'
+    workbook.save(response)
+    return response
