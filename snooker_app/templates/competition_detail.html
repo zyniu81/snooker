@@ -84,14 +84,27 @@
                     <h5 class="mb-0 text-secondary"><i class="bi bi-kanban me-2"></i>Tournament Management</h5>
                 </div>
 
-                <div class="d-flex gap-2">
-                    {% if competition.status != 'FINISHED' %}
+                <div class="d-flex gap-2 align-items-center">
 
-                        <div class="dropdown">
-                            <button class="btn btn-primary dropdown-toggle fw-bold shadow-sm" type="button" id="nextStageDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    {# --- 1. DROPDOWN (Zawsze widoczny, ale zmienia treść) --- #}
+                    <div class="dropdown">
+                        <button class="btn {% if competition.status != 'FINISHED' %}btn-primary{% else %}btn-secondary{% endif %} dropdown-toggle fw-bold shadow-sm"
+                                type="button"
+                                id="nextStageDropdown"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false">
+
+                            {% if competition.status != 'FINISHED' %}
                                 <i class="bi bi-plus-circle-fill me-1"></i> Add Stage & Extras
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="nextStageDropdown">
+                            {% else %}
+                                <i class="bi bi-printer-fill me-1"></i> Print Center & Options
+                            {% endif %}
+                        </button>
+
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="nextStageDropdown">
+
+                            {# --- OPCJE EDYCJI (Tylko gdy turniej TRWA) --- #}
+                            {% if competition.status != 'FINISHED' %}
                                 <li><h6 class="dropdown-header text-uppercase small ls-1">Main Stages</h6></li>
                                 <li>
                                     <a class="dropdown-item" href="{% url 'create_group_stage' competition.id %}">
@@ -107,10 +120,8 @@
                                 <li><hr class="dropdown-divider"></li>
                                 <li><h6 class="dropdown-header text-uppercase small ls-1">Extras</h6></li>
 
-                                {# --- PĘTLA PO WSZYSTKICH ETAPACH --- #}
+                                {# PĘTLA PO ETAPACH #}
                                 {% for stage in all_stages %}
-
-                                    {# 1. Jeśli to GRUPA (ma atrybut groups) #}
                                     {% if stage.groups and not stage.is_finished %}
                                         <li>
                                             <a class="dropdown-item" href="{% url 'manage_groups' stage.id %}">
@@ -124,27 +135,50 @@
                                         </li>
                                     {% endif %}
 
-                                    {# 2. Jeśli to PUCHAR (ma atrybut num_rounds - specyficzny dla Knockout) #}
                                     {% if stage.num_rounds and not stage.is_finished %}
                                         <li>
-                                            {# ZMIANA: Kierujemy do nowego widoku substitute_player_knockout #}
                                             <a class="dropdown-item" href="{% url 'substitute_player_knockout' competition.id %}">
                                                 <i class="bi bi-arrow-left-right me-2 text-warning"></i> Substitute ({{ stage.name }})
                                             </a>
                                         </li>
                                     {% endif %}
-
                                 {% endfor %}
-                                {# --------------------------------- #}
 
                                 <li>
                                     <a class="dropdown-item" href="{% url 'add_matches_to_competition' competition.pk %}">
                                         <i class="bi bi-lightning-fill me-2 text-danger"></i> Add Single Match
                                     </a>
                                 </li>
-                            </ul>
-                        </div>
 
+                                {# Linia oddzielająca edycję od druku (tylko gdy edycja jest widoczna) #}
+                                <li><hr class="dropdown-divider"></li>
+                            {% endif %}
+
+                            {# --- SEKCJA PRINT CENTER (ZAWSZE WIDOCZNA) --- #}
+                            <li><h6 class="dropdown-header text-uppercase small ls-1">Print Center</h6></li>
+
+                            <li>
+                                <a class="dropdown-item" href="{% url 'competition_print_matches' competition.pk %}" target="_blank">
+                                    <i class="bi bi-printer me-2 text-dark"></i> Match Schedule
+                                </a>
+                            </li>
+
+                            <li>
+                                <a class="dropdown-item" href="{% url 'competition_print_groups' competition.pk %}" target="_blank">
+                                    <i class="bi bi-file-spreadsheet me-2 text-dark"></i> Group Standings
+                                </a>
+                            </li>
+
+                            <li>
+                                <a class="dropdown-item" href="{% url 'competition_print_bracket' competition.pk %}" target="_blank">
+                                    <i class="bi bi-diagram-3 me-2 text-dark"></i> Play-Off Bracket
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+
+                    {# --- 2. PRZYCISKI AKCJI (Tylko gdy turniej TRWA) --- #}
+                    {% if competition.status != 'FINISHED' %}
                         <a href="{% url 'mass_edit_matches' competition.pk %}" class="btn btn-outline-dark" title="Mass Result Entry">
                              <i class="bi bi-list-check"></i>
                         </a>
@@ -152,12 +186,16 @@
                         <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#endTournamentModal">
                             Finish
                         </button>
+
+                    {# --- 3. ALERT (Gdy turniej ZAKOŃCZONY) --- #}
                     {% else %}
                         <div class="alert alert-success py-1 px-3 mb-0 fw-bold border-success">
                             <i class="bi bi-check-circle-fill me-2"></i> TOURNAMENT COMPLETED
                         </div>
                     {% endif %}
+
                 </div>
+
             </div>
             {% endif %}
 
@@ -406,73 +444,103 @@
 
                                 <div class="bracket-container d-flex justify-content-center py-4">
                                     {% for round in stage.bracket_tree %}
-                                        <div class="bracket-round mx-3 d-flex flex-column justify-content-around" style="min-width: 220px;">
 
-                                            {# Nazwa rundy #}
-                                            <div class="text-center fw-bold text-secondary mb-4 text-uppercase small ls-1">
-                                                {% if forloop.last %}FINAL{% else %}ROUND {{ round.round_number }}{% endif %}
+                                        {# Kolumna rundy #}
+                                        <div class="d-flex flex-column mx-3" style="min-width: 220px;">
+
+                                            {# 1. NAGŁÓWEK O STAŁEJ WYSOKOŚCI (Naprawia pozycjonowanie) #}
+                                            <div class="text-center fw-bold text-secondary mb-3 text-uppercase small ls-1 d-flex align-items-end justify-content-center" style="height: 40px;">
+                                                {% with match_count=round.matches|length %}
+                                                    {% if forloop.last %}FINAL
+                                                    {% elif match_count == 2 %}SEMI-FINALS
+                                                    {% elif match_count == 4 %}QUARTER-FINALS
+                                                    {% elif match_count == 8 %}LAST 16
+                                                    {% elif match_count == 16 %}LAST 32
+                                                    {% else %}ROUND {{ round.round_number }}
+                                                    {% endif %}
+                                                {% endwith %}
                                             </div>
 
-                                            {# --- MECZE GŁÓWNEJ DRABINKI --- #}
-                                            {% for match in round.matches %}
-                                                <div class="card shadow-sm mb-4 border-0 position-relative match-bracket-card">
-                                                    {# Pasek statusu #}
-                                                    <div class="card-header py-1 px-2 border-0 {% if match.is_finished %}bg-success{% else %}bg-secondary{% endif %}" style="height: 6px;"></div>
+                                            {# 2. KONTENER NA MECZE (Zajmuje całą dostępną resztę wysokości) #}
+                                            <div class="d-flex flex-column justify-content-around flex-grow-1 position-relative">
 
-                                                    <div class="card-body p-2 bg-white">
-                                                        {# Gracz 1 #}
-                                                        <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
-                                                            <span class="small fw-bold text-truncate {% if match.winner == match.player1 and match.is_finished %}text-success{% endif %}" style="max-width: 140px;">
-                                                                {{ match.player1|default:"-" }}
-                                                            </span>
-                                                            <span class="badge bg-light text-dark border">{{ match.get_real_score.0 }}</span>
-                                                        </div>
-                                                        {# Gracz 2 #}
-                                                        <div class="d-flex justify-content-between align-items-center">
-                                                            <span class="small fw-bold text-truncate {% if match.winner == match.player2 and match.is_finished %}text-success{% endif %}" style="max-width: 140px;">
-                                                                {{ match.player2|default:"-" }}
-                                                            </span>
-                                                            <span class="badge bg-light text-dark border">{{ match.get_real_score.1 }}</span>
-                                                        </div>
-                                                    </div>
-                                                    <a href="{% if match.is_finished %}{% url 'match_detail' match.pk %}{% else %}{% url 'start_game' match.pk %}{% endif %}" class="stretched-link" title="Go to match"></a>
-                                                </div>
-                                            {% endfor %}
+                                                {# --- MECZE GŁÓWNEJ DRABINKI --- #}
+                                                {% for match in round.matches %}
+                                                    <div class="card shadow-sm my-3 border-0 position-relative match-bracket-card">
+                                                        {# Pasek statusu #}
+                                                        <div class="card-header py-1 px-2 border-0 {% if match.is_finished %}bg-success{% else %}bg-secondary{% endif %}" style="height: 6px;"></div>
 
-                                            {# --- ZMIANA: Mecz o 3 miejsce w kolumnie Finału --- #}
-                                            {% if forloop.last and stage.third_place_matches %}
-                                                <div class="mt-5">
-                                                    <div class="text-center fw-bold text-muted mb-3 text-uppercase small ls-1">
-                                                        3rd Place
-                                                    </div>
-                                                    {% for match in stage.third_place_matches %}
-                                                        <div class="card shadow-sm mb-4 border-0 position-relative match-bracket-card">
-                                                            <div class="card-header py-1 px-2 border-0 {% if match.is_finished %}bg-warning text-dark{% else %}bg-secondary{% endif %}" style="height: 6px;"></div>
-                                                            <div class="card-body p-2 bg-white">
-                                                                <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
-                                                                    <span class="small fw-bold text-truncate" style="max-width: 140px;">{{ match.player1|default:"-" }}</span>
-                                                                    <span class="badge bg-light text-dark border">{{ match.get_real_score.0 }}</span>
-                                                                </div>
-                                                                <div class="d-flex justify-content-between align-items-center">
-                                                                    <span class="small fw-bold text-truncate" style="max-width: 140px;">{{ match.player2|default:"-" }}</span>
-                                                                    <span class="badge bg-light text-dark border">{{ match.get_real_score.1 }}</span>
-                                                                </div>
+                                                        <div class="card-body p-2 bg-white">
+                                                            {# Gracz 1 #}
+                                                            <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
+                                                                <span class="small fw-bold text-truncate {% if match.winner == match.player1 and match.is_finished %}text-success{% endif %}" style="max-width: 140px;">
+                                                                    {{ match.player1|default:"-" }}
+                                                                </span>
+                                                                <span class="badge bg-light text-dark border">{{ match.get_real_score.0 }}</span>
                                                             </div>
-                                                            <a href="{% if match.is_finished %}{% url 'match_detail' match.pk %}{% else %}{% url 'start_game' match.pk %}{% endif %}" class="stretched-link"></a>
+                                                            {# Gracz 2 #}
+                                                            <div class="d-flex justify-content-between align-items-center">
+                                                                <span class="small fw-bold text-truncate {% if match.winner == match.player2 and match.is_finished %}text-success{% endif %}" style="max-width: 140px;">
+                                                                    {{ match.player2|default:"-" }}
+                                                                </span>
+                                                                <span class="badge bg-light text-dark border">{{ match.get_real_score.1 }}</span>
+                                                            </div>
                                                         </div>
-                                                    {% endfor %}
-                                                </div>
-                                            {% endif %}
-                                            {# -------------------------------------------------- #}
 
+                                                        {# Nieklikalność jeśli brak graczy #}
+                                                        {% if match.player1 and match.player2 %}
+                                                            <a href="{% if match.is_finished %}{% url 'match_detail' match.pk %}{% else %}{% url 'start_game' match.pk %}{% endif %}" class="stretched-link" title="Go to match"></a>
+                                                        {% endif %}
+                                                    </div>
+                                                {% endfor %}
+
+                                                {# --- MECZ O 3 MIEJSCE --- #}
+                                                {# Umieszczamy go absolutnie na dole kolumny Finału, żeby nie rozpychał środka #}
+                                                {% if forloop.last and stage.third_place_matches %}
+                                                    <div class="position-absolute start-0 end-0" style="top: 100%; margin-top: 40px;">
+
+                                                        <div class="text-center fw-bold text-muted mb-2 text-uppercase small ls-1">
+                                                            3rd Place
+                                                        </div>
+                                                        {% for match in stage.third_place_matches %}
+                                                            <div class="card shadow-sm border-0 position-relative match-bracket-card">
+                                                                <div class="card-header py-1 px-2 border-0 {% if match.is_finished %}bg-warning text-dark{% else %}bg-secondary{% endif %}" style="height: 6px;"></div>
+                                                                <div class="card-body p-2 bg-white">
+                                                                    <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
+                                                                        <span class="small fw-bold text-truncate" style="max-width: 140px;">{{ match.player1|default:"-" }}</span>
+                                                                        <span class="badge bg-light text-dark border">{{ match.get_real_score.0 }}</span>
+                                                                    </div>
+                                                                    <div class="d-flex justify-content-between align-items-center">
+                                                                        <span class="small fw-bold text-truncate" style="max-width: 140px;">{{ match.player2|default:"-" }}</span>
+                                                                        <span class="badge bg-light text-dark border">{{ match.get_real_score.1 }}</span>
+                                                                    </div>
+                                                                </div>
+                                                                {% if match.player1 and match.player2 %}
+                                                                    <a href="{% if match.is_finished %}{% url 'match_detail' match.pk %}{% else %}{% url 'start_game' match.pk %}{% endif %}" class="stretched-link"></a>
+                                                                {% endif %}
+                                                            </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% endif %}
+
+                                            </div>
                                         </div>
                                     {% endfor %}
                                 </div>
 
                                 <style>
-                                    .bracket-round { flex: 1; }
-                                    .match-bracket-card { transition: transform 0.2s; border-radius: 8px; overflow: hidden; }
-                                    .match-bracket-card:hover { transform: translateY(-3px); z-index: 10; box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
+                                    /* Drobne poprawki CSS */
+                                    .match-bracket-card {
+                                        transition: transform 0.2s;
+                                        border-radius: 8px;
+                                        overflow: hidden;
+                                        height: 85px; /* Stała wysokość kafelka pomaga w symetrii */
+                                    }
+                                    .match-bracket-card:hover {
+                                        transform: translateY(-3px);
+                                        z-index: 10;
+                                        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
+                                    }
                                 </style>
 
                             {# ========================================== #}

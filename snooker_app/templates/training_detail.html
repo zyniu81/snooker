@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5" style="max-width: 700px;">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="{% url 'player_training_list' session.player.pk %}" class="text-decoration-none text-muted">
+            <i class="bi bi-arrow-left"></i> Back to Diary
+        </a>
+        <div class="text-muted small">Added: {{ session.created_at|date:"d M Y, H:i" }}</div>
+    </div>
+
+    <div class="card shadow border-0">
+        <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+            <div>
+                <h4 class="mb-0 fw-bold">{{ session.get_main_focus_display }}</h4>
+                <span class="badge bg-light text-dark mt-1">{{ session.get_session_type_display }}</span>
+            </div>
+            <div class="text-end">
+                <h2 class="mb-0 fw-bold">{{ session.date|date:"d" }}</h2>
+                <div class="small text-uppercase">{{ session.date|date:"M Y" }}</div>
+            </div>
+        </div>
+
+        <div class="card-body p-4">
+
+            <div class="row text-center mb-4">
+                <div class="col-4 border-end">
+                    <div class="text-muted small text-uppercase fw-bold">Duration</div>
+                    <div class="h4 fw-bold text-primary mb-0">{{ session.duration_minutes }}m</div>
+                </div>
+                <div class="col-4 border-end">
+                    <div class="text-muted small text-uppercase fw-bold">Best Break</div>
+                    <div class="h4 fw-bold text-danger mb-0">
+                        {% if session.best_break > 0 %}{{ session.best_break }}{% else %}-{% endif %}
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="text-muted small text-uppercase fw-bold">Rating</div>
+                    <div class="h4 fw-bold mb-0">
+                        <span class="badge {% if session.rating >= 8 %}bg-success{% elif session.rating >= 5 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                            {{ session.rating }}/10
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <hr>
+
+            {% if session.pot_success or session.safety_success or session.long_pot_success %}
+            <div class="row mb-4">
+                <div class="col-12"><h6 class="text-muted small fw-bold text-uppercase mb-3">Stats</h6></div>
+
+                {% if session.pot_success %}
+                <div class="col-md-4 mb-2">
+                    <label class="small text-muted">Potting Success</label>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar bg-info" style="width: {{ session.pot_success }}%">{{ session.pot_success }}%</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if session.safety_success %}
+                <div class="col-md-4 mb-2">
+                    <label class="small text-muted">Safety Success</label>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar bg-warning text-dark" style="width: {{ session.safety_success }}%">{{ session.safety_success }}%</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if session.long_pot_success %}
+                <div class="col-md-4 mb-2">
+                    <label class="small text-muted">Long Potting</label>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar bg-primary" style="width: {{ session.long_pot_success }}%">{{ session.long_pot_success }}%</div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            <hr>
+            {% endif %}
+
+            <div class="mb-4">
+                <h6 class="text-muted small fw-bold text-uppercase">Notes</h6>
+                <p class="card-text bg-light p-3 rounded">
+                    {% if session.notes %}
+                        {{ session.notes|linebreaks }}
+                    {% else %}
+                        <em class="text-muted">No notes added.</em>
+                    {% endif %}
+                </p>
+            </div>
+
+            {% if session.venue %}
+            <div class="d-flex align-items-center text-muted small">
+                <i class="bi bi-geo-alt-fill me-2"></i> Played at: <strong>{{ session.venue.name }}</strong>
+            </div>
+            {% endif %}
+
+        </div>
+
+        <div class="card-footer bg-white p-3 text-end">
+            <a href="{% url 'training_edit' session.pk %}" class="btn btn-outline-primary btn-sm me-1">Edit</a>
+            <a href="{% url 'training_delete' session.pk %}" class="btn btn-outline-danger btn-sm">Delete</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

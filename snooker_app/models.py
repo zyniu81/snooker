@@ -1299,21 +1299,65 @@ class EquipmentPhoto(models.Model):
 
 # --- 5. TRAINING SESSION (Dziennik Treningowy) ---
 class TrainingSession(models.Model):
+    # --- LISTA A: FORMAT TRENINGU ---
     TYPE_CHOICES = [
-        ('SOLO', 'Solo Practice'),
-        ('LINEUP', 'Line-up / Drills'),
-        ('SPARING', 'Sparing (No Match)'),
-        ('COACHING', 'Coaching Session'),
+        ('SOLO', 'Solo Practice'),  # Luźne granie
+        ('LINEUP', 'Line-up / Drills'),  # Ustawki / Zadaniowy
+        ('SPARING', 'Sparing (No Match)'),  # Gra z kumplem bez wpisywania wyniku
+        ('MATCH', 'Match Play'),  # Mecz o stawkę / turniejowy
+        ('COACHING', 'Coaching Session'),  # Z trenerem
     ]
 
+    # --- LISTA B: GŁÓWNY CEL (MAIN FOCUS) ---
+    FOCUS_CHOICES = [
+        ('GENERAL', 'General / Mixed'),  # Ogólny / Rozgrzewka
+        ('TECHNIQUE', 'Technique / Cue Action'),  # Technika / Postawa
+        ('POTTING', 'Potting Success'),  # Skuteczność wbić
+        ('LONG', 'Long Potting'),  # Długie wbicia
+        ('BREAK', 'Break Building'),  # Budowanie breaków
+        ('SAFETY', 'Safety / Tactical'),  # Odstawne / Taktyka
+        ('ESCAPES', 'Escapes / Snookers'),  # Wyjścia ze snookerów / Psychologia
+        ('REST', 'Rest Play'),  # Gra przyrządami (krzyżak)
+        ('CLEARANCE', 'Clearance Drills'),  # Czyszczenie stołu
+        ('MATCH_SIM', 'Match Simulation'),  # Symulacja meczu (Solo)
+    ]
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
-    venue = models.ForeignKey(Venue, on_delete=models.SET_NULL, null=True, blank=True)
+    player = models.ForeignKey('Player', on_delete=models.CASCADE, related_name='sessions')
+    venue = models.ForeignKey('Venue', on_delete=models.SET_NULL, null=True, blank=True)
 
     date = models.DateField(default=timezone.now)
     duration_minutes = models.PositiveIntegerField(help_text="Duration in minutes", default=60)
-    session_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='SOLO')
 
-    notes = models.TextField(blank=True, null=True, help_text="What did you practice? How did it go?")
+    # Wybór formatu i celu
+    session_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='SOLO')
+    main_focus = models.CharField(max_length=15, choices=FOCUS_CHOICES, default='GENERAL')
+
+    # --- STATYSTYKI OPCJONALNE (DOSTĘPNE NA PRZYSZŁOŚĆ) ---
+    best_break = models.PositiveIntegerField(
+        default=0,
+        blank=True,
+        help_text="Highest break achieved (Optional)"
+    )
+
+    # Procenty (0-100) - wszystkie opcjonalne (blank=True, null=True)
+    pot_success = models.PositiveIntegerField(
+        blank=True, null=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Potting %"
+    )
+    safety_success = models.PositiveIntegerField(
+        blank=True, null=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Safety %"
+    )
+    long_pot_success = models.PositiveIntegerField(
+        blank=True, null=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Long Potting %"
+    )
+
+    # --- POZOSTAŁE ---
+    notes = models.TextField(blank=True, null=True, help_text="Notes, feelings, specific drills used")
     rating = models.PositiveIntegerField(
         default=5,
         validators=[MinValueValidator(1), MaxValueValidator(10)],
@@ -1323,7 +1367,7 @@ class TrainingSession(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Training {self.date} - {self.get_session_type_display()}"
+        return f"{self.date} - {self.get_session_type_display()} ({self.get_main_focus_display()})"
 
 
 # --- 6. COMPETITION RESULT (Osiągnięcia Turniejowe) ---

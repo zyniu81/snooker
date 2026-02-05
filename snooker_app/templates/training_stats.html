@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="container mt-4 mb-5">
+
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+
+        <div class="d-flex align-items-center gap-3">
+            <a href="{% url 'player_training_list' player.pk %}" class="btn btn-outline-secondary shadow-sm" title="Back to Training List">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+
+            <div>
+                <h2 class="fw-bold mb-0">
+                    <i class="bi bi-bar-chart-line-fill text-primary me-2"></i>Training Stats
+                </h2>
+                <small class="text-muted">{{ player.first_name }} {{ player.last_name }}</small>
+            </div>
+        </div>
+
+        <form method="get" class="d-flex gap-2 align-items-center bg-white p-2 rounded shadow-sm border">
+            <select name="year" class="form-select form-select-sm fw-bold" style="width: auto;">
+                {% for y in years_range %}
+                    <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+
+            <select name="month" class="form-select form-select-sm" style="width: auto;">
+                <option value="0" {% if selected_month == 0 %}selected{% endif %}>Whole Year</option>
+                <option value="1" {% if selected_month == 1 %}selected{% endif %}>January</option>
+                <option value="2" {% if selected_month == 2 %}selected{% endif %}>February</option>
+                <option value="3" {% if selected_month == 3 %}selected{% endif %}>March</option>
+                <option value="4" {% if selected_month == 4 %}selected{% endif %}>April</option>
+                <option value="5" {% if selected_month == 5 %}selected{% endif %}>May</option>
+                <option value="6" {% if selected_month == 6 %}selected{% endif %}>June</option>
+                <option value="7" {% if selected_month == 7 %}selected{% endif %}>July</option>
+                <option value="8" {% if selected_month == 8 %}selected{% endif %}>August</option>
+                <option value="9" {% if selected_month == 9 %}selected{% endif %}>September</option>
+                <option value="10" {% if selected_month == 10 %}selected{% endif %}>October</option>
+                <option value="11" {% if selected_month == 11 %}selected{% endif %}>November</option>
+                <option value="12" {% if selected_month == 12 %}selected{% endif %}>December</option>
+            </select>
+
+            <button type="submit" class="btn btn-sm btn-primary fw-bold">
+                <i class="bi bi-funnel-fill"></i> Filter
+            </button>
+
+            {% if selected_month != 0 or selected_year != 2024 %}
+                 <a href="{% url 'player_training_stats' player.pk %}" class="btn btn-sm btn-outline-secondary" title="Reset Filters">
+                     <i class="bi bi-x-lg"></i>
+                 </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 border-start border-primary border-4 h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-bold">Total Time</div>
+                    <div class="d-flex align-items-center mt-2">
+                        <h2 class="fw-bold mb-0 me-2">{{ total_hours }}</h2>
+                        <span class="text-muted">hours</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 border-start border-success border-4 h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-bold">Sessions Logged</div>
+                    <div class="d-flex align-items-center mt-2">
+                        <h2 class="fw-bold mb-0 me-2">{{ total_sessions }}</h2>
+                        <span class="text-muted">sessions</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 border-start border-warning border-4 h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-bold">Avg Rating</div>
+                    <div class="d-flex align-items-center mt-2">
+                        <h2 class="fw-bold mb-0 me-2">{{ avg_rating }}</h2>
+                        <span class="badge bg-warning text-dark rounded-pill">/ 10</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+
+        <div class="col-lg-5">
+            <div class="card shadow border-0 h-100">
+                <div class="card-header bg-white fw-bold">
+                    Training Structure (by Time)
+                </div>
+                <div class="card-body d-flex justify-content-center align-items-center" style="position: relative;">
+                    {% if chart_focus_values %}
+                        <canvas id="focusChart" style="max-height: 300px;"></canvas>
+                    {% else %}
+                        <div class="text-center text-muted py-5">
+                            <i class="bi bi-pie-chart display-4 d-block mb-3 opacity-25"></i>
+                            No data for this period.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card shadow border-0 h-100">
+                <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                    <span>Sessions List</span>
+                    <small class="text-muted">Most recent first</small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
+                        <table class="table table-hover mb-0 small">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th class="ps-3">Date</th>
+                                    <th>Focus</th>
+                                    <th>Time</th>
+                                    <th>Rating</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for session in sessions_list %}
+                                <tr>
+                                    <td class="ps-3 fw-bold">{{ session.date|date:"d.m" }}</td>
+                                    <td>
+                                        <span class="text-dark fw-bold">{{ session.get_main_focus_display }}</span><br>
+                                        <span class="text-muted" style="font-size: 0.85em;">{{ session.get_session_type_display }}</span>
+                                    </td>
+                                    <td>{{ session.duration_minutes }}m</td>
+                                    <td>
+                                        <span class="badge {% if session.rating >= 8 %}bg-success{% elif session.rating >= 5 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                            {{ session.rating }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <a href="{% url 'training_detail' session.pk %}" class="text-muted"><i class="bi bi-eye-fill"></i></a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-muted">
+                                        No logs found.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if chart_focus_values %}
+<script>
+    const ctx = document.getElementById('focusChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            // Django przekazuje tu listy napisów i liczb:
+            labels: {{ chart_focus_labels|safe }},
+            datasets: [{
+                data: {{ chart_focus_values|safe }},
+                backgroundColor: [
+                    '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b',
+                    '#858796', '#5a5c69', '#fd7e14', '#20c997', '#6f42c1'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 15
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
+
+{% endblock %}

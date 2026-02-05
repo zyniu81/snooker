@@ -20,7 +20,8 @@ from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
 from snooker_app import views
-from snooker_app.views import PlayerDeleteView, VenueDeleteView
+from snooker_app.views import (PlayerDeleteView, VenueDeleteView, TrainingDetailView, TrainingStatsView,
+                               TrainingListView, TrainingCreateView)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -93,6 +94,7 @@ urlpatterns = [
     path('equipment/<int:pk>/delete/', views.delete_equipment, name='delete_equipment'),
     path('equipment/<int:pk>/photos/', views.manage_photos, name='manage_photos'),
     path('equipment/<int:pk>/', views.equipment_detail, name='equipment_detail'),
+    path('equipment/reactivate/<int:pk>/', views.use_equipment_again, name='use_equipment_again'),
     path('profile/settings/', views.profile_settings, name='profile_settings'),
     path('password-reset/',
          auth_views.PasswordResetView.as_view(template_name='users/password_reset.html'),
@@ -108,6 +110,20 @@ urlpatterns = [
          name='password_reset_complete'),
     path('export/excel/', views.export_data_excel, name='export_excel'),
     path('superuser/backup/download/', views.admin_backup_json, name='admin_backup'),
+    path('training/', views.TrainingListView.as_view(), name='training_list'),
+    path('player/<int:pk>/trainings/', TrainingListView.as_view(), name='player_training_list'),
+    path('training/add/', views.TrainingCreateView.as_view(), name='training_add'),
+    path('player/<int:player_id>/add_training/', TrainingCreateView.as_view(), name='training_add_for_player'),
+    path('training/<int:pk>/edit/', views.TrainingUpdateView.as_view(), name='training_edit'),
+    path('training/<int:pk>/delete/', views.TrainingDeleteView.as_view(), name='training_delete'),
+    path('competition/<int:pk>/print/matches/', views.CompetitionMatchListPrintView.as_view(),
+         name='competition_print_matches'),
+    path('competition/<int:pk>/print/groups/', views.CompetitionGroupsPrintView.as_view(),
+         name='competition_print_groups'),
+    path('competition/<int:pk>/print/bracket/', views.CompetitionBracketPrintView.as_view(),
+         name='competition_print_bracket'),
+    path('training/<int:pk>/', TrainingDetailView.as_view(), name='training_detail'),
+    path('player/<int:pk>/stats/', TrainingStatsView.as_view(), name='player_training_stats'),
 ]
 
 

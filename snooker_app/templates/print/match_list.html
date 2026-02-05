@@ -1,0 +1,65 @@
+{% extends 'base_print.html' %}
+
+{% block title %}Matches - {{ competition.name }}{% endblock %}
+
+{% block content %}
+    <div class="text-center mb-4">
+        <h2>{{ competition.name }}</h2>
+        <h3>Match Schedule</h3>
+        <p style="font-size: 0.9em;">Generated: {{ now|date:"d M Y H:i" }}</p>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 15%;">Date & Time</th>
+                <th style="width: 10%;">Stage</th>
+                <th style="width: 30%;">Player 1</th>
+                <th style="width: 10%; text-align: center;">Score</th>
+                <th style="width: 30%;">Player 2</th>
+                <th style="width: 5%;">Table</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for match in matches %}
+            <tr>
+                <td>
+                    {% if match.date %}
+                        {{ match.date|date:"d.m" }} <small>{{ match.time|date:"H:i" }}</small>
+                    {% else %}
+                        TBD
+                    {% endif %}
+                </td>
+                <td style="white-space: nowrap;">
+                    {{ match.print_stage_name }}
+                </td>
+
+                {# Player 1 #}
+                <td {% if match.winner == match.player1 %}class="fw-bold"{% endif %}>
+                    {{ match.player1|default:"TBD" }}
+                </td>
+
+                {# Score #}
+                <td style="text-align: center; font-size: 1.1em;">
+                    {% if match.status == 'FINISHED' %}
+                        {{ match.final_score_player1 }} - {{ match.final_score_player2 }}
+                    {% else %}
+                        v
+                    {% endif %}
+                </td>
+
+                {# Player 2 #}
+                <td {% if match.winner == match.player2 %}class="fw-bold"{% endif %}>
+                    {{ match.player2|default:"TBD" }}
+                </td>
+
+                <td>{{ match.table_number|default:"-" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="text-center">No matches scheduled yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

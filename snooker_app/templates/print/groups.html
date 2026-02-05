@@ -1,0 +1,90 @@
+{% extends 'base_print.html' %}
+
+{% block title %}Groups - {{ competition.name }}{% endblock %}
+
+{% block content %}
+    <style>
+        /* To jest klucz do ładnego druku grup */
+        .group-container {
+            break-inside: avoid; /* Nie łam strony w środku tej sekcji */
+            page-break-inside: avoid; /* Dla starszych przeglądarek */
+            margin-bottom: 30px;
+            border: 1px solid #ccc;
+            padding: 15px;
+        }
+
+        .matches-table th, .matches-table td {
+            font-size: 0.9em; /* Troszkę mniejsze mecze, żeby nie zajmowały miejsca */
+            padding: 4px;
+        }
+    </style>
+
+    <div class="text-center mb-4">
+        <h2>{{ competition.name }}</h2>
+        <h3>Group Stage Standings</h3>
+    </div>
+
+    {% for group in groups %}
+    <div class="group-container">
+        <h3 style="border-bottom: 2px solid black; padding-bottom: 5px;">
+            Group {{ group.name }}
+        </h3>
+
+        <table class="mb-4">
+            <thead>
+                <tr>
+                    <th style="width: 5%;">#</th>
+                    <th style="width: 40%;">Player</th>
+                    <th class="text-center">Pld</th>
+                    <th class="text-center">Won</th>
+                    <th class="text-center">Lost</th>
+                    <th class="text-center">Frames</th>
+                    <th class="text-center">Pts</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for standing in group.standings.all|dictsortreversed:"points" %}
+                {# Sortowanie po punktach - zazwyczaj robi to model, ale tu wymuszamy dla pewności #}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td style="font-weight: bold;">{{ standing.player }}</td>
+                    <td class="text-center">{{ standing.matches_played }}</td>
+                    <td class="text-center">{{ standing.matches_won }}</td>
+                    <td class="text-center">{{ standing.matches_lost }}</td>
+                    <td class="text-center">
+                        {{ standing.frames_won }}-{{ standing.frames_lost }}
+                    </td>
+                    <td class="text-center" style="font-weight: bold; background: #eee;">
+                        {{ standing.points }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h4>Matches</h4>
+        <table class="matches-table" style="width: 100%;">
+            <tbody>
+                {% for match in group.matches.all %}
+                <tr>
+                    <td style="width: 40%; text-align: right;">{{ match.player1|default:"TBD" }}</td>
+                    <td style="width: 20%; text-align: center; font-weight: bold;">
+                        {% if match.status == 'FINISHED' %}
+                            {{ match.final_score_player1 }} - {{ match.final_score_player2 }}
+                        {% else %}
+                            vs
+                        {% endif %}
+                    </td>
+                    <td style="width: 40%; text-align: left;">{{ match.player2|default:"TBD" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="text-center">No matches yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% empty %}
+        <p>No groups found for this tournament.</p>
+    {% endfor %}
+
+{% endblock %}

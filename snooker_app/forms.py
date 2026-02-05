@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.forms import BaseModelFormSet
 
 from .models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Group, GroupStanding,
-                     Equipment, EquipmentPhoto, Profile)
+                     Equipment, EquipmentPhoto, Profile, TrainingSession)
 
 import math
 
@@ -497,8 +497,11 @@ class KnockoutStageForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
+        # ZMIANA 1: Ustawiamy pole rund jako opcjonalne i dodajemy placeholder
+        self.fields['num_rounds'].required = False
+        self.fields['num_rounds'].widget.attrs['placeholder'] = 'Auto (Full bracket)'
+
         if self.competition:
-            # ZMIANA: Pobieramy tylko graczy z tego turnieju
             self.fields['players'].queryset = self.competition.players.all()
 
             if self.winner_list:
@@ -520,7 +523,22 @@ class KnockoutStageForm(forms.ModelForm):
         if count % 2 != 0:
             raise forms.ValidationError(f"Selected {count} players. You need an even number of players to start.")
 
-        # 2. SYMULACJA RUND
+        # ZMIANA 2: AUTOMATYCZNE WYLICZANIE (jeśli pole puste)
+        if not num_rounds:
+            # Sprawdzamy czy liczba to potęga dwójki (np. 4, 8, 16, 32...)
+            # Wzór bitowy: (n & (n-1) == 0) działa dla potęg dwójki
+            if (count & (count - 1) != 0) or count == 0:
+                raise forms.ValidationError(
+                    f"Auto-calculation works only for full brackets (Power of 2: 4, 8, 16...). "
+                    f"You have {count} players. Please enter rounds manually."
+                )
+
+            # Wyliczamy logarytm (np. log2(16) = 4)
+            num_rounds = int(math.log2(count))
+            # Zapisujemy wyliczoną wartość z powrotem, żeby widok ją dostał
+            cleaned_data['num_rounds'] = num_rounds
+
+        # 3. SYMULACJA RUND (Twoja stara logika - sprawdzi też te wyliczone automatycznie)
         if num_rounds:
             current_players = count
             for r in range(1, num_rounds + 1):
@@ -950,3 +968,66 @@ class ProfileUpdateForm(forms.ModelForm):
             'instagram': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://instagram.com/...'}),
             'twitter': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://x.com/...'}),
         }
+
+
+class TrainingSessionForm(forms.ModelForm):
+    venue = forms.ModelChoiceField(
+        queryset=Venue.objects.none(),
+        required=False,
+        label="Location / Venue",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    class Meta:
+        model = TrainingSession
+        fields = [
+            'player',
+            'date', 'duration_minutes', 'venue',
+            'session_type', 'main_focus',
+            'best_break',
+            'pot_success', 'safety_success', 'long_pot_success',
+            'rating', 'notes'
+        ]
+
+        widgets = {
+            'player': forms.Select(attrs={'class': 'form-select'}),
+            'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'duration_minutes': forms.NumberInput(attrs={'class': 'form-control', 'min': 10, 'step': 5}),
+            'venue': forms.Select(attrs={'class': 'form-select'}),
+
+            'session_type': forms.Select(attrs={'class': 'form-select'}),
+            'main_focus': forms.Select(attrs={'class': 'form-select'}),
+
+            'best_break': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Highest break (optional)'}),
+            'pot_success': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '%', 'min': 0, 'max': 100}),
+            'safety_success': forms.NumberInput(
+                attrs={'class': 'form-control', 'placeholder': '%', 'min': 0, 'max': 100}),
+            'long_pot_success': forms.NumberInput(
+                attrs={'class': 'form-control', 'placeholder': '%', 'min': 0, 'max': 100}),
+
+            'rating': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 10, 'placeholder': '1-10'}),
+            'notes': forms.Textarea(
+                attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Describe your drills...'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        # Pobieramy pre-wybranego gracza (jeśli jest)
+        preselected_player = kwargs.pop('preselected_player', None)
+
+        super().__init__(*args, **kwargs)
+
+        if self.user:
+            self.fields['player'].queryset = Player.objects.filter(owner=self.user)
+            self.fields['venue'].queryset = Venue.objects.filter(
+                Q(is_public=True) | Q(owner=self.user)
+            ).order_by('name')
+
+        # LOGIKA UKRYWANIA POLA GRACZA
+        if preselected_player:
+            # Ustawiamy wartość pola na tego gracza
+            self.fields['player'].initial = preselected_player
+            # Zmieniamy widget na ukryty (użytkownik go nie widzi, ale on tam jest)
+            self.fields['player'].widget = forms.HiddenInput()
+            # Opcjonalnie: usuwamy label, żeby nie wisiał pusty napis
+            self.fields['player'].label = ""

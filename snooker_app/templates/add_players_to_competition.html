@@ -29,6 +29,13 @@
                                 </div>
                             </div>
 
+                            <div class="d-flex justify-content-end mb-2">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="selectAll">
+                                    <label class="form-check-label fw-bold cursor-pointer" for="selectAll">Select All</label>
+                                </div>
+                            </div>
+
                             <div class="row row-cols-1 row-cols-md-3 g-3 mb-4">
                                 {% for player in available_players %}
                                 <div class="col">
@@ -123,38 +130,52 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Pobieramy wszystkie karty graczy
     const cards = document.querySelectorAll('.player-card-select');
+    // Pobieramy wszystkie checkboxy graczy (potrzebne do "Select All")
+    const allCheckboxes = document.querySelectorAll('input[name="players"]');
+    // Pobieramy główny checkbox "Select All"
+    const selectAllBtn = document.getElementById('selectAll');
 
+    // --- 1. Obsługa kart (Twoja stara logika) ---
     cards.forEach(card => {
-        // 1. Obsługa kliknięcia w kartę
         card.addEventListener('click', function(e) {
-            // Jeśli kliknęliśmy bezpośrednio w checkbox, nie rób nic (system sam to obsłuży),
-            // w przeciwnym razie zmień stan checkboxa ręcznie.
             if (e.target.type !== 'checkbox') {
                 const checkbox = this.querySelector('input[type="checkbox"]');
                 checkbox.checked = !checkbox.checked;
-                // Wywołaj zdarzenie zmiany, żeby zaktualizować wygląd (punkt 2)
                 checkbox.dispatchEvent(new Event('change'));
             }
         });
 
-        // 2. Obsługa zmiany wyglądu (podświetlenie)
         const checkbox = card.querySelector('input[type="checkbox"]');
 
-        // Funkcja aktualizująca wygląd karty
         const updateCardStyle = () => {
             if (checkbox.checked) {
                 card.classList.add('active');
             } else {
                 card.classList.remove('active');
             }
+            // Dodatek: Jeśli odznaczymy ręcznie jednego gracza, odznacz też "Select All"
+            if (!checkbox.checked && selectAllBtn) {
+                selectAllBtn.checked = false;
+            }
         };
 
-        // Nasłuchuj zmian na checkboxie
         checkbox.addEventListener('change', updateCardStyle);
-
-        // Ustaw wygląd początkowy (na wypadek odświeżenia strony z zaznaczonymi polami)
         updateCardStyle();
     });
+
+    // --- 2. NOWA CZĘŚĆ: Obsługa "Select All" ---
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('change', function() {
+            const isChecked = this.checked; // Czy zaznaczamy, czy odznaczamy?
+
+            allCheckboxes.forEach(cb => {
+                cb.checked = isChecked;
+                // WAŻNE: Wywołujemy zdarzenie 'change' na każdym checkboxie,
+                // żeby uruchomiła się funkcja updateCardStyle (zielone ramki)
+                cb.dispatchEvent(new Event('change'));
+            });
+        });
+    }
 });
 </script>
 {% endblock %}

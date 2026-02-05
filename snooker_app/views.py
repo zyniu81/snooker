@@ -1,12 +1,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views.decorators.http import require_POST
-from django.views.generic import DeleteView
+from django.views.generic import DeleteView, ListView, CreateView, UpdateView, DetailView, TemplateView
 from django.contrib import messages
-from django.db.models import Count, Sum, F, Case, When, IntegerField, Q, Max
+from django.db.models import Count, Sum, F, Case, When, IntegerField, Q, Max, Avg
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse
 from django.core.exceptions import PermissionDenied
@@ -17,7 +18,7 @@ from django.contrib.auth.signals import user_logged_in
 from django.dispatch import receiver
 from datetime import timedelta
 from django.utils.safestring import mark_safe
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.db import transaction, models
 from django.utils.crypto import get_random_string
 from django.template.loader import render_to_string
@@ -27,6 +28,8 @@ from django.core.management import call_command
 from io import StringIO
 from openai import OpenAI
 import os, json, openpyxl, sys
+import datetime
+from datetime import date
 
 from .services import update_career_stats, calculate_competition_results
 
@@ -35,10 +38,10 @@ from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueFor
                                GroupStageForm, SignUpForm, KnockoutStageForm, MassMatchEditForm, ExtraMatchForm,
                                SubstitutePlayerForm, GroupAssignmentForm, AddPlayerToGroupForm, KnockoutSwapForm,
                                ImportCodeForm, SelectImportedPlayersForm, MatchFormSetValidating, EquipmentForm,
-                               EquipmentPhotoForm, UserUpdateForm, ProfileUpdateForm)
+                               EquipmentPhotoForm, UserUpdateForm, ProfileUpdateForm, TrainingSessionForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
                                 MatchPlayer, Frame, GroupStanding, SharingToken, CompetitionResult, Equipment,
-                                EquipmentPhoto)
+                                EquipmentPhoto, TrainingSession, Group)
 
 
 # --- FUNKCJE POMOCNICZE ---
@@ -2268,6 +2271,48 @@ def delete_equipment(request, pk):
 
 
 @login_required
+def use_equipment_again(request, pk):
+    # 1. Pobieramy stary sprzęt z archiwum
+    old_item = get_object_or_404(Equipment, pk=pk)
+
+    # --- NOWOŚĆ: Zapisujemy sobie listę zdjęć starego przedmiotu ---
+    # Musimy to zrobić TERAZ, zanim zresetujemy ID obiektu old_item
+    photos_to_copy = list(old_item.photos.all())
+
+    # 2. Archiwizujemy AKTUALNY sprzęt tego samego typu
+    current_active = Equipment.objects.filter(
+        player=old_item.player,
+        item_type=old_item.item_type,
+        end_date__isnull=True
+    )
+    for active in current_active:
+        active.end_date = date.today()
+        active.save()
+        messages.info(request, f"Moved {active.name} to archive.")
+
+    # 3. Tworzymy NOWY sprzęt na bazie starego
+    old_item.pk = None
+    old_item.start_date = date.today()
+    old_item.end_date = None
+
+    # Dodajemy notkę o powrocie
+    old_item.notes = (old_item.notes or "") + f"\n[Re-activated on {date.today()}]"
+
+    old_item.save()  # W tym momencie old_item to już NOWY wpis w bazie z nowym ID
+
+    # 4. Kopiujemy zdjęcia
+    for photo in photos_to_copy:
+        EquipmentPhoto.objects.create(
+            equipment=old_item,  # Przypisujemy do tego nowego sprzętu
+            image=photo.image,  # Wskazujemy na ten sam plik na dysku (oszczędność miejsca)
+            is_main=photo.is_main  # Zachowujemy info, czy to było główne zdjęcie
+        )
+
+    messages.success(request, f"Welcome back! {old_item.name} is active again (with photos).")
+    return redirect('equipment_list', player_id=old_item.player.id)
+
+
+@login_required
 def manage_photos(request, pk):
     equipment = get_object_or_404(Equipment, pk=pk)
 
@@ -2322,28 +2367,26 @@ def export_data_excel(request):
     ws_dash.title = "General Stats"
     ws_dash.append(['Metric', 'Value'])
 
-    # POPRAWKA 1: status='FINISHED' (Wielkie litery)
     total_matches = Match.objects.filter(owner=request.user, status='FINISHED').count()
     total_players = Player.objects.filter(owner=request.user).count()
     total_tournaments = Competition.objects.filter(owner=request.user).count()
 
-    # --- POPRAWKA GLÓWNA: Club Highest Break ---
-    # Zamiast szukać w Turniejach, szukamy w Graczach (uwzględnia sparingi/quick match)
-    all_players = Player.objects.filter(owner=request.user)
+    # Dodajemy też liczbę treningów do dashboardu
+    total_trainings = TrainingSession.objects.filter(owner=request.user).count()
 
+    # --- Club Highest Break ---
+    all_players = Player.objects.filter(owner=request.user)
     all_breaks_values = []
     for p in all_players:
-        # Sprawdzamy czy highest_break to metoda czy pole (dla bezpieczeństwa)
         val = p.highest_break() if callable(getattr(p, 'highest_break', None)) else p.highest_break
         all_breaks_values.append(val or 0)
-
-    # Wyciągamy max z listy wszystkich graczy
     global_max_break = max(all_breaks_values) if all_breaks_values else 0
 
     ws_dash.append(['Total Finished Matches', total_matches])
+    ws_dash.append(['Total Training Sessions', total_trainings])
     ws_dash.append(['Total Players Database', total_players])
     ws_dash.append(['Total Tournaments', total_tournaments])
-    ws_dash.append(['Club Highest Break', global_max_break])  # Teraz pokaże 56!
+    ws_dash.append(['Club Highest Break', global_max_break])
 
     # =========================================================
     # ARKUSZ 2: FULL PLAYER STATISTICS
@@ -2371,7 +2414,6 @@ def export_data_excel(request):
         frame_win_pct = round((p.frames_won / p.frames_played * 100), 1) if p.frames_played > 0 else 0.0
         decider_pct = round((p.deciders_won / p.deciders_played * 100), 1) if p.deciders_played > 0 else 0.0
 
-        # Metody czasowe (z zabezpieczeniem callable)
         fastest = p.formatted_fastest_frame() if callable(
             getattr(p, 'formatted_fastest_frame', None)) else p.formatted_fastest_frame
         longest = p.formatted_longest_frame() if callable(
@@ -2381,7 +2423,6 @@ def export_data_excel(request):
         ast = p.formatted_avg_shot_time() if callable(
             getattr(p, 'formatted_avg_shot_time', None)) else p.formatted_avg_shot_time
 
-        # Breaki (Słownik -> Tekst)
         stats_dict = p.career_break_stats() if callable(
             getattr(p, 'career_break_stats', None)) else p.career_break_stats
         break_details_str = ""
@@ -2430,7 +2471,6 @@ def export_data_excel(request):
 
     referees = Referee.objects.filter(owner=request.user)
     for r in referees:
-        # status='FINISHED'
         ref_matches = Match.objects.filter(owner=request.user, status='FINISHED', referees=r).order_by('-date')
         count = ref_matches.count()
         last_match = ref_matches.first()
@@ -2443,13 +2483,30 @@ def export_data_excel(request):
     ws_matches = workbook.create_sheet(title="Match History")
     ws_matches.append(['Date', 'Player 1', 'Score', 'Player 2', 'Winner'])
 
-    # status='FINISHED'
     matches = Match.objects.filter(owner=request.user, status='FINISHED').order_by('-date')
 
     for m in matches:
         date_str = m.date.strftime('%Y-%m-%d') if m.date else ""
         score_str = f"{m.final_score_player1} - {m.final_score_player2}"
         ws_matches.append([date_str, str(m.player1), score_str, str(m.player2), str(m.winner)])
+
+    # =========================================================
+    # ARKUSZ 6: TRAINING DIARY (NOWOŚĆ)
+    # =========================================================
+    ws_train = workbook.create_sheet(title="Training Diary")
+    ws_train.append(['Date', 'Type', 'Venue', 'Duration (min)', 'Rating (1-10)', 'Notes'])
+
+    trainings = TrainingSession.objects.filter(owner=request.user).order_by('-date', '-created_at')
+
+    for t in trainings:
+        t_date = t.date.strftime('%Y-%m-%d') if t.date else ""
+        t_type = t.get_session_type_display()
+        t_venue = t.venue.name if t.venue else "Unknown/Private"
+        t_rating = f"{t.rating}/10"
+        # Notatki skracamy do 100 znaków w Excelu, żeby nie robić bałaganu
+        t_notes = str(t.notes)[:100] + "..." if t.notes and len(str(t.notes)) > 100 else (t.notes or "")
+
+        ws_train.append([t_date, t_type, t_venue, t.duration_minutes, t_rating, t_notes])
 
     # =========================================================
     # ZAPIS
@@ -2489,3 +2546,325 @@ def admin_backup_json(request):
     response['Content-Disposition'] = f'attachment; filename={filename}'
 
     return response
+
+
+# --- 1. LISTA TRENINGÓW ---
+class TrainingListView(LoginRequiredMixin, ListView):
+    model = TrainingSession
+    template_name = 'training_list.html'
+    context_object_name = 'sessions'
+    paginate_by = 10
+
+    def get_queryset(self):
+        # 1. Sprawdzamy, czy w URL jest podane ID gracza
+        player_id = self.kwargs.get('pk')
+
+        if player_id:
+            # Jeśli tak: filtrujemy treningi TYLKO dla tego gracza
+            self.player = get_object_or_404(Player, pk=player_id, owner=self.request.user)
+            return TrainingSession.objects.filter(player=self.player).order_by('-date', '-created_at')
+        else:
+            # Jeśli nie (widok ogólny): pokaż wszystkie treningi usera
+            self.player = None
+            return TrainingSession.objects.filter(owner=self.request.user).order_by('-date', '-created_at')
+
+    def get_context_data(self, **kwargs):
+        # Przekazujemy obiekt 'player' do szablonu, żeby przyciski działały
+        context = super().get_context_data(**kwargs)
+        context['player'] = getattr(self, 'player', None)
+        return context
+
+# --- 2. DODAWANIE TRENINGU ---
+class TrainingCreateView(LoginRequiredMixin, CreateView):
+    model = TrainingSession
+    form_class = TrainingSessionForm
+    template_name = 'training_form.html'
+
+    def get_success_url(self):
+        # Przekieruj do listy treningów TEGO gracza, którego wybrano w formularzu
+        return reverse('player_training_list', kwargs={'pk': self.object.player.pk})
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+
+        # SPRAWDZAMY CZY W ADRESIE JEST 'player_id'
+        if 'player_id' in self.kwargs:
+            # Jeśli tak, pobieramy gracza i przekazujemy do formularza
+            from .models import Player
+            from django.shortcuts import get_object_or_404
+
+            player = get_object_or_404(Player, pk=self.kwargs['player_id'], owner=self.request.user)
+            kwargs['preselected_player'] = player
+
+        return kwargs
+
+    def form_valid(self, form):
+        # Automatycznie przypisz właściciela (owner = user)
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
+
+# --- 3. EDYCJA TRENINGU ---
+class TrainingUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    model = TrainingSession
+    form_class = TrainingSessionForm
+    template_name = 'training_form.html' # Używamy tego samego szablonu co przy dodawaniu
+
+    def get_success_url(self):
+        return reverse('player_training_list', kwargs={'pk': self.object.player.pk})
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def test_func(self):
+        # Zabezpieczenie: Tylko właściciel może edytować swój trening
+        session = self.get_object()
+        return session.owner == self.request.user
+
+# --- 4. USUWANIE TRENINGU ---
+class TrainingDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
+    model = TrainingSession
+    template_name = 'training_confirm_delete.html'
+
+    def get_success_url(self):
+        # Wracamy do listy gracza, do którego należał usunięty trening
+        return reverse('player_training_list', kwargs={'pk': self.object.player.pk})
+
+    def test_func(self):
+        # Zabezpieczenie: Tylko właściciel może usunąć
+        session = self.get_object()
+        return session.owner == self.request.user
+
+
+# --- 5. SZCZEGÓŁY TRENINGU (PODGLĄD) ---
+class TrainingDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    model = TrainingSession
+    template_name = 'training_detail.html'
+    context_object_name = 'session'
+
+    def test_func(self):
+        # Tylko właściciel może podglądać swoje notatki
+        session = self.get_object()
+        return session.owner == self.request.user
+
+
+# --- 6. STATYSTYKI TRENINGOWE (DASHBOARD DLA GRACZA) ---
+class TrainingStatsView(LoginRequiredMixin, TemplateView):
+    template_name = 'training_stats.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # 1. Pobieramy gracza z URL-a (PK/ID)
+        # Zakładam, że w urls.py masz: path('player/<int:pk>/stats/', ...)
+        player_id = self.kwargs.get('pk')
+        player = get_object_or_404(Player, pk=player_id)
+
+        # Opcjonalne zabezpieczenie: Czy to Twój gracz?
+        # if player.owner != self.request.user: raise PermissionDenied
+
+        # 2. Pobieranie parametrów filtra (Rok / Miesiąc)
+        today = datetime.date.today()
+        try:
+            selected_year = int(self.request.GET.get('year', today.year))
+        except ValueError:
+            selected_year = today.year
+
+        try:
+            selected_month = int(self.request.GET.get('month', 0))
+        except ValueError:
+            selected_month = 0
+
+        # 3. Filtrowanie QuerySetu PO GRACZU (nie po Userze!)
+        stats_qs = TrainingSession.objects.filter(player=player, date__year=selected_year)
+
+        # Jeśli wybrano konkretny miesiąc, zawężamy
+        if selected_month > 0:
+            stats_qs = stats_qs.filter(date__month=selected_month)
+
+        # 4. OBLICZENIA (KPI)
+        aggregates = stats_qs.aggregate(
+            total_minutes=Sum('duration_minutes'),
+            avg_rating=Avg('rating'),
+            total_sessions=Count('id')
+        )
+
+        total_minutes = aggregates['total_minutes'] or 0
+        total_hours = round(total_minutes / 60, 1)
+        avg_rating = aggregates['avg_rating'] or 0
+
+        # 5. DANE DO WYKRESÓW
+        focus_data = stats_qs.values('main_focus').annotate(minutes=Sum('duration_minutes')).order_by('-minutes')
+
+        focus_labels = []
+        focus_values = []
+        focus_dict = dict(TrainingSession.FOCUS_CHOICES)
+
+        for item in focus_data:
+            readable_name = focus_dict.get(item['main_focus'], item['main_focus'])
+            focus_labels.append(readable_name)
+            focus_values.append(item['minutes'])
+
+        # 6. Przekazanie wszystkiego do kontekstu
+        context.update({
+            'player': player,  # Przekazujemy gracza, żeby wyświetlić jego imię
+            'selected_year': selected_year,
+            'selected_month': selected_month,
+            'years_range': range(2023, today.year + 2),
+
+            'total_hours': total_hours,
+            'total_sessions': aggregates['total_sessions'],
+            'avg_rating': round(avg_rating, 1),
+
+            'chart_focus_labels': focus_labels,
+            'chart_focus_values': focus_values,
+
+            'sessions_list': stats_qs.order_by('-date')
+        })
+
+        return context
+
+
+class CompetitionMatchListPrintView(LoginRequiredMixin, DetailView):
+    model = Competition
+    template_name = "print/match_list.html"
+    context_object_name = 'competition'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # 1. Pobieramy mecze (używamy select_related dla wydajności)
+        matches_qs = Match.objects.filter(
+            Q(group_stage__competition=self.object) |
+            Q(knockout_stage__competition=self.object)
+        ).select_related('group', 'knockout_stage', 'player1', 'player2').order_by('date', 'time')
+
+        # 2. Przerabiamy QuerySet na listę i dodajemy "ładne nazwy"
+        matches = []
+        for m in matches_qs:
+            # Domyślna nazwa (jeśli nic nie pasuje)
+            display_name = ""
+
+            if m.group:
+                display_name = f"Gr {m.group.name}"
+
+            elif m.knockout_stage:
+                # --- LOGIKA NAZEWNICTWA RUND ---
+
+                # A. Mecz o 3 miejsce (zazwyczaj runda 99 lub nazwa zawiera "3rd")
+                if m.round_number == 99 or (m.knockout_name and "3rd" in m.knockout_name):
+                    display_name = "3rd Place"
+                else:
+                    # B. Obliczamy nazwę na podstawie całkowitej liczby rund
+                    # Jeśli turniej ma 2 rundy (4 graczy):
+                    # Runda 1 (2-1=1) -> 1/2
+                    # Runda 2 (2-2=0) -> Final
+
+                    total = m.knockout_stage.num_rounds or 0
+                    current = m.round_number
+                    diff = total - current
+
+                    if diff == 0:
+                        display_name = "Final"
+                    elif diff == 1:
+                        display_name = "1/2"
+                    elif diff == 2:
+                        display_name = "1/4"
+                    elif diff == 3:
+                        display_name = "1/8"
+                    else:
+                        display_name = f"Rd {current}"
+
+            # Doklejamy nazwę do obiektu (jako nowy atrybut 'print_stage_name')
+            m.print_stage_name = display_name
+            matches.append(m)
+
+        context['matches'] = matches
+        context['now'] = timezone.now()
+        return context
+
+
+class CompetitionGroupsPrintView(LoginRequiredMixin, DetailView):
+    model = Competition
+    template_name = "print/groups.html"
+    context_object_name = 'competition'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Pytamy: "Daj mi GroupStage, który należy do tego turnieju (self.object)"
+        group_stage = GroupStage.objects.filter(competition=self.object).first()
+
+        if group_stage:
+            # Jeśli znaleźliśmy etap, pobieramy jego grupy
+            groups = group_stage.groups.all().prefetch_related(
+                'standings__player',
+                'matches__player1',
+                'matches__player2'
+            ).order_by('name')
+            context['groups'] = groups
+        else:
+            context['groups'] = []
+
+        context['now'] = timezone.now()
+        return context
+
+
+class CompetitionBracketPrintView(LoginRequiredMixin, DetailView):
+    model = Competition
+    template_name = "print/bracket.html"
+    context_object_name = 'competition'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        knockout_stage = KnockoutStage.objects.filter(competition=self.object).first()
+
+        rounds_data = []
+        match_3rd_place = None
+
+        if knockout_stage:
+            # Pobieramy mecze
+            matches = Match.objects.filter(knockout_stage=knockout_stage).order_by('round_number', 'id')
+
+            # Szukamy meczu o 3 miejsce (zakładam runda 99 lub nazwa)
+            match_3rd_place = matches.filter(
+                Q(round_number=99) | Q(knockout_name__icontains="3rd")
+            ).first()
+
+            total_rounds = knockout_stage.num_rounds
+
+            # --- ZMIANA: Pokaż maksymalnie 5 ostatnich rund (czyli od 1/16 do Finału) ---
+            # Jeśli chcesz od 1/8, zmień liczbę 4 na 3.
+            # Jeśli chcesz od 1/16, zostaw 4 (bo runda finałowa to 0 'wstecz', więc 4 wstecz to 5 rund)
+            start_round = max(1, total_rounds - 3)
+
+            for r in range(start_round, total_rounds + 1):
+                # Filtrujemy mecze tylko dla danej rundy
+                current_round_matches = matches.filter(round_number=r)
+
+                # --- LOGIKA NAZEWNICTWA (tak jak w harmonogramie) ---
+                diff = total_rounds - r
+                if diff == 0:
+                    round_name = "Final"
+                elif diff == 1:
+                    round_name = "Semi-Finals (1/2)"
+                elif diff == 2:
+                    round_name = "Quarter-Finals (1/4)"
+                elif diff == 3:
+                    round_name = "Last 16 (1/8)"
+                else:
+                    round_name = f"Round {r}"
+
+                rounds_data.append({
+                    'number': r,
+                    'name': round_name,  # <--- Nowe pole z ładną nazwą
+                    'matches': current_round_matches
+                })
+
+        context['rounds_data'] = rounds_data
+        context['match_3rd_place'] = match_3rd_place  # Przekazujemy osobno do szablonu
+        context['now'] = timezone.now()
+        return context
