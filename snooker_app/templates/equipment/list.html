@@ -138,23 +138,34 @@
                                 {% if item.weight_value %}{{ item.weight_value }}{{ item.weight_unit }}{% endif %}
                                 {% if item.tip_diameter %} / {{ item.tip_diameter }}mm{% endif %}
                             </td>
-                            <td class="text-end pe-4">
-                                <div class="btn-group">
+                           <td class="text-end pe-4">
+                                <div class="btn-group shadow-sm" role="group">
+                                    {# 1. USE AGAIN (Zielony) #}
                                     <a href="{% url 'use_equipment_again' item.pk %}"
-                                       class="btn btn-sm btn-outline-success"
-                                       title="Use this again (Clone)"
-                                       onclick="return confirm('Do you want to use {{ item.name }} again?Current item of this type will be archived.')">
-                                        <i class="bi bi-arrow-counterclockwise"></i> Use Again
+                                       class="btn btn-sm btn-outline-success fw-bold"
+                                       title="Re-activate this item"
+                                       onclick="return confirm('Do you want to use {{ item.name }} again? Current item of this type will be archived.')">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i> Use
                                     </a>
 
-                                    <a href="{% url 'equipment_detail' item.pk %}" class="btn btn-sm btn-outline-dark" title="View">
+                                    {# 2. VIEW (Szary) #}
+                                    <a href="{% url 'equipment_detail' item.pk %}" class="btn btn-sm btn-outline-secondary" title="View details">
                                         <i class="bi bi-eye-fill"></i>
                                     </a>
-                                    <a href="{% url 'edit_equipment' item.pk %}" class="btn btn-sm btn-light border text-muted" title="Edit">
-                                        <i class="bi bi-pencil"></i>
+
+                                    {# 3. EDIT (Niebieski - poprawiony styl ołówka) #}
+                                    <a href="{% url 'edit_equipment' item.pk %}" class="btn btn-sm btn-outline-primary" title="Edit">
+                                        <i class="bi bi-pencil-fill"></i>
+                                    </a>
+
+                                    {# 4. DELETE (Teraz prowadzi do ładnej strony) #}
+                                    <a href="{% url 'delete_equipment' item.pk %}"
+                                       class="btn btn-sm btn-outline-danger"
+                                       title="Delete permanently">
+                                        <i class="bi bi-trash-fill"></i>
                                     </a>
                                 </div>
-                            </td>
+                           </td>
                         </tr>
                         {% endfor %}
                     </tbody>

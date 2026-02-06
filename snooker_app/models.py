@@ -17,6 +17,15 @@ class Player(models.Model):
     # --- 1. DANE OSOBOWE I KONFIGURACJA ---
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='players', null=True, blank=True)
     user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='player_profile')
+    # Nowe pole - link do oryginału:
+    cloned_from = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='clones',
+        help_text="If it's a clone, it points to the original player."
+    )
     is_public = models.BooleanField(default=False)
     is_temporary = models.BooleanField(default=False)
     is_guest = models.BooleanField(default=False,
@@ -499,7 +508,7 @@ class Match(models.Model):
             self.referee_ids = ', '.join([str(referee.id) for referee in self.referees.all()])
             super().save(update_fields=['referee_names', 'referee_ids', 'player_names', 'player_ids'])
 
-        # --- NOWOŚĆ: MOST DO STAREGO SYSTEMU (MatchPlayer Sync) - POPRAWKA 2 ---
+        # --- MOST DO STAREGO SYSTEMU (MatchPlayer Sync) - POPRAWKA 2 ---
         from .models import MatchPlayer
         from django.db import transaction
 

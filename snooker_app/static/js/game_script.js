@@ -1098,9 +1098,13 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
         if (activePlayer === 1) {
             p1Fouls++;
             p1FoulPoints += foulPoints;
+            p1Shots++;
+            p1Misses++;
         } else {
             p2Fouls++;
             p2FoulPoints += foulPoints;
+            p2Shots++;
+            p2Misses++;
         }
         // --- END NEW CODE ---
 

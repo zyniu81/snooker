@@ -320,45 +320,79 @@
                                         <div class="col-3 col-sm-2 text-muted small border-end text-center">
                                             <div class="fw-bold">{{ match.date|date:"d.m" }}</div>
                                             <div>{{ match.time|time:"H:i" }}</div>
+                                            {# Dodatek: Ikonka Remote, jeśli to mecz z innego konta #}
+                                            {% if match.owner != request.user %}
+                                                 <div class="text-info" style="font-size: 0.65rem;">
+                                                    <i class="bi bi-link-45deg"></i> Remote
+                                                 </div>
+                                            {% endif %}
                                         </div>
 
                                         {# 2. PRZECIWNIK I WYNIK #}
                                         <div class="col-9 col-sm-10">
                                             <div class="d-flex justify-content-between align-items-center">
 
-                                                <div class="d-flex align-items-center">
-                                                    <span class="text-muted me-2 small">vs</span>
-                                                    <span class="fw-bold text-dark fs-5">
-                                                        {# Wyświetlamy rywala #}
-                                                        {% if match.player1 == player %}
-                                                            {{ match.player2 }}
-                                                        {% else %}
-                                                            {{ match.player1 }}
-                                                        {% endif %}
-                                                    </span>
-                                                </div>
+                                                {# --- LOGIKA: CZY JESTEM PLAYER 1? --- #}
+                                                {# Jestem P1 jeśli: to ja (ID) LUB to mój klon #}
+                                                {% if match.player1 == player or match.player1.cloned_from == player %}
 
-                                                {# WYNIK / STATUS #}
-                                                <div class="text-end">
-                                                    {% if match.status == 'FINISHED' %}
-                                                        {# Logika wyświetlania wyniku: Mój Wynik - Wynik Rywala #}
-                                                        <div class="fs-5 fw-bold font-monospace">
-                                                            {% if match.player1 == player %}
-                                                                <span class="{% if match.winner == player %}text-success{% else %}text-danger{% endif %}">{{ match.final_score_player1 }}</span>
+                                                    {# SCENARIUSZ A: JESTEM P1 (LUB MÓJ KLON TO P1) #}
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="text-muted me-2 small">vs</span>
+                                                        <span class="fw-bold text-dark fs-5">
+                                                            {{ match.player2 }}
+                                                        </span>
+                                                    </div>
+
+                                                    <div class="text-end">
+                                                        {% if match.status == 'FINISHED' %}
+                                                            <div class="fs-5 fw-bold font-monospace">
+                                                                {# Kolorujemy wynik. Sprawdzamy czy wygrałem JA lub mój KLON #}
+                                                                {% if match.winner == match.player1 or match.winner.cloned_from == player %}
+                                                                    <span class="text-success">{{ match.final_score_player1 }}</span>
+                                                                {% else %}
+                                                                    <span class="text-danger">{{ match.final_score_player1 }}</span>
+                                                                {% endif %}
                                                                 <span class="text-muted mx-1">:</span>
                                                                 <span>{{ match.final_score_player2 }}</span>
-                                                            {% else %}
-                                                                <span class="{% if match.winner == player %}text-success{% else %}text-danger{% endif %}">{{ match.final_score_player2 }}</span>
+                                                            </div>
+                                                        {% elif match.status == 'IN_PROGRESS' %}
+                                                            <span class="badge bg-warning text-dark animate-pulse">LIVE</span>
+                                                        {% else %}
+                                                            <span class="badge bg-light text-muted border">Plan</span>
+                                                        {% endif %}
+                                                    </div>
+
+                                                {% else %}
+
+                                                    {# SCENARIUSZ B: JESTEM P2 (LUB MÓJ KLON TO P2) #}
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="text-muted me-2 small">vs</span>
+                                                        <span class="fw-bold text-dark fs-5">
+                                                            {{ match.player1 }}
+                                                        </span>
+                                                    </div>
+
+                                                    <div class="text-end">
+                                                        {% if match.status == 'FINISHED' %}
+                                                            <div class="fs-5 fw-bold font-monospace">
+                                                                {# Kolorujemy wynik (dla P2) #}
+                                                                {% if match.winner == match.player2 or match.winner.cloned_from == player %}
+                                                                    <span class="text-success">{{ match.final_score_player2 }}</span>
+                                                                {% else %}
+                                                                    <span class="text-danger">{{ match.final_score_player2 }}</span>
+                                                                {% endif %}
                                                                 <span class="text-muted mx-1">:</span>
                                                                 <span>{{ match.final_score_player1 }}</span>
-                                                            {% endif %}
-                                                        </div>
-                                                    {% elif match.status == 'IN_PROGRESS' %}
-                                                        <span class="badge bg-warning text-dark animate-pulse">LIVE</span>
-                                                    {% else %}
-                                                        <span class="badge bg-light text-muted border">Plan</span>
-                                                    {% endif %}
-                                                </div>
+                                                            </div>
+                                                        {% elif match.status == 'IN_PROGRESS' %}
+                                                            <span class="badge bg-warning text-dark animate-pulse">LIVE</span>
+                                                        {% else %}
+                                                            <span class="badge bg-light text-muted border">Plan</span>
+                                                        {% endif %}
+                                                    </div>
+
+                                                {% endif %}
                                             </div>
                                         </div>
 

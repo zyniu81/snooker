@@ -8,6 +8,7 @@ from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.views import LoginView
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse
 from django.core.exceptions import PermissionDenied
@@ -24,6 +25,7 @@ from django.utils.crypto import get_random_string
 from django.template.loader import render_to_string
 from collections import defaultdict
 from django.core.management import call_command
+from django.core.cache import cache
 
 from io import StringIO
 from openai import OpenAI
@@ -169,11 +171,14 @@ def player_detail(request, pk):
     if not (player.is_public or player.owner == request.user):
         raise PermissionDenied("You do not have access to this player.")
 
-    # --- POBIERANIE HISTORII MECZÓW (POPRAWIONE) ---
-    # Używamy Q, żeby sprawdzić czy gracz jest w player1 LUB w player2
+    # --- POBIERANIE HISTORII MECZÓW (POPRAWIONE DLA KLONÓW) ---
+    # Szukamy meczów gdzie:
+    # 1. Gracz jest P1 lub P2 (standard)
+    # 2. Klon tego gracza jest P1 lub P2 (nowość)
     recent_matches = Match.objects.filter(
-        Q(player1=player) | Q(player2=player)
-    ).order_by('-date', '-time')[:5]
+        Q(player1=player) | Q(player1__cloned_from=player) |
+        Q(player2=player) | Q(player2__cloned_from=player)
+    ).distinct().order_by('-date', '-time')[:5]
     # -----------------------------------------------
 
     # --- POBIERANIE WYNIKÓW TURNIEJOWYCH ---
@@ -434,6 +439,17 @@ def match_detail(request, pk):
         has_access = True
     elif request.user.is_authenticated and match.owner == request.user:
         has_access = True
+
+    # --- NOWE: WPUSZCZAMY WŁAŚCICIELA ORYGINAŁU (READ ONLY) ---
+    elif request.user.is_authenticated:
+        # Sprawdzamy, czy w meczu grał KLON należący do obecnego usera (User B)
+        # P1 jest klonem i jego oryginał należy do mnie?
+        if match.player1 and match.player1.cloned_from and match.player1.cloned_from.owner == request.user:
+            has_access = True
+        # P2 jest klonem i jego oryginał należy do mnie?
+        elif match.player2 and match.player2.cloned_from and match.player2.cloned_from.owner == request.user:
+            has_access = True
+    # ----------------------------------------------------------
 
     if not has_access:
         if request.user.is_authenticated:
@@ -1973,11 +1989,13 @@ def import_players_to_competition(request, comp_id):
                         # TWORZYMY KLONA-GOŚCIA
                         new_guest = Player.objects.create(
                             owner=request.user,
-                            user=source.user,
-                            is_guest=True,  # <--- KLUCZOWA ZMIANA: To jest Gość
-                            first_name=new_first_name,
-                            last_name=new_last_name,
-                            nickname=new_nickname,
+                            # user=source.user,  <-- USUWAMY TO (Klon nie może być podpięty pod konto Usera oryginału)
+                            cloned_from=source,  # <--- DODAJEMY TO (Nasz nowy most)
+                            is_guest=True,
+                            first_name=source.first_name,
+                            # Tu była literówka w zmiennych, lepiej brać prosto z source albo z Twoich zmiennych wyżej
+                            last_name=new_last_name,  # Używamy Twojej logiki z suffixem
+                            nickname=new_nickname,  # Używamy Twojej logiki z suffixem
                             # photo=source.photo
                         )
                         # Dodajemy go do turnieju
@@ -2054,15 +2072,16 @@ def import_guest_for_match(request):
                         else:
                             new_first_name += suffix
 
-                    # Tworzymy Gościa (is_guest=True)
-                    new_guest = Player.objects.create(
-                        owner=request.user,
-                        user=source.user,
-                        is_guest=True,
-                        first_name=new_first_name,
-                        last_name=new_last_name,
-                        nickname=new_nickname,
-                    )
+                            # Tworzymy Gościa (is_guest=True)
+                            new_guest = Player.objects.create(
+                                owner=request.user,
+                                # user=source.user,  <-- USUWAMY TO
+                                cloned_from=source,  # <--- DODAJEMY TO
+                                is_guest=True,
+                                first_name=new_first_name,
+                                last_name=new_last_name,
+                                nickname=new_nickname,
+                            )
                     last_created_id = new_guest.id
 
                 messages.success(request, "Guest imported for the match.")
@@ -2265,9 +2284,17 @@ def equipment_detail(request, pk):
 def delete_equipment(request, pk):
     equipment = get_object_or_404(Equipment, pk=pk)
     player_id = equipment.player.id
-    equipment.delete()
-    messages.success(request, "Equipment deleted.")
-    return redirect('equipment_list', player_id=player_id)
+
+    if request.method == 'POST':
+        # Jeśli użytkownik kliknął "Yes, Delete" na stronie potwierdzenia
+        equipment.delete()
+        messages.success(request, f"Equipment '{equipment.name}' deleted.")
+        return redirect('equipment_list', player_id=player_id)
+
+    # Jeśli to zwykłe wejście (kliknięcie w kosz) -> pokaż stronę potwierdzenia
+    return render(request, 'equipment/confirm_delete.html', {
+        'item': equipment
+    })
 
 
 @login_required
@@ -2868,3 +2895,45 @@ class CompetitionBracketPrintView(LoginRequiredMixin, DetailView):
         context['match_3rd_place'] = match_3rd_place  # Przekazujemy osobno do szablonu
         context['now'] = timezone.now()
         return context
+
+
+class CustomLoginView(LoginView):
+    template_name = 'login.html'
+
+    def post(self, request, *args, **kwargs):
+        # 1. Sprawdzamy, czy użytkownik (IP) ma blokadę
+        ip = request.META.get('REMOTE_ADDR')
+        if cache.get(f'block_ip_{ip}'):
+            # Jeśli zablokowany - zwracamy stronę z błędem, nie sprawdzając nawet hasła
+            form = self.get_form()
+            form.add_error(None, "Too many failed attempts. Please try again in 5 minutes.")
+            return self.render_to_response(self.get_context_data(form=form))
+
+        return super().post(request, *args, **kwargs)
+
+    def form_invalid(self, form):
+        ip = self.request.META.get('REMOTE_ADDR')
+        key = f'login_errors_{ip}'
+        attempts = cache.get(key, 0) + 1
+
+        cache.set(key, attempts, 300)
+
+        if attempts >= 5:
+            cache.set(f'block_ip_{ip}', True, 300)
+
+            # --- Czyścimy standardowy błąd Django ("Please enter correct...") ---
+            # Żeby użytkownik widział tylko konkret: "Zablokowano"
+            if form._errors:
+                form._errors.clear()
+
+            form.add_error(None, "Account locked due to multiple failed attempts. Try again in 5 minutes.")
+
+        return super().form_invalid(form)
+
+    def form_valid(self, form):
+        # 3. To się uruchamia, gdy wpiszesz DOBRE hasło
+        # Czyścimy historię błędów
+        ip = self.request.META.get('REMOTE_ADDR')
+        cache.delete(f'login_errors_{ip}')
+        cache.delete(f'block_ip_{ip}')
+        return super().form_valid(form)

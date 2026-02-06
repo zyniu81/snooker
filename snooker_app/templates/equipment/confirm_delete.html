@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Equipment - Snooker App{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-danger shadow">
+                <div class="card-body text-center p-5">
+
+                    <i class="bi bi-trash3 text-danger display-1 mb-3"></i>
+
+                    <h3 class="card-title fw-bold">Delete Item?</h3>
+
+                    <p class="card-text text-muted mb-4">
+                        Are you sure you want to permanently delete: <br>
+                        <strong class="fs-5 text-dark">{{ item.brand|default:"" }} {{ item.name }}</strong>?
+                        <br>
+                        <small class="text-danger">This cannot be undone.</small>
+                    </p>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+                            {# Przycisk zatwierdzający (POST) #}
+                            <button type="submit" class="btn btn-danger px-4 fw-bold">
+                                <i class="bi bi-trash-fill me-1"></i> Yes, Delete
+                            </button>
+
+                            {# Przycisk Anuluj - wraca do listy gracza #}
+                            <a href="{% url 'equipment_list' item.player.id %}" class="btn btn-secondary px-4">Cancel</a>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

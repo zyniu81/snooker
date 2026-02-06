@@ -1,4 +1,4 @@
-from django.db.models import Sum, Min, Max, Avg
+from django.db.models import Sum, Min, Max, Avg, Q
 from .models import Player, MatchPlayer, Frame, CompetitionResult, KnockoutStage, GroupStage, Match
 from datetime import timedelta
 from django.db import transaction
@@ -7,11 +7,15 @@ from django.db import transaction
 def update_career_stats(player):
     """
     Przelicza statystyki gracza na podstawie historii meczów.
-    POPRAWKA: Pobiera framy przez relację match_player__match.
+    OBSŁUGUJE KLONY: Liczy mecze własne oraz mecze rozegrane przez klony tego gracza.
     """
 
-    # 1. Znajdź zakończone mecze tego gracza
-    match_participations = MatchPlayer.objects.filter(player=player, match__status='FINISHED').select_related('match')
+    # 1. Znajdź zakończone mecze tego gracza ORAZ jego klonów
+    # Używamy Q, żeby pobrać mecze gdzie player=player LUB player__cloned_from=player
+    match_participations = MatchPlayer.objects.filter(
+        Q(player=player) | Q(player__cloned_from=player),
+        match__status='FINISHED'
+    ).select_related('match')
 
     # Sortujemy mecze chronologicznie
     matches = sorted([mp.match for mp in match_participations], key=lambda x: x.created_at)
@@ -54,19 +58,22 @@ def update_career_stats(player):
     # --- GŁÓWNA PĘTLA PO MECZACH ---
     for m in matches:
         # 1. Ustal kim był gracz w tym meczu (P1 czy P2?)
-        is_p1 = (m.player1 == player)
-        is_p2 = (m.player2 == player)
+        # UWAGA: Tutaj sprawdzamy też, czy P1/P2 jest klonem naszego gracza
+        is_p1 = (m.player1 == player) or (getattr(m.player1, 'cloned_from', None) == player)
+        is_p2 = (m.player2 == player) or (getattr(m.player2, 'cloned_from', None) == player)
 
         if not is_p1 and not is_p2:
             continue
 
         # 2. Wynik meczu
-        is_winner = (m.winner == player)
+        # Sprawdzamy czy zwycięzcą jest gracz LUB jego klon
+        winner_is_me = (m.winner == player) or (getattr(m.winner, 'cloned_from', None) == player)
+
         p1_score, p2_score = m.get_real_score()
         frames_played_in_match = p1_score + p2_score
 
         # --- Streaks (Mecze) ---
-        if is_winner:
+        if winner_is_me:
             career_matches_won += 1
             current_match_streak += 1
             if current_match_streak > max_match_streak:
@@ -78,23 +85,24 @@ def update_career_stats(player):
         # --- Decidery ---
         if frames_played_in_match == m.number_of_frames and m.number_of_frames >= 3:
             career_deciders_played += 1
-            if is_winner:
+            if winner_is_me:
                 career_deciders_won += 1
 
         # --- Whitewashes ---
-        if is_winner:
+        if winner_is_me:
             opponent_score = p2_score if is_p1 else p1_score
             if opponent_score == 0:
                 career_whitewashes += 1
 
         # --- ANALIZA FRAMÓW ---
-        # POPRAWKA TUTAJ: Zamiast m.frame_set.all(), szukamy framów, które należą do tego meczu
-        # przechodząc przez relację match_player__match
         match_frames = Frame.objects.filter(match_player__match=m).order_by('frame_number')
 
         for f in match_frames:
             # -- Zwycięstwo we framie --
-            if f.winner == player:
+            # Tutaj też musimy sprawdzić, czy wygrał gracz LUB jego klon
+            frame_winner_is_me = (f.winner == player) or (getattr(f.winner, 'cloned_from', None) == player)
+
+            if frame_winner_is_me:
                 career_frames_won += 1
                 current_frame_streak += 1
                 if current_frame_streak > max_frame_streak:
@@ -103,7 +111,8 @@ def update_career_stats(player):
                 career_frames_lost += 1
                 current_frame_streak = 0
 
-                # -- Pobieranie danych --
+            # -- Pobieranie danych --
+            # is_p1 zostało ustalone wyżej z uwzględnieniem klonów, więc tu jest OK
             if is_p1:
                 pts = f.points_scored_player1 or 0
                 pots = f.potted_balls_player1 or 0
@@ -138,20 +147,16 @@ def update_career_stats(player):
                 if b > career_highest_break:
                     career_highest_break = b
 
-                # Liczniki 147 / 100 / 50 (Rozłączne)
                 if b >= 147:
                     career_max_breaks += 1
-                    career_centuries += 1  # 147 liczymy też jako setkę (zgodnie z życzeniem)
+                    career_centuries += 1
                 elif b >= 100:
                     career_centuries += 1
                 elif b >= 50:
                     career_fifties += 1
 
-                # Histogram "Kubełkowy" (Tylko najwyższy próg)
-                # Np. break 64 -> bucket 60. Zapisujemy tylko w 60+.
                 if b >= 10:
-                    bucket = (b // 10) * 10  # Dzielenie całkowite: 64//10 = 6 -> *10 = 60
-                    # Zabezpieczenie, żeby nie wyszło więcej niż 140
+                    bucket = (b // 10) * 10
                     if bucket > 140:
                         bucket = 140
                     career_break_histogram[f"{bucket}+"] += 1
@@ -175,7 +180,7 @@ def update_career_stats(player):
     player.matches_played = matches_played_count
     player.matches_won = career_matches_won
     player.matches_lost = career_matches_lost
-
+    # ... reszta przypisań bez zmian ...
     player.deciders_played = career_deciders_played
     player.deciders_won = career_deciders_won
     player.whitewashes_count = career_whitewashes
@@ -201,9 +206,7 @@ def update_career_stats(player):
     player.max_breaks_count = career_max_breaks
     player.career_break_stats = career_break_histogram
 
-    # --- NOWE: ANALIZA CZASU FRAMÓW (Min/Max/Avg) ---
-    # Bierzemy framy tylko z zakończonych meczów tego gracza
-    # Wykluczamy framy, które nie mają czasu (null) lub trwają 0 sekund
+    # --- NOWE: ANALIZA CZASU FRAMÓW ---
     time_stats = Frame.objects.filter(match_player__match__in=matches).exclude(time_duration=None).aggregate(
         shortest=Min('time_duration'),
         longest=Max('time_duration'),
@@ -215,6 +218,11 @@ def update_career_stats(player):
     player.avg_frame_time = time_stats['average']
 
     player.save()
+
+    # --- TRIGGER DLA ORYGINAŁU ---
+    # Jeśli aktualizujemy klona, musimy też zaktualizować oryginał
+    if player.cloned_from:
+        update_career_stats(player.cloned_from)
 
 
 def calculate_competition_results(competition):

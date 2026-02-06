@@ -17,7 +17,6 @@ class Command(BaseCommand):
         # - is_temporary jest True (dla pewności)
         # - created_at jest starsze niż 12h temu
         matches_to_delete = Match.objects.filter(
-            owner__isnull=True,
             is_temporary=True,
             created_at__lt=cutoff_time
         )

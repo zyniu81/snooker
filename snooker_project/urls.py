@@ -54,7 +54,7 @@ urlpatterns = [
     path('competitions/<int:pk>/stages/', views.competition_stages, name='competition_stages'),
     path('competitions/<int:competition_id>/add-matches/', views.add_matches_to_competition,
          name='add_matches_to_competition'),
-    path('login/', auth_views.LoginView.as_view(template_name='login.html'), name='login'),
+    path('login/', views.CustomLoginView.as_view(), name='login'),
     path('logout/', views.custom_logout, name='logout'),
     path('register/', views.register, name='register'),
     path('user/settings/', views.user_settings, name='user_settings'),
