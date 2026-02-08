@@ -4,7 +4,7 @@
 
 {% block content %}
 <style>
-    /* Hybrydowa Karta Gracza */
+    /* Hybrid Player Card */
     .player-row-card {
         border: none;
         background-color: white;
@@ -20,7 +20,7 @@
         cursor: pointer;
     }
 
-    /* Awatar */
+    /* Avatar */
     .player-avatar {
         width: 60px;
         height: 60px;
@@ -33,18 +33,18 @@
         justify-content: center;
         font-size: 1.5rem;
         font-weight: bold;
-        /* WAŻNE: Przycinanie zdjęcia do kółka */
+        /* IMPORTANT: Crop image to circle */
         overflow: hidden;
     }
 
-    /* Styl dla zdjęcia wewnątrz kółka */
+    /* Style for image inside circle */
     .player-avatar img {
         width: 100%;
         height: 100%;
         object-fit: cover;
     }
 
-    /* Statystyki */
+    /* Statistics */
     .stat-box {
         text-align: center;
         padding: 0 15px;
@@ -113,7 +113,7 @@
                             <div class="text-center text-md-start flex-grow-1 mb-3 mb-md-0">
                                 <h5 class="mb-0 text-dark lh-sm">
 
-                                    {# 1. IMIĘ #}
+                                    {# 1. FIRST NAME #}
                                     {% if player.first_name %}
                                         <span class="d-block fw-normal">{{ player.first_name }}</span>
                                     {% endif %}
@@ -125,7 +125,7 @@
                                         </span>
                                     {% endif %}
 
-                                    {# 3. NAZWISKO #}
+                                    {# 3. LAST NAME #}
                                     {% if player.last_name %}
                                         <span class="d-block fw-bold">{{ player.last_name }}</span>
                                     {% endif %}
@@ -145,7 +145,7 @@
                                 <div class="stat-box border-end">
                                     <div class="stat-label">Pot Success</div>
                                     <div class="stat-value text-success">
-                                        {# Sprawdzamy czy > 0, bo default w modelu to 0.0 #}
+                                        {# Check if > 0, as model default is 0.0 #}
                                         {% if player.global_pot_success > 0 %}
                                             {{ player.global_pot_success|floatformat:0 }}%
                                         {% else %}
@@ -157,7 +157,7 @@
                                 <div class="stat-box">
                                     <div class="stat-label">AST</div>
                                     <div class="stat-value">
-                                        {# Używamy gotowej metody z modelu, która sama robi "0:15" albo "-" #}
+                                        {# Using ready-made model method that formats to "0:15" or "-" #}
                                         {{ player.formatted_avg_shot_time }}
                                     </div>
                                 </div>

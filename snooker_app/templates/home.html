@@ -11,7 +11,7 @@
 
             <ul class="list-group shadow-sm border-0">
 
-                {# --- DLA ZALOGOWANYCH --- #}
+                {# --- FOR LOGGED IN USERS --- #}
                 {% if user.is_authenticated %}
                     <li class="list-group-item p-4 text-center bg-white border-bottom-0">
                         <p class="mb-3 text-muted">
@@ -22,7 +22,7 @@
                         </a>
                     </li>
 
-                {# --- DLA NIEZALOGOWANYCH --- #}
+                {# --- FOR UNLOGGED USERS --- #}
                 {% else %}
                     <li class="list-group-item p-3 border-bottom-0">
                         <a href="{% url 'login' %}" class="btn btn-primary w-100 fw-bold">
@@ -36,7 +36,7 @@
                     </li>
                 {% endif %}
 
-                {# --- DLA WSZYSTKICH (Szybki mecz) --- #}
+                {# --- FOR ALL (Quick Match) --- #}
                 <li class="list-group-item p-3 bg-light">
                     <a href="{% url 'create_temporary_match' %}" class="btn btn-info w-100 text-white fw-bold shadow-sm">
                         <i class="bi bi-lightning-fill me-2"></i> Quick Match

@@ -1,30 +1,30 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import transaction
-from django.core.exceptions import ObjectDoesNotExist  # <--- WAŻNY IMPORT
+from django.core.exceptions import ObjectDoesNotExist  # <--- IMPORTANT IMPORT
 from .models import Match, MatchPlayer, GroupStanding, Competition, GroupStage, KnockoutStage
 
 
 def recalculate_group_standings(group):
     """
-    Resetuje i przelicza tabelę dla konkretnej grupy na podstawie zakończonych meczów.
-    Pobiera zasady punktacji (win/draw) z etapu (GroupStage).
+    Resets and recalculates the table for a specific group based on finished matches.
+    Fetches scoring rules (win/draw) from the stage (GroupStage).
     """
-    # Zabezpieczenie: Jeśli grupa nie ma przypisanego etapu (sierota), przerwij
+    # Safeguard: If group has no assigned stage (orphan), stop
     try:
         stage = group.stage
     except ObjectDoesNotExist:
         return
 
-    # 1. Pobierz ustawienia punktacji z Etapu
+    # 1. Get scoring settings from Stage
     pts_win = stage.points_for_win
     pts_draw = stage.points_for_draw
     pts_loss = stage.points_for_loss
 
-    # 2. Pobierz wszystkie wiersze tabeli dla tej grupy (żeby je zaktualizować)
+    # 2. Get all table rows for this group (to update them)
     standings = {s.player_id: s for s in group.standings.all()}
 
-    # 3. ZRESETUJ statystyki do zera (żeby nie dodawać dubli)
+    # 3. RESET statistics to zero (to avoid double counting)
     for s in standings.values():
         s.matches_played = 0
         s.matches_won = 0
@@ -36,13 +36,13 @@ def recalculate_group_standings(group):
         s.small_points_scored = 0
         s.small_points_conceded = 0
         s.highest_break = 0
-        # Nie resetujemy is_qualified ręcznie
+        # We do not reset is_qualified manually
 
-    # 4. Pobierz ZAKOŃCZONE mecze w tej grupie
+    # 4. Get FINISHED matches in this group
     finished_matches = group.matches.filter(status='FINISHED')
 
     for match in finished_matches:
-        # Pobierz graczy i ich wyniki z modelu Match
+        # Get players and their results from Match model
         mps = list(match.matchplayer_set.all().order_by('position'))
         if len(mps) < 2:
             continue
@@ -56,13 +56,13 @@ def recalculate_group_standings(group):
         s1 = standings[p1.id]
         s2 = standings[p2.id]
 
-        # -- LICZENIE STATYSTYK --
+        # -- CALCULATING STATISTICS --
 
-        # Mecze rozegrane
+        # Matches played
         s1.matches_played += 1
         s2.matches_played += 1
 
-        # Frame'y
+        # Frames
         f1 = match.final_score_player1
         f2 = match.final_score_player2
 
@@ -71,7 +71,7 @@ def recalculate_group_standings(group):
         s2.frames_won += f2
         s2.frames_lost += f1
 
-        # Małe Punkty
+        # Points (Small Points)
         sp1 = match.total_points_player1
         sp2 = match.total_points_player2
 
@@ -81,13 +81,13 @@ def recalculate_group_standings(group):
         s2.small_points_scored += sp2
         s2.small_points_conceded += sp1
 
-        # Najwyższy Break w Grupie
+        # Highest Break in Group
         if match.highest_break_p1 > s1.highest_break:
             s1.highest_break = match.highest_break_p1
         if match.highest_break_p2 > s2.highest_break:
             s2.highest_break = match.highest_break_p2
 
-        # Punkty meczowe (Win/Draw/Loss)
+        # Match Points (Win/Draw/Loss)
         if f1 > f2:
             s1.matches_won += 1
             s1.points += pts_win
@@ -99,13 +99,13 @@ def recalculate_group_standings(group):
             s1.matches_lost += 1
             s1.points += pts_loss
         else:
-            # Remis
+            # Draw
             s1.matches_drawn += 1
             s1.points += pts_draw
             s2.matches_drawn += 1
             s2.points += pts_draw
 
-    # 5. Zapisz wszystko w bazie
+    # 5. Save everything to database
     GroupStanding.objects.bulk_update(standings.values(), [
         'matches_played', 'matches_won', 'matches_drawn', 'matches_lost',
         'frames_won', 'frames_lost', 'points',
@@ -115,7 +115,7 @@ def recalculate_group_standings(group):
 
 def update_records(match):
     """
-    Sprawdza, czy w meczu padł rekord breaka dla Etapu lub Turnieju.
+    Checks if a break record for the Stage or Tournament was set in the match.
     """
     breaks = []
     if match.highest_break_p1 > 0:
@@ -129,7 +129,7 @@ def update_records(match):
     if not breaks:
         return
 
-    # Pobieramy kontekst bezpiecznie
+    # Get context safely
     try:
         stage = match.get_stage()
     except ObjectDoesNotExist:
@@ -138,13 +138,13 @@ def update_records(match):
     competition = stage.competition if stage else None
 
     for points, player in breaks:
-        # 1. Rekord ETAPU
+        # 1. STAGE Record
         if stage and points > stage.highest_break_points:
             stage.highest_break_points = points
             stage.highest_break_player = player
             stage.save()
 
-        # 2. Rekord TURNIEJU
+        # 2. TOURNAMENT Record
         if competition and points > competition.highest_break_points:
             competition.highest_break_points = points
             competition.highest_break_player = player
@@ -154,40 +154,40 @@ def update_records(match):
 @receiver(post_save, sender=Match)
 def match_post_save_handler(sender, instance, created, raw=False,  **kwargs):
     """
-    Główny sygnał. Uruchamia się po zapisaniu meczu.
+    Main signal. Triggers after saving a match.
     """
 
     if raw:
         return
 
-    # 1. Jeśli to mecz grupowy -> Przelicz tabelę tej grupy
+    # 1. If group match -> Recalculate table for this group
     if instance.group:
         transaction.on_commit(lambda: recalculate_group_standings(instance.group))
 
-    # 2. Sprawdź rekordy (Max Break)
+    # 2. Check records (Max Break)
     if instance.status == 'FINISHED':
         transaction.on_commit(lambda: update_records(instance))
 
 
-# --- TU BYŁ BŁĄD ---
+# --- THERE WAS AN ERROR HERE ---
 @receiver(post_delete, sender=Match)
 def match_post_delete_handler(sender, instance, **kwargs):
     """
-    Obsługa usunięcia meczu.
-    Musi być odporna na sytuację, gdy usuwamy cały Turniej (wtedy Grupa też znika).
+    Handles match deletion.
+    Must be robust against situations where the entire Tournament is deleted (Group disappears too).
     """
     try:
-        # Próbujemy pobrać grupę.
-        # Jeśli usuwamy kaskadowo (Turniej -> Grupa -> Mecz),
-        # to w tym momencie Grupa już nie istnieje w bazie.
-        # Django rzuci wyjątek ObjectDoesNotExist przy próbie dostępu do instance.group
+        # Try to get the group.
+        # If deleting concurrently (Tournament -> Group -> Match),
+        # the Group no longer exists in DB at this point.
+        # Django raises ObjectDoesNotExist when accessing instance.group
         if instance.group:
             recalculate_group_standings(instance.group)
 
     except ObjectDoesNotExist:
-        # Jeśli grupa nie istnieje, to znaczy, że albo została usunięta wcześniej,
-        # albo usuwamy cały turniej. W obu przypadkach - nie musimy nic przeliczać.
-        # Po prostu ignorujemy błąd.
+        # If group doesn't exist, it means it was deleted earlier,
+        # or we are deleting the whole tournament. In both cases - no need to recalculate.
+        # Just ignore the error.
         pass
 
 
@@ -197,46 +197,46 @@ def advance_knockout_winner(sender, instance, created, raw=False, **kwargs):
     if raw:
         return
     """
-    Automatycznie przesuwa zwycięzcę do następnej rundy w drabince pucharowej.
+    Automatically advances the winner to the next round in the knockout bracket.
     """
-    # Działamy tylko dla zakończonych meczów pucharowych, które mają zwycięzcę
+    # Only act on finished knockout matches that have a winner
     if not instance.knockout_stage or not instance.is_finished or not instance.winner:
         return
 
     stage = instance.knockout_stage
     current_round = instance.round_number
 
-    # --- LOGIKA GŁÓWNA: AWANS DO NASTĘPNEJ RUNDY ---
+    # --- MAIN LOGIC: ADVANCE TO NEXT ROUND ---
 
-    # 1. Pobieramy wszystkie mecze TEJ rundy, posortowane po ID (kolejność tworzenia)
+    # 1. Get all matches of THIS round, sorted by ID (creation order)
     current_round_matches = Match.objects.filter(
         knockout_stage=stage,
         round_number=current_round
     ).order_by('id')
 
-    # 2. Sprawdzamy, którym meczem z kolei jest nasz zakończony mecz (indeks 0, 1, 2...)
+    # 2. Check which match in sequence is our finished match (index 0, 1, 2...)
     matches_list = list(current_round_matches)
     try:
         current_match_index = matches_list.index(instance)
     except ValueError:
-        return  # Coś dziwnego, meczu nie ma na liście
+        return  # Something weird, match not in list
 
-    # 3. Obliczamy cel: Następna runda, Mecz o indeksie (nasz_indeks // 2)
+    # 3. Calculate target: Next round, Match at index (our_index // 2)
     next_round = current_round + 1
     target_match_index = current_match_index // 2
 
-    # Pobieramy mecze NASTĘPNEJ rundy
+    # Get matches of NEXT round
     next_round_matches = Match.objects.filter(
         knockout_stage=stage,
         round_number=next_round
     ).order_by('id')
 
-    # Jeśli cel istnieje (czyli nie jest to finał)
+    # If target exists (i.e. not the final)
     if target_match_index < len(next_round_matches):
         target_match = next_round_matches[target_match_index]
 
-        # Parzysty indeks (0, 2...) idzie na Player 1 (Góra drabinki)
-        # Nieparzysty indeks (1, 3...) idzie na Player 2 (Dół drabinki)
+        # Even index (0, 2...) goes to Player 1 (Top of bracket)
+        # Odd index (1, 3...) goes to Player 2 (Bottom of bracket)
         if current_match_index % 2 == 0:
             target_match.player1 = instance.winner
         else:
@@ -244,15 +244,15 @@ def advance_knockout_winner(sender, instance, created, raw=False, **kwargs):
 
         target_match.save()
 
-    # --- LOGIKA DODATKOWA: MECZ O 3 MIEJSCE ---
-    # Jeśli to Półfinał (przedostatnia runda) i mamy mecz o 3 miejsce
+    # --- ADDITIONAL LOGIC: 3RD PLACE MATCH ---
+    # If this is Semi-final (penultimate round) and we have a 3rd place match
     total_rounds = stage.num_rounds
     if stage.has_third_place_match and current_round == (total_rounds - 1):
-        # Znajdź przegranego
+        # Find loser
         loser = instance.player1 if instance.winner == instance.player2 else instance.player2
 
         if loser:
-            # Szukamy meczu o 3 miejsce (ma specjalny round_number=99 lub nazwę)
+            # Look for 3rd place match (has special round_number=99 or name)
             third_place_match = Match.objects.filter(
                 knockout_stage=stage,
                 knockout_name="3rd Place Match"

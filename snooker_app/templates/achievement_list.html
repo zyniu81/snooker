@@ -198,13 +198,12 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-    // Automatyczne sortowanie po kolumnie 5 (% Win Matches)
+    // Automatically sort by column 5 (% Win Matches)
     sortTable(5, true);
 });
 
 function sortTable(n, forceDesc = false) {
   var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-  // UPEWNIJ SIĘ ŻE TABELA MA ID="statsTable"
   table = document.getElementById("statsTable");
   switching = true;
   dir = "desc";
@@ -245,7 +244,7 @@ function parseContent(content) {
     content = content.trim();
     if (content === "-" || content === "" || content === "N/A") return -1;
 
-    // Obsługa czasów (np. 1:05:20)
+    // Time management (np. 1:05:20)
     if (content.includes(":")) {
         var parts = content.split(":").reverse();
         var seconds = 0;
@@ -254,9 +253,9 @@ function parseContent(content) {
         if (parts[2]) seconds += parseInt(parts[2]) * 3600;
         return seconds;
     }
-    // Obsługa procentów
+    // Percentage support
     if (content.includes("%")) return parseFloat(content.replace("%", ""));
-    // Obsługa Deciderów "1/2" -> bierzemy 1
+    // Handling Deciders "1/2" -> we take 1
     if (content.includes("/")) return parseFloat(content.split("/")[0]);
 
     var parsed = parseFloat(content);
@@ -265,7 +264,7 @@ function parseContent(content) {
 </script>
 
 <style>
-    /* Drobne poprawki, żeby tabela była czytelna */
+    /* Minor corrections to make the table readable */
     #statsTable th {
         font-size: 0.85rem;
         vertical-align: middle;
@@ -276,45 +275,45 @@ function parseContent(content) {
     .popover-body {
         padding: 0.5rem 1rem;
     }
-    /* --- Dopisz to wewnątrz znacznika <style> --- */
     thead th:hover {
         background-color: #343a40 !important; /* Jaśniejszy szary przy najechaniu */
         transition: background-color 0.2s;
     }
 
-    /* --- STICKY COLUMNS (Blokowanie kolumn) --- */
+    /* --- STICKY COLUMNS (Column locking) --- */
 
-    /* 1. Kolumna z numerem (#) */
+    /* 1. Column with number (#) */
     #statsTable th:nth-child(1),
     #statsTable td:nth-child(1) {
         position: sticky;
         left: 0;
         z-index: 10;
-        background-color: #fff; /* Tło musi być, żeby tekst nie prześwitywał */
+        background-color: #fff;/* The background must be there so that the text doesn't show through */
     }
 
     /* 2. Kolumna z Graczem */
     #statsTable th:nth-child(2),
     #statsTable td:nth-child(2) {
         position: sticky;
-        left: 40px; /* Tyle mniej więcej ma pierwsza kolumna. Jak się nakłada, zwiększ tę liczbę */
+        left: 40px; /* This is approximately how many columns there are in the first column.
+        If there's an overlap, increase this number */
         z-index: 10;
         background-color: #fff;
-        border-right: 2px solid #dee2e6; /* Linia oddzielająca zablokowane od reszty */
+        border-right: 2px solid #dee2e6; /* Line separating blocked from the rest */
     }
 
-    /* Poprawka dla nagłówka (czarne tło dla zablokowanych nagłówków) */
+    /* Header fix (black background for blocked headers) */
     #statsTable thead th:nth-child(1),
     #statsTable thead th:nth-child(2) {
-        z-index: 100 !important; /* Musi być nad resztą tabeli */
-        background-color: #212529; /* Kolor table-dark */
+        z-index: 100 !important; /* Must be above the rest of the table */
+        background-color: #212529;
         color: white;
     }
 
-    /* Opcjonalnie: Obsługa hovera (żeby podświetlało się też pod zablokowaną kolumną) */
+    /* Optional: Hover support (so that it also highlights under a locked column) */
     #statsTable tbody tr:hover td:nth-child(1),
     #statsTable tbody tr:hover td:nth-child(2) {
-        background-color: #e9ecef; /* Kolor podświetlenia bootstrapa */
+        background-color: #e9ecef; /* Bootstrap highlight color */
     }
 </style>
 {% endblock %}

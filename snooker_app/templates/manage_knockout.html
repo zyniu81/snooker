@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container mt-5">
 
-    {# --- NAGŁÓWEK I PRZYCISK POWROTU --- #}
+    {# --- HEADER AND BACK BUTTON --- #}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>
             <i class="bi bi-person-lines-fill me-2"></i>Substitute Player (Knockout)
@@ -33,13 +33,13 @@
                     <form method="post">
                         {% csrf_token %}
 
-                        {# --- BŁĘDY GLOBALNE --- #}
+                        {# --- GLOBAL ERRORS --- #}
                         {% if form.non_field_errors %}
                             <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                         {% endif %}
 
                         <div class="row g-3 mt-2">
-                            {# --- POLE: GRACZ WYCHODZĄCY --- #}
+                            {# --- FIELD: OUT PLAYER --- #}
                             <div class="col-md-6">
                                 <label class="form-label fw-bold text-danger">Player OUT (To remove)</label>
                                 {{ form.player_out }}
@@ -48,7 +48,7 @@
                                 {% endif %}
                             </div>
 
-                            {# --- POLE: GRACZ WCHODZĄCY --- #}
+                            {# --- FIELD: PLAYER ENTERING --- #}
                             <div class="col-md-6">
                                 <label class="form-label fw-bold text-success">Player IN (New player)</label>
                                 {{ form.player_in }}

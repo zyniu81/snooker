@@ -21,7 +21,7 @@
         {% csrf_token %}
         {{ formset.management_form }}
 
-        {# --- BLOK BŁĘDÓW GLOBALNYCH (FORMSET) --- #}
+        {# --- GLOBAL ERROR BLOCK (FORMSET) --- #}
         {% if formset.non_form_errors %}
             <div class="alert alert-danger shadow-sm mb-4">
                 <h5 class="alert-heading d-flex align-items-center mb-2">
@@ -55,9 +55,9 @@
                             {% for form in formset %}
                                 {% with match=form.instance %}
 
-                                    {# --- NAGŁÓWKI ROZDZIELAJĄCE (SEPARATORY) --- #}
+                                    {# --- SEPARATOR HEADERS --- #}
 
-                                    {# 1. Nagłówek dla GRUP (np. Group 1 - Round 1) #}
+                                    {# 1. Header for GROUPS (e.g. Group 1 - Round 1) #}
                                     {% if match.group_stage %}
                                         {% ifchanged match.group match.round_number %}
                                             <tr class="table-light border-top border-bottom">
@@ -73,7 +73,7 @@
                                             </tr>
                                         {% endifchanged %}
 
-                                    {# 2. Nagłówek dla PUCHARÓW (np. Quarter-Final) #}
+                                    {# 2. Header for KNOCKOUTS (e.g. Quarter-Final) #}
                                     {% elif match.knockout_stage %}
                                         {% ifchanged match.knockout_name %}
                                             <tr class="table-light border-top border-bottom">
@@ -86,7 +86,7 @@
                                             </tr>
                                         {% endifchanged %}
 
-                                    {# 3. Nagłówek dla INNYCH (Extra Matches) #}
+                                    {# 3. Header for OTHERS (Extra Matches) #}
                                     {% else %}
                                         {% ifchanged match.is_temporary %}
                                             <tr class="table-light border-top border-bottom">
@@ -100,9 +100,9 @@
                                     {% endif %}
 
 
-                                    {# --- WŁAŚCIWY WIERSZ Z FORMULARZEM --- #}
+                                    {# --- ACTUAL FORM ROW --- #}
                                     <tr>
-                                        {# --- KOLUMNA 1: ZAWODNICY --- #}
+                                        {# --- COLUMN 1: PLAYERS --- #}
                                         <td class="ps-4 border-start-0">
                                             <div class="d-flex flex-column gap-1">
                                                 <div>
@@ -125,7 +125,7 @@
                                             </div>
                                         </td>
 
-                                        {# --- KOLUMNA 2: DATA --- #}
+                                        {# --- COLUMN 2: DATE --- #}
                                         <td>
                                             {{ form.date }}
                                             {% if form.date.errors %}
@@ -133,7 +133,7 @@
                                             {% endif %}
                                         </td>
 
-                                        {# --- KOLUMNA 3: CZAS --- #}
+                                        {# --- COLUMN 3: TIME --- #}
                                         <td>
                                             {{ form.time }}
                                             {% if form.time.errors %}
@@ -141,7 +141,7 @@
                                             {% endif %}
                                         </td>
 
-                                        {# --- KOLUMNA 4: STÓŁ --- #}
+                                        {# --- COLUMN 4: TABLE --- #}
                                         <td>
                                             {{ form.table_number }}
                                             {% if form.table_number.errors %}
@@ -149,7 +149,7 @@
                                             {% endif %}
                                         </td>
 
-                                        {# --- KOLUMNA 5: SĘDZIOWIE --- #}
+                                        {# --- COLUMN 5: REFEREES --- #}
                                         <td>
                                             {{ form.referees }}
                                             <div class="form-text text-muted fst-italic mt-1" style="font-size: 0.7rem;">
@@ -157,7 +157,7 @@
                                             </div>
                                         </td>
 
-                                        {# --- UKRYTE ID (Niezbędne!) --- #}
+                                        {# --- HIDDEN ID (Required!) --- #}
                                         <td style="display:none;">
                                             {{ form.id }}
                                         </td>
@@ -169,7 +169,7 @@
                 </div>
             </div>
 
-            {# --- STOPKA KARTY Z PRZYCISKAMI --- #}
+            {# --- CARD FOOTER WITH BUTTONS --- #}
             <div class="card-footer bg-white p-3 border-top">
                 <div class="d-flex justify-content-end gap-2">
                     <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">

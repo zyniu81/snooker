@@ -11,7 +11,7 @@
         </a>
     </div>
 
-    {# --- NAGŁÓWEK TURNIEJU --- #}
+    {# --- TOURNAMENT HEADER --- #}
     <div class="card shadow mb-4 border-0">
         <div class="card-body d-flex justify-content-between align-items-center bg-light rounded">
             <div>
@@ -42,7 +42,7 @@
 
             <div class="d-flex gap-2">
                 {% if competition.status != 'SCHEDULED' %}
-                    {# ZMIANA: Styl dopasowany do Settings/Delete (outline + btn-sm) #}
+                    {# CHANGE: Style matching Settings/Delete (outline + btn-sm) #}
                     <a href="{% url 'competition_ranking' competition.id %}" class="btn btn-outline-dark btn-sm">
                         <i class="bi bi-trophy-fill me-1"></i> Ranking
                     </a>
@@ -77,7 +77,7 @@
 
         <div class="tab-pane fade show active" id="stages" role="tabpanel">
 
-            {# --- PANEL ZARZĄDZANIA (Bez zmian) --- #}
+            {# --- MANAGEMENT PANEL (Unchanged) --- #}
             {% if user == competition.owner %}
             <div class="d-flex justify-content-between align-items-center mb-4 p-3 bg-white rounded shadow-sm border">
                 <div>
@@ -86,7 +86,7 @@
 
                 <div class="d-flex gap-2 align-items-center">
 
-                    {# --- 1. DROPDOWN (Zawsze widoczny, ale zmienia treść) --- #}
+                    {# --- 1. DROPDOWN (Always visible, but content changes) --- #}
                     <div class="dropdown">
                         <button class="btn {% if competition.status != 'FINISHED' %}btn-primary{% else %}btn-secondary{% endif %} dropdown-toggle fw-bold shadow-sm"
                                 type="button"
@@ -103,7 +103,7 @@
 
                         <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="nextStageDropdown">
 
-                            {# --- OPCJE EDYCJI (Tylko gdy turniej TRWA) --- #}
+                            {# --- EDIT OPTIONS (Only when tournament is ACTIVE) --- #}
                             {% if competition.status != 'FINISHED' %}
                                 <li><h6 class="dropdown-header text-uppercase small ls-1">Main Stages</h6></li>
                                 <li>
@@ -120,7 +120,7 @@
                                 <li><hr class="dropdown-divider"></li>
                                 <li><h6 class="dropdown-header text-uppercase small ls-1">Extras</h6></li>
 
-                                {# PĘTLA PO ETAPACH #}
+                                {# LOOP THROUGH STAGES #}
                                 {% for stage in all_stages %}
                                     {% if stage.groups and not stage.is_finished %}
                                         <li>
@@ -150,11 +150,11 @@
                                     </a>
                                 </li>
 
-                                {# Linia oddzielająca edycję od druku (tylko gdy edycja jest widoczna) #}
+                                {# Divider between edit and print (only if edit is visible) #}
                                 <li><hr class="dropdown-divider"></li>
                             {% endif %}
 
-                            {# --- SEKCJA PRINT CENTER (ZAWSZE WIDOCZNA) --- #}
+                            {# --- PRINT CENTER SECTION (ALWAYS VISIBLE) --- #}
                             <li><h6 class="dropdown-header text-uppercase small ls-1">Print Center</h6></li>
 
                             <li>
@@ -177,7 +177,7 @@
                         </ul>
                     </div>
 
-                    {# --- 2. PRZYCISKI AKCJI (Tylko gdy turniej TRWA) --- #}
+                    {# --- 2. ACTION BUTTONS (Only when tournament is ACTIVE) --- #}
                     {% if competition.status != 'FINISHED' %}
                         <a href="{% url 'mass_edit_matches' competition.pk %}" class="btn btn-outline-dark" title="Mass Result Entry">
                              <i class="bi bi-list-check"></i>
@@ -187,7 +187,7 @@
                             Finish
                         </button>
 
-                    {# --- 3. ALERT (Gdy turniej ZAKOŃCZONY) --- #}
+                    {# --- 3. ALERT (When tournament is FINISHED) --- #}
                     {% else %}
                         <div class="alert alert-success py-1 px-3 mb-0 fw-bold border-success">
                             <i class="bi bi-check-circle-fill me-2"></i> TOURNAMENT COMPLETED
@@ -209,10 +209,10 @@
                 </div>
             {% endif %}
 
-            {# --- GŁÓWNA PĘTLA PO ETAPACH (SORTOWANA OD NAJNOWSZEGO) --- #}
+            {# --- MAIN LOOP THROUGH STAGES (SORTED BY NEWEST) --- #}
             {% for stage in all_stages %}
 
-                {# === SPRAWDZAMY CZY TO ETAP GRUPOWY === #}
+                {# === CHECK IF IT IS A GROUP STAGE === #}
                 {% if stage.groups %}
                     <div class="card shadow-sm mb-5 border-0">
                         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
@@ -245,7 +245,7 @@
                                     </div>
                                     <div class="card-body p-0">
 
-                                        {# TABELA WYNIKÓW #}
+                                        {# STANDINGS TABLE #}
                                         <div class="table-responsive">
                                             <table class="table table-hover table-striped mb-0 text-center" style="font-size: 0.9rem;">
                                                 <thead class="bg-light text-muted small text-uppercase">
@@ -264,37 +264,37 @@
                                                 </thead>
                                                 <tbody>
                                                 {% for standing in group.standings.all %}
-                                                    {# Sprawdzamy, czy gracz wychodzi #}
+                                                    {# Check if player qualifies #}
                                                     {% if forloop.counter <= stage.num_qualifiers %}
-                                                        {# --- STYL DLA AWANSUJĄCYCH (Q) --- #}
-                                                        <tr style="background-color: #f8fff9;"> {# Bardzo jasna mięta #}
-                                                            {# 1. Pozycja: Ciemna "pastylka" z numerem #}
+                                                        {# --- STYLE FOR QUALIFIERS (Q) --- #}
+                                                        <tr style="background-color: #f8fff9;"> {# Very light mint #}
+                                                            {# 1. Position: Dark pill with number #}
                                                             <td class="align-middle">
                                                                 <span class="badge bg-success rounded-pill shadow-sm" style="min-width: 25px;">
                                                                     {{ forloop.counter }}
                                                                 </span>
                                                             </td>
 
-                                                            {# 2. Gracz: Pogrubiony + mała literka 'Q' #}
+                                                            {# 2. Player: Bold + small 'Q' letter #}
                                                             <td class="text-start align-middle">
                                                                 <span class="fw-bold text-dark">{{ standing.player }}</span>
                                                                 <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2" style="font-size: 0.65rem;">Q</span>
                                                             </td>
                                                     {% else %}
-                                                        {# --- STYL DLA RESZTY --- #}
+                                                        {# --- STYLE FOR THE REST --- #}
                                                         <tr>
-                                                            {# 1. Pozycja: Zwykły szary tekst #}
+                                                            {# 1. Position: Normal gray text #}
                                                             <td class="align-middle text-muted fw-bold" style="color: #adb5bd;">
                                                                 {{ forloop.counter }}
                                                             </td>
 
-                                                            {# 2. Gracz: Zwykły tekst #}
+                                                            {# 2. Player: Normal text #}
                                                             <td class="text-start align-middle">
                                                                 {{ standing.player }}
                                                             </td>
                                                     {% endif %}
 
-                                                            {# --- RESZTA KOLUMN (Wspólna) --- #}
+                                                            {# --- REST OF COLUMNS (Common) --- #}
                                                             <td class="align-middle">{{ standing.matches_played }}</td>
                                                             <td class="align-middle">{{ standing.matches_won }}</td>
                                                             <td class="align-middle">{{ standing.matches_drawn }}</td>
@@ -323,7 +323,7 @@
                                             </table>
                                         </div>
 
-                                        {# LISTA MECZÓW W GRUPIE (Z PODZIAŁEM NA KOLEJKI) #}
+                                        {# MATCH LIST IN GROUP (DIVIDED BY ROUNDS) #}
                                         <div class="accordion accordion-flush" id="accordionMatches{{ group.id }}">
                                             <div class="accordion-item">
                                                 <h2 class="accordion-header" id="heading{{ group.id }}">
@@ -334,17 +334,17 @@
                                                 <div id="collapse{{ group.id }}" class="accordion-collapse collapse" data-bs-parent="#accordionMatches{{ group.id }}">
                                                     <div class="list-group list-group-flush">
 
-                                                        {# --- REGROUP: Podział na kolejki (Round 1, Round 2...) --- #}
-                                                        {# Najpierw sortujemy po rundzie, potem po dacie/czasie #}
+                                                        {# --- REGROUP: Divide by rounds (Round 1, Round 2...) --- #}
+                                                        {# Sort by round first, then by date/time #}
                                                         {% regroup group.matches.all|dictsort:"round_number" by round_number as matches_by_round %}
 
                                                         {% for round in matches_by_round %}
-                                                            {# Belka kolejki #}
+                                                            {# Round Header #}
                                                             <div class="list-group-item bg-light text-uppercase fw-bold small text-muted py-1 ps-3">
                                                                 Round {{ round.grouper }}
                                                             </div>
 
-                                                            {# Pętla meczów w danej kolejce #}
+                                                            {# Loop matches in this round #}
                                                             {% for match in round.list|dictsort:"sort_key" %}
                                                                 <div class="list-group-item d-flex justify-content-between align-items-center">
                                                                     <div class="d-flex align-items-center" style="flex: 1;">
@@ -378,7 +378,7 @@
                                                                             <a href="{% url 'match_detail' match.pk %}" class="btn btn-sm btn-outline-secondary">View</a>
                                                                         {% endif %}
 
-                                                                        {# --- UKRYWANIE OŁÓWKA JEŚLI ZAKOŃCZONY --- #}
+                                                                        {# --- HIDE PENCIL IF FINISHED --- #}
                                                                         {% if user == competition.owner and not match.is_finished %}
                                                                             <a href="{% url 'edit_match' match.pk %}" class="btn btn-sm btn-light text-muted border"><i class="bi bi-pencil"></i></a>
                                                                         {% endif %}
@@ -401,7 +401,7 @@
                         </div>
                     </div>
 
-                {# === SPRAWDZAMY CZY TO ETAP PUCHAROWY === #}
+                {# === CHECK IF IT IS A KNOCKOUT STAGE === #}
                 {% else %}
                     <div class="card shadow-sm mb-5 border-0">
                         <div class="card-header bg-success text-white d-flex justify-content-between align-items-center py-3">
@@ -415,7 +415,7 @@
                             </div>
 
                             <div class="d-flex gap-2">
-                                {# --- NOWOŚĆ: PRZEŁĄCZNIK WIDOKU --- #}
+                                {# --- NEW: VIEW SWITCHER --- #}
                                 {% if view_mode == 'bracket' %}
                                     <a href="?view=list" class="btn btn-sm btn-light text-success fw-bold border">
                                         <i class="bi bi-list-ul me-1"></i> List View
@@ -439,16 +439,16 @@
                         <div class="card-body bg-light overflow-auto">
 
                             {# ========================================== #}
-                            {# === OPCJA A: WIDOK DRABINKI (BRACKET) === #}
+                            {# === OPTION A: BRACKET VIEW === #}
                             {% if view_mode == 'bracket' %}
 
                                 <div class="bracket-container d-flex justify-content-center py-4">
                                     {% for round in stage.bracket_tree %}
 
-                                        {# Kolumna rundy #}
+                                        {# Round column #}
                                         <div class="d-flex flex-column mx-3" style="min-width: 220px;">
 
-                                            {# 1. NAGŁÓWEK O STAŁEJ WYSOKOŚCI (Naprawia pozycjonowanie) #}
+                                            {# 1. HEADER WITH FIXED HEIGHT (Fixes alignment) #}
                                             <div class="text-center fw-bold text-secondary mb-3 text-uppercase small ls-1 d-flex align-items-end justify-content-center" style="height: 40px;">
                                                 {% with match_count=round.matches|length %}
                                                     {% if forloop.last %}FINAL
@@ -461,24 +461,24 @@
                                                 {% endwith %}
                                             </div>
 
-                                            {# 2. KONTENER NA MECZE (Zajmuje całą dostępną resztę wysokości) #}
+                                            {# 2. MATCH CONTAINER (Takes all remaining height) #}
                                             <div class="d-flex flex-column justify-content-around flex-grow-1 position-relative">
 
-                                                {# --- MECZE GŁÓWNEJ DRABINKI --- #}
+                                                {# --- MAIN BRACKET MATCHES --- #}
                                                 {% for match in round.matches %}
                                                     <div class="card shadow-sm my-3 border-0 position-relative match-bracket-card">
-                                                        {# Pasek statusu #}
+                                                        {# Status bar #}
                                                         <div class="card-header py-1 px-2 border-0 {% if match.is_finished %}bg-success{% else %}bg-secondary{% endif %}" style="height: 6px;"></div>
 
                                                         <div class="card-body p-2 bg-white">
-                                                            {# Gracz 1 #}
+                                                            {# Player 1 #}
                                                             <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
                                                                 <span class="small fw-bold text-truncate {% if match.winner == match.player1 and match.is_finished %}text-success{% endif %}" style="max-width: 140px;">
                                                                     {{ match.player1|default:"-" }}
                                                                 </span>
                                                                 <span class="badge bg-light text-dark border">{{ match.get_real_score.0 }}</span>
                                                             </div>
-                                                            {# Gracz 2 #}
+                                                            {# Player 2 #}
                                                             <div class="d-flex justify-content-between align-items-center">
                                                                 <span class="small fw-bold text-truncate {% if match.winner == match.player2 and match.is_finished %}text-success{% endif %}" style="max-width: 140px;">
                                                                     {{ match.player2|default:"-" }}
@@ -487,15 +487,15 @@
                                                             </div>
                                                         </div>
 
-                                                        {# Nieklikalność jeśli brak graczy #}
+                                                        {# Unclickable if no players #}
                                                         {% if match.player1 and match.player2 %}
                                                             <a href="{% if match.is_finished %}{% url 'match_detail' match.pk %}{% else %}{% url 'start_game' match.pk %}{% endif %}" class="stretched-link" title="Go to match"></a>
                                                         {% endif %}
                                                     </div>
                                                 {% endfor %}
 
-                                                {# --- MECZ O 3 MIEJSCE --- #}
-                                                {# Umieszczamy go absolutnie na dole kolumny Finału, żeby nie rozpychał środka #}
+                                                {# --- 3rd PLACE MATCH --- #}
+                                                {# Placed absolutely at the bottom of the Final column so it doesn't push the center #}
                                                 {% if forloop.last and stage.third_place_matches %}
                                                     <div class="position-absolute start-0 end-0" style="top: 100%; margin-top: 40px;">
 
@@ -529,12 +529,12 @@
                                 </div>
 
                                 <style>
-                                    /* Drobne poprawki CSS */
+                                    /* Minor CSS fixes */
                                     .match-bracket-card {
                                         transition: transform 0.2s;
                                         border-radius: 8px;
                                         overflow: hidden;
-                                        height: 85px; /* Stała wysokość kafelka pomaga w symetrii */
+                                        height: 85px; /* Fixed card height helps symmetry */
                                     }
                                     .match-bracket-card:hover {
                                         transform: translateY(-3px);
@@ -544,17 +544,17 @@
                                 </style>
 
                             {# ========================================== #}
-                            {# === OPCJA B: WIDOK LISTY (TWOJA STARA) === #}
+                            {# === OPTION B: LIST VIEW (YOUR OLD ONE) === #}
                             {# ========================================== #}
                             {% else %}
 
-                                {# --- NOWOŚĆ: GRUPOWANIE PO NAZWIE RUNDY (np. Semi-Final) --- #}
-                                {# Sortujemy po round_number, żeby Finał był pod Półfinałami #}
+                                {# --- NEW: GROUP BY ROUND NAME (e.g. Semi-Final) --- #}
+                                {# Sort by round_number so Final is below Semi-Finals #}
                                 {% regroup stage.matches.all|dictsort:"round_number" by knockout_name as matches_by_round %}
 
                                 {% for round_group in matches_by_round %}
 
-                                    {# DELIKATNY NAGŁÓWEK ROZDZIELAJĄCY #}
+                                    {# DELICATE SEPARATOR HEADER #}
                                     <div class="position-relative py-3">
                                         <hr class="border-secondary opacity-25">
                                         <span class="position-absolute top-50 start-50 translate-middle bg-light px-3 text-muted fw-bold text-uppercase" style="font-size: 0.75rem; letter-spacing: 1px;">
@@ -566,13 +566,13 @@
                                         {% for match in round_group.list|dictsort:"id" %}
                                             <div class="list-group-item d-flex justify-content-between align-items-center p-3 border-start-0 border-end-0">
 
-                                                {# DATA #}
+                                                {# DATE #}
                                                 <div class="d-none d-md-block me-3 text-center text-muted" style="min-width: 60px;">
                                                     <small class="fw-bold">{{ match.date|date:"d M" }}</small>
                                                     <small class="d-block" style="font-size: 0.7rem;">{{ match.time|time:"H:i" }}</small>
                                                 </div>
 
-                                                {# ZAWODNICY I WYNIK #}
+                                                {# PLAYERS AND RESULT #}
                                                 <div class="d-flex align-items-center flex-grow-1 justify-content-center">
                                                     {% if match.player1 or match.player2 %}
                                                         {% with p1=match.player1 p2=match.player2 scores=match.get_real_score %}
@@ -582,7 +582,7 @@
                                                                     {{ p1|default:"TBD" }}
                                                                 </span>
 
-                                                                {# WYNIK / VS #}
+                                                                {# RESULT / VS #}
                                                                 <span class="badge {% if match.is_finished %}bg-dark{% else %}bg-white text-dark border{% endif %} px-3 py-2 shadow-sm" style="min-width: 60px;">
                                                                     {% if match.is_finished or scores.0 > 0 or scores.1 > 0 %}
                                                                         <span class="fs-6">{{ scores.0 }} - {{ scores.1 }}</span>
@@ -602,7 +602,7 @@
                                                     {% endif %}
                                                 </div>
 
-                                                {# PRZYCISKI AKCJI #}
+                                                {# ACTION BUTTONS #}
                                                 <div class="ms-3 btn-group">
                                                     {% if match.player1 and match.player2 %}
                                                         {% if not match.is_finished and not stage.is_finished %}
@@ -612,7 +612,7 @@
                                                         {% endif %}
                                                     {% endif %}
 
-                                                    {# OŁÓWEK #}
+                                                    {# PENCIL #}
                                                     {% if user == competition.owner and not match.is_finished %}
                                                         <a href="{% url 'edit_match' match.pk %}" class="btn btn-sm btn-light text-secondary border"><i class="bi bi-pencil"></i></a>
                                                     {% endif %}
@@ -629,7 +629,7 @@
                                     </div>
                                 {% endif %}
 
-                            {% endif %} {# Koniec if view_mode #}
+                            {% endif %} {# End if view_mode #}
 
                         </div>
                     </div>
@@ -639,7 +639,7 @@
 
         </div>
 
-        {# --- ZAKŁADKA UCZESTNICY (TU JEST OK, BO UŻYWA COMPETITION.PLAYERS) --- #}
+        {# --- PARTICIPANTS TAB (THIS IS OK AS IT USES COMPETITION.PLAYERS) --- #}
         <div class="tab-pane fade" id="participants" role="tabpanel">
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">

@@ -3,45 +3,45 @@
 {% block content %}
 
 <style>
-    /* Pasek boczny (History Sidebar) */
+    /* Sidebar (History Sidebar) */
     .sidebar-panel {
         position: fixed;
         top: 0;
-        right: -320px; /* Domyślnie schowany poza ekranem */
+        right: -320px; /* Hidden off-screen by default */
         width: 300px;
-        height: 100vh; /* Pełna wysokość ekranu */
-        background-color: #fff; /* Białe tło */
-        box-shadow: -2px 0 5px rgba(0,0,0,0.5); /* Cień rzucany w lewo */
-        z-index: 9999; /* Zawsze na samym wierzchu */
-        transition: right 0.3s ease-in-out; /* Płynna animacja wysuwania */
-        overflow-y: auto; /* Pasek przewijania, jak historia będzie długa */
+        height: 100vh; /* Full screen height */
+        background-color: #fff; /* White background */
+        box-shadow: -2px 0 5px rgba(0,0,0,0.5); /* Shadow cast to the left */
+        z-index: 9999; /* Always on top */
+        transition: right 0.3s ease-in-out; /* Smooth slide animation */
+        overflow-y: auto; /* Scrollbar if history is long */
         display: flex;
         flex-direction: column;
     }
 
-    /* Klasa, która sprawia, że pasek wjeżdża na ekran */
+    /* Class that makes the sidebar slide onto the screen */
     .sidebar-panel.active {
         right: 0;
     }
 
-    /* Przyciemnione tło pod spodem (Backdrop) */
+    /* Dimmed background underneath (Backdrop) */
     .sidebar-backdrop {
         position: fixed;
         top: 0;
         left: 0;
         width: 100vw;
         height: 100vh;
-        background: rgba(0,0,0,0.5); /* Półprzezroczysty czarny */
-        z-index: 9998; /* Pod panelem bocznym, ale nad resztą strony */
-        display: none; /* Domyślnie ukryte */
+        background: rgba(0,0,0,0.5); /* Semi-transparent black */
+        z-index: 9998; /* Below the sidebar but above the rest of the page */
+        display: none; /* Hidden by default */
     }
 
-    /* Pokazanie tła, gdy aktywne */
+    /* Show backdrop when active */
     .sidebar-backdrop.active {
         display: block;
     }
 
-    /* Mały odstęp dla listy wewnątrz panelu */
+    /* Small padding for the list inside the panel */
     .history-content {
         padding: 15px;
     }

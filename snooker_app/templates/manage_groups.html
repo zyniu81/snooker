@@ -52,7 +52,7 @@
                         <tbody>
                             {% for form in formset %}
                                 <tr>
-                                    {# Ukryte ID potrzebne dla formsetu #}
+                                    {# Hidden ID needed for formset #}
                                     {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
 
                                     <td class="fw-bold text-primary">

@@ -12,7 +12,7 @@
                     <form method="post">
                         {% csrf_token %}
 
-                        {# Wyświetlanie błędów ogólnych formularza (np. "Select at least 2 players") #}
+                        {# Displaying general form errors (e.g. "Select at least 2 players") #}
                         {% if form.non_field_errors %}
                             <div class="alert alert-danger">
                                 {% for error in form.non_field_errors %}
@@ -21,11 +21,10 @@
                             </div>
                         {% endif %}
 
-                        {# Pętla po wszystkich polach formularza #}
+                        {# Loop through all form fields #}
                         {% for field in form %}
                             {% if not field.is_hidden %}
 
-                                {# SPECJALNY WYGLĄD DLA CHECKBOXÓW (Naprawia problem nr 1) #}
                                 {% if field.field.widget.input_type == 'checkbox' %}
                                     <div class="mb-3 form-check">
                                         {{ field }}
@@ -40,7 +39,7 @@
                                         {% endif %}
                                     </div>
 
-                                {# STANDARDOWY WYGLĄD DLA INNYCH PÓL (Input, Select) #}
+                                {# STANDARD APPEARANCE FOR OTHER FIELDS (Input, Select) #}
                                 {% else %}
                                     <div class="mb-3">
                                         <label for="{{ field.id_for_label }}" class="form-label">

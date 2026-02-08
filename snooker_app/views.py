@@ -46,12 +46,12 @@ from snooker_app.models import (Player, Referee, Venue, Match, Competition, Grou
                                 EquipmentPhoto, TrainingSession, Group)
 
 
-# --- FUNKCJE POMOCNICZE ---
+# --- HELPER FUNCTIONS ---
 
 def check_ownership(request, obj):
     """
-    Sprawdza, czy użytkownik jest właścicielem obiektu.
-    Jeśli obiekt jest publiczny, tylko Superuser może go edytować.
+    Checks if the user is the owner of the object.
+    If the object is public, only a Superuser can edit it.
     """
     if request.user.is_superuser:
         return True
@@ -64,10 +64,10 @@ def check_ownership(request, obj):
 
 @login_required
 def player_list(request):
-    # Logika: (Moi LUB Publiczni) ORAZ (Nie Goście)
+    # Logic: (Mine OR Public) AND (Not Guests)
     players = Player.objects.filter(
         (Q(owner=request.user) | Q(is_public=True)) & Q(is_guest=False)
-    ).order_by('-created_at')  # Warto dodać sortowanie
+    ).order_by('-created_at')
 
     return render(request, 'player_list.html', {'players': players})
 
@@ -75,13 +75,13 @@ def player_list(request):
 @login_required
 def add_player(request):
     if request.method == 'POST':
-        # ZMIANA: Dodano request.FILES
+        # CHANGE: Added request.FILES
         form = PlayerForm(request.POST, request.FILES, request=request)
         if form.is_valid():
             player = form.save(commit=False)
             player.owner = request.user
 
-            # Admin domyślnie tworzy publicznych (opcjonalnie)
+            # Admin creates public players by default (optional)
             if request.user.is_superuser:
                 player.is_public = True
 
@@ -111,14 +111,14 @@ def player_edit(request, pk):
             is_now_temporary = saved_player.is_temporary
             saved_player.save()
 
-            # --- Logika konwersji (Tymczasowy -> Stały) ---
+            # --- Conversion Logic (Temporary -> Permanent) ---
             if was_temporary and not is_now_temporary:
-                # POPRAWKA 1: Używamy Q dla player1/player2
+                # FIX 1: Using Q for player1/player2
                 matches_qs = Match.objects.filter(
                     (Q(player1=saved_player) | Q(player2=saved_player)) & Q(is_temporary=True)
                 )
 
-                # POPRAWKA 2: Szukanie przeciwników po poprawnych relacjach (matches_as_p1 / matches_as_p2)
+                # FIX 2: Searching opponents via correct relations (matches_as_p1 / matches_as_p2)
                 opponents_list = list(Player.objects.filter(
                     (Q(matches_as_p1__in=matches_qs) | Q(matches_as_p2__in=matches_qs)) &
                     Q(is_temporary=True)
@@ -146,13 +146,13 @@ def player_edit(request, pk):
             else:
                 messages.success(request, "Player updated successfully.")
 
-            # --- Aktualizacja nazw w meczach (Cache) ---
-            # POPRAWKA 3: Tutaj też używamy Q dla player1/player2
+            # --- Updating names in matches (Cache) ---
+            # FIX 3: Here too we use Q for player1/player2
             player_matches = Match.objects.filter(
                 Q(player1=saved_player) | Q(player2=saved_player)
             )
             for m in player_matches:
-                m.save() # To wywoła metodę save() modelu, która zaktualizuje player_names
+                m.save() # This triggers model.save(), which updates player_names
 
             return redirect('player_detail', pk=player.pk)
     else:
@@ -163,29 +163,29 @@ def player_edit(request, pk):
 
 @login_required
 def player_detail(request, pk):
-    # Możemy podglądać publiczne lub swoje
-    # Tutaj mała uwaga: Jeśli wchodzisz na "Gościa" (is_guest=True),
-    # to on technicznie jest Twój (owner=request.user), więc ten warunek zadziała poprawnie.
+    # We can view public or our own
+    # If entering a "Guest" (is_guest=True),
+    # they technically belong to you (owner=request.user), so this condition works correctly.
     player = get_object_or_404(Player, pk=pk)
 
     if not (player.is_public or player.owner == request.user):
         raise PermissionDenied("You do not have access to this player.")
 
-    # --- POBIERANIE HISTORII MECZÓW (POPRAWIONE DLA KLONÓW) ---
-    # Szukamy meczów gdzie:
-    # 1. Gracz jest P1 lub P2 (standard)
-    # 2. Klon tego gracza jest P1 lub P2 (nowość)
+    # --- FETCHING MATCH HISTORY (FIXED FOR CLONES) ---
+    # We search for matches where:
+    # 1. Player is P1 or P2 (standard)
+    # 2. Clone of this player is P1 or P2 (new)
     recent_matches = Match.objects.filter(
         Q(player1=player) | Q(player1__cloned_from=player) |
         Q(player2=player) | Q(player2__cloned_from=player)
     ).distinct().order_by('-date', '-time')[:5]
     # -----------------------------------------------
 
-    # --- POBIERANIE WYNIKÓW TURNIEJOWYCH ---
+    # --- FETCHING TOURNAMENT RESULTS ---
     comp_results = CompetitionResult.objects.filter(player=player).select_related('competition').order_by(
         '-competition__end_date')
 
-    # Liczniki do "Gabloty"
+    # Counters for "Trophy Room"
     trophies = {
         'gold': comp_results.filter(result='WINNER').count(),
         'silver': comp_results.filter(result='RUNNER_UP').count(),
@@ -207,8 +207,8 @@ class PlayerDeleteView(DeleteView):
     success_url = reverse_lazy('player_list')
 
     def get_queryset(self):
-        # DeleteView używa tego do pobrania obiektu. Filtrujemy tylko do własnych.
-        # User nie może usunąć publicznego gracza, nawet jak go widzi.
+        # DeleteView uses this to fetch the object. Filtering only to own.
+        # User cannot delete a public player, even if they can see them.
         return Player.objects.filter(owner=self.request.user)
 
 
@@ -221,12 +221,12 @@ def referee_list(request):
 @login_required
 def add_referee(request):
     if request.method == 'POST':
-        # Dodano request.FILES
+        # Added request.FILES
         form = RefereeForm(request.POST, request.FILES, request=request)
         if form.is_valid():
             referee = form.save(commit=False)
             referee.owner = request.user
-            # Opcjonalne: Admin domyślnie tworzy publicznych, ale ma też checkboxa
+            # Optional: Admin creates public by default, but also has a checkbox
             if request.user.is_superuser:
                 referee.is_public = True
             referee.save()
@@ -241,11 +241,11 @@ def add_referee(request):
 def edit_referee(request, pk):
     referee = get_object_or_404(Referee, pk=pk)
     if not check_ownership(request, referee):
-        messages.error(request, "Brak uprawnień.")
+        messages.error(request, "Permission denied.")
         return redirect('referee_list')
 
     if request.method == 'POST':
-        # Dodano request.FILES
+        # Added request.FILES
         form = RefereeForm(request.POST, request.FILES, instance=referee, request=request)
         if form.is_valid():
             form.save()
@@ -286,14 +286,14 @@ def venue_list(request):
 @login_required
 def add_venue(request):
     if request.method == 'POST':
-        # TU BYŁ BŁĄD: Dodano request.FILES
+        # ERROR WAS HERE: Added request.FILES
         form = VenueForm(request.POST, request.FILES, request=request)
         if form.is_valid():
             venue = form.save(commit=False)
             venue.owner = request.user
 
-            # Ta logika jest ok, jeśli wymuszamy publiczność dla admina,
-            # choć admin ma teraz checkbox w formularzu.
+            # This logic is fine if we force public for admin,
+            # although admin now has a checkbox in the form.
             if request.user.is_superuser:
                 venue.is_public = True
 
@@ -309,15 +309,15 @@ def add_venue(request):
 def edit_venue(request, pk):
     venue = get_object_or_404(Venue, pk=pk)
     if not check_ownership(request, venue):
-        messages.error(request, "Brak uprawnień.")
+        messages.error(request, "Permission denied.")
         return redirect('venue_list')
 
     if request.method == 'POST':
-        # TU BYŁ BŁĄD: Dodano request.FILES przed instance
+        # ERROR WAS HERE: Added request.FILES before instance
         form = VenueForm(request.POST, request.FILES, instance=venue, request=request)
         if form.is_valid():
             form.save()
-            # Sugestia: Po edycji lepiej wrócić do szczegółów niż do listy
+            # Better to return to details than list after edit
             return redirect('venue_detail', pk=venue.pk)
     else:
         form = VenueForm(instance=venue, request=request)
@@ -344,26 +344,26 @@ def venue_detail(request, pk):
 
 @login_required
 def match_list(request):
-    # 1. BAZA: Twoje oryginalne zapytanie
+    # 1. BASE: Your original query
     matches = Match.objects.filter(owner=request.user).order_by('-date', '-time')
 
-    # 2. Pobieramy lata do listy rozwijanej (zanim przefiltrujemy listę!)
-    # Metoda .dates() zwraca unikalne daty (lata) z QuerySetu
+    # 2. Get years for dropdown (before filtering the list!)
+    # Method .dates() returns unique dates (years) from QuerySet
     available_years = matches.dates('date', 'year', order='DESC')
 
-    # 3. FILTR: ROK
+    # 3. FILTER: YEAR
     selected_year = request.GET.get('year')
     if selected_year:
         matches = matches.filter(date__year=selected_year)
 
-    # 4. FILTR: STATUS
+    # 4. FILTER: STATUS
     selected_status = request.GET.get('status')
     if selected_status:
         matches = matches.filter(status=selected_status)
 
     return render(request, 'match_list.html', {
         'matches': matches,
-        # Przekazujemy dane do formularza filtrów
+        # Pass data to filter form
         'available_years': available_years,
         'selected_year': selected_year,
         'selected_status': selected_status,
@@ -372,18 +372,18 @@ def match_list(request):
 
 @login_required
 def add_match(request):
-    # 1. Sprawdzamy, czy wracamy z importu z konkretnym gościem
+    # 1. Check if returning from import with a specific guest
     guest_id = request.GET.get('guest_id')
 
-    # 2. Budujemy QuerySet graczy dostępnych w tym formularzu
-    # Logika: (Moi Zwykli Gracze) LUB (Ten Jeden Konkretny Gość, jeśli istnieje)
-    # Dzięki temu normalnie nie widzisz gości, ale tego jednego teraz zobaczysz.
+    # 2. Build QuerySet of players available in this form
+    # Logic: (My Regular Players) OR (That One Specific Guest, if exists)
+    # This way you don't normally see guests, but you will see this one now.
 
-    # Bazowi gracze (Twoi, nietymczasowi)
+    # Base players (Yours, non-temporary)
     base_players = Player.objects.filter(owner=request.user, is_guest=False)
 
     if guest_id:
-        # Jeśli jest guest_id, dodajemy go do puli (upewniając się, że należy do Ciebie)
+        # If guest_id exists, add to pool (ensuring they belong to you)
         specific_guest = Player.objects.filter(owner=request.user, pk=guest_id)
         players_queryset = (base_players | specific_guest).distinct().order_by('last_name')
     else:
@@ -392,8 +392,8 @@ def add_match(request):
     if request.method == 'POST':
         form = MatchForm(request.POST, request=request)
 
-        # WAŻNE: Musimy nadpisać queryset w polach formularza PRZED walidacją.
-        # Inaczej Django powie "Wybrany gracz jest nieprawidłowy", bo gość jest ukryty w domyślnym QuerySecie formularza.
+        # IMPORTANT: Must override queryset in form fields BEFORE validation.
+        # Otherwise Django says "Select a valid choice" because guest is hidden in default form QuerySet.
         form.fields['player1'].queryset = players_queryset
         form.fields['player2'].queryset = players_queryset
 
@@ -401,37 +401,37 @@ def add_match(request):
             match = form.save(commit=False)
             match.owner = request.user
 
-            # ZAPISUJEMY MECZ
+            # SAVE MATCH
             match.save()
 
-            # Zapisujemy sędziów
+            # Save referees
             form.save_m2m()
 
-            # Obsługa graczy tymczasowych (stworzonych ręcznie z inputa, a nie z kodu)
+            # Handling temporary players (created manually from input, not code)
             form.create_temp_players_if_needed(match)
 
             return redirect('match_detail', pk=match.pk)
     else:
         form = MatchForm(request=request)
 
-        # Nadpisujemy queryset, żeby gracz pojawił się na liście rozwijanej
+        # Override queryset so player appears in dropdown
         form.fields['player1'].queryset = players_queryset
         form.fields['player2'].queryset = players_queryset
 
-        # UX: Jeśli mamy gościa, ustawiamy go automatycznie w polu Player 2
+        # UX: If we have a guest, automatically set as Player 2
         if guest_id:
             form.fields['player2'].initial = guest_id
 
     return render(request, 'add_match.html', {
         'form': form,
-        'guest_id': guest_id  # Przekazujemy do template'u (żeby obsłużyć przycisk Import)
+        'guest_id': guest_id  # Pass to template (to handle Import button)
     })
 
 
 def match_detail(request, pk):
     match = get_object_or_404(Match, pk=pk)
 
-    # --- LOGIKA DOSTĘPU (Bez zmian) ---
+    # --- ACCESS LOGIC (Unchanged) ---
     has_access = False
     if match.owner is None:
         has_access = True
@@ -440,13 +440,13 @@ def match_detail(request, pk):
     elif request.user.is_authenticated and match.owner == request.user:
         has_access = True
 
-    # --- NOWE: WPUSZCZAMY WŁAŚCICIELA ORYGINAŁU (READ ONLY) ---
+    # --- NEW: ALLOW ORIGINAL OWNER (READ ONLY) ---
     elif request.user.is_authenticated:
-        # Sprawdzamy, czy w meczu grał KLON należący do obecnego usera (User B)
-        # P1 jest klonem i jego oryginał należy do mnie?
+        # Check if a CLONE belonging to current user (User B) played in the match
+        # P1 is a clone and their original belongs to me?
         if match.player1 and match.player1.cloned_from and match.player1.cloned_from.owner == request.user:
             has_access = True
-        # P2 jest klonem i jego oryginał należy do mnie?
+        # P2 is a clone and their original belongs to me?
         elif match.player2 and match.player2.cloned_from and match.player2.cloned_from.owner == request.user:
             has_access = True
     # ----------------------------------------------------------
@@ -458,34 +458,34 @@ def match_detail(request, pk):
             return redirect(f'{reverse("login")}?next={request.path}')
     # ----------------------------------
 
-    # Status gry (korzysta już z nowej logiki w modelu)
+    # Game status (uses new logic in model)
     game_status = match.get_game_status()
 
-    # Pobieramy framy (one są podpięte przez MatchPlayer, ale filtrujemy je po meczu)
+    # Get frames (linked via MatchPlayer, but filtered by match)
     frames = Frame.objects.filter(match_player__match=match).order_by('frame_number')
 
-    # --- NOWA LOGIKA POBIERANIA GRACZY (Prosto z foteli) ---
-    # Nie musimy już szukać w MatchPlayer i sortować. Mamy ich pod ręką.
+    # --- NEW PLAYER FETCHING LOGIC (Straight from seats) ---
+    # No need to search MatchPlayer and sort. We have them handy.
 
     p1_data = None
     p2_data = None
 
-    # Gracz 1 (Gospodarz / Lewy)
+    # Player 1 (Host / Left)
     if match.player1:
-        # Liczymy wygrane framy (winner we Frame to ForeignKey do Player, więc to zadziała bezpośrednio)
+        # Count won frames (winner in Frame is ForeignKey to Player, so this works directly)
         p1_wins = frames.filter(winner=match.player1).count()
         p1_data = {
             'name': str(match.player1),
-            'obj': match.player1,  # Przekazujemy obiekt Player
+            'obj': match.player1,  # Pass Player object
             'wins': p1_wins
         }
 
-    # Gracz 2 (Gość / Prawy)
+    # Player 2 (Guest / Right)
     if match.player2:
         p2_wins = frames.filter(winner=match.player2).count()
         p2_data = {
             'name': str(match.player2),
-            'obj': match.player2,  # Przekazujemy obiekt Player
+            'obj': match.player2,  # Pass Player object
             'wins': p2_wins
         }
 
@@ -503,7 +503,7 @@ def match_detail(request, pk):
 def edit_match(request, pk):
     match = get_object_or_404(Match, pk=pk)
     if match.owner != request.user:
-        messages.error(request, "Możesz edytować tylko swoje mecze.")
+        messages.error(request, "You can only edit your own matches.")
         return redirect('match_list')
 
     if request.method == 'POST':
@@ -525,26 +525,26 @@ class MatchDeleteView(DeleteView):
     def get_queryset(self):
         return Match.objects.filter(owner=self.request.user)
 
-    # --- NOWE ZABEZPIECZENIE ---
-    # Zamiast def delete(...), użyj tego:
+    # --- NEW SAFEGUARD ---
+    # Instead of def delete(...), use this:
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
 
-        # WARUNEK BLOKADY
+        # BLOCK CONDITION
         if self.object.group_stage or self.object.knockout_stage:
             messages.error(request, "You cannot delete a match that is part of a tournament!")
-            # Wracamy na listę, zamiast kasować
+            # Return to list instead of deleting
             return redirect(self.success_url)
 
-        # Jeśli warunek nie spełniony -> kasujemy
+        # If condition not met -> delete
         return self.delete(request, *args, **kwargs)
 
 
 def start_game(request, pk):
-    # Pobieramy mecz
+    # Get match
     match = get_object_or_404(Match, pk=pk)
 
-    # --- LOGIKA DOSTĘPU ---
+    # --- ACCESS LOGIC ---
     has_access = False
     if match.owner is None:
         has_access = True
@@ -555,32 +555,32 @@ def start_game(request, pk):
 
     if not has_access:
         if request.user.is_authenticated:
-            raise PermissionDenied("Brak dostępu do meczu.")
+            raise PermissionDenied("Access denied.")
         else:
             return redirect(f'{reverse("login")}?next={request.path}')
     # ----------------------
 
     status = match.get_game_status()
     if status['is_finished']:
-        messages.warning(request, "Ten mecz jest już zakończony!")
+        messages.warning(request, "This match is already finished!")
         return redirect('match_detail', pk=pk)
 
-    # --- CZYSTA LOGIKA (Bez auto-naprawy) ---
-    # Pobieramy graczy TYLKO z tabeli MatchPlayer, posortowanych po pozycji.
-    # Jeśli tu jest pusto -> trudno. Nie zgadujemy.
+    # --- PURE LOGIC (No auto-repair) ---
+    # Get players ONLY from MatchPlayer table, sorted by position.
+    # If empty -> too bad. No guessing.
     match_players = MatchPlayer.objects.filter(match=match).order_by('position')
 
-    # Tworzymy listę obiektów Player (potrzebna do active_player itp.)
+    # Create Player object list (needed for active_player etc.)
     players_list = [mp.player for mp in match_players]
 
-    # --- LOGIKA FRAMÓW ---
+    # --- FRAME LOGIC ---
     existing_frames = Frame.objects.filter(match_player__in=match_players)
     active_frame_object = None
 
-    # Tworzymy Frame 1 tylko jeśli mamy graczy (żeby nie wywaliło błędu przy pustej liście)
+    # Create Frame 1 only if we have players (to avoid error on empty list)
     if not existing_frames.exists() and match_players.exists():
         active_frame_object = Frame.objects.create(
-            match_player=match_players.first(), # To jest bezpieczne, bo mamy .exists()
+            match_player=match_players.first(), # This is safe because we have .exists()
             frame_number=1,
             points_scored_player1=0,
             points_scored_player2=0,
@@ -589,7 +589,7 @@ def start_game(request, pk):
     else:
         active_frame_object = existing_frames.last()
 
-    # --- WYLICZANIE WYNIKÓW ---
+    # --- CALCULATING RESULTS ---
     frame_results = Frame.objects.filter(match_player__match=match).values('winner').annotate(
         frames_won=Count('winner'))
     frames_won = {result['winner']: result['frames_won'] for result in frame_results if result['winner']}
@@ -603,7 +603,7 @@ def start_game(request, pk):
 
     context = {
         'match': match,
-        'players': player_results, # Jeśli mecz był zepsuty, to będzie puste. I dobrze.
+        'players': player_results, # If match was broken, this will be empty. And that's fine.
         'pk': pk,
         'number_of_frames': match.number_of_frames,
         'frame': active_frame_object
@@ -676,7 +676,7 @@ def competition_list(request):
 def competition_detail(request, pk):
     competition = get_object_or_404(Competition, pk=pk)
 
-    # 1. Pobieranie danych (bez zmian)
+    # 1. Data fetching (unchanged)
     group_stages_qs = competition.groupstage_stages.prefetch_related(
         'groups__standings__player',
         'groups__matches',
@@ -692,24 +692,24 @@ def competition_detail(request, pk):
         'matches__venue'
     )
 
-    # 2. Logika widoku Drabinki (NOWOŚĆ)
-    view_mode = request.GET.get('view', 'list')  # Domyślnie lista
+    # 2. Bracket View Logic (NEW)
+    view_mode = request.GET.get('view', 'list')  # Default list
 
     for stage in knockout_stages_qs:
         matches = stage.matches.all().order_by('round_number', 'id')
 
         rounds_map = defaultdict(list)
-        stage.third_place_matches = []  # <--- Tworzymy listę na mecz o 3 miejsce
+        stage.third_place_matches = []  # <--- Create list for 3rd place match
 
         for m in matches:
             if m.round_number < 99:
-                # Główne drzewo
+                # Main tree
                 rounds_map[m.round_number].append(m)
             else:
-                # Mecz o 3 miejsce (lub inne specjalne)
+                # 3rd place match (or other specials)
                 stage.third_place_matches.append(m)
 
-        # Budowanie drzewa (bez zmian)
+        # Tree building (unchanged)
         stage.bracket_tree = []
         for r_num in sorted(rounds_map.keys()):
             stage.bracket_tree.append({
@@ -717,7 +717,7 @@ def competition_detail(request, pk):
                 'matches': rounds_map[r_num]
             })
 
-    # 3. Łączenie etapów (bez zmian)
+    # 3. Merging stages (unchanged)
     from itertools import chain
     all_stages = sorted(
         chain(group_stages_qs, knockout_stages_qs),
@@ -746,20 +746,20 @@ class CompetitionDeleteView(DeleteView):
         return Competition.objects.filter(owner=self.request.user)
 
 
-# --- Sprawdzanie kolejności etapów ---
+# --- Checking stage order ---
 def get_next_stage_order_or_block(competition, request):
     """
-    Sprawdza, czy poprzedni etap jest zakończony.
-    Zwraca (next_order, error_message).
-    Jeśli error_message jest ustawiony, należy przerwać akcję.
+    Checks if the previous stage is finished.
+    Returns (next_order, error_message).
+    If error_message is set, abort action.
     """
-    # Pobieramy wszystkie etapy posortowane
-    stages = competition.get_stages()  # Używamy metody z modelu Competition
+    # Get all sorted stages
+    stages = competition.get_stages()  # Use method from Competition model
 
     if not stages:
-        return 1, None  # To pierwszy etap, Order = 1
+        return 1, None  # This is the first stage, Order = 1
 
-    last_stage = stages[-1]  # Ostatni dodany etap
+    last_stage = stages[-1]  # Last added stage
 
     if not last_stage.is_finished:
         return None, f"You must finish the current stage '{last_stage.name}' before adding a new one."
@@ -770,7 +770,7 @@ def get_next_stage_order_or_block(competition, request):
 @login_required
 def add_matches_to_competition(request, competition_id):
     """
-    Tworzy pojedynczy 'Extra Match' w ramach turnieju.
+    Creates a single 'Extra Match' within the tournament.
     """
     competition = get_object_or_404(Competition, pk=competition_id)
     if competition.owner != request.user:
@@ -779,7 +779,7 @@ def add_matches_to_competition(request, competition_id):
     if request.method == 'POST':
         form = ExtraMatchForm(request.POST, competition=competition)
         if form.is_valid():
-            # 1. Znajdź lub stwórz etap "Extras"
+            # 1. Find or create "Extras" stage
             extra_stage, created = KnockoutStage.objects.get_or_create(
                 competition=competition,
                 name="Extras",
@@ -791,14 +791,14 @@ def add_matches_to_competition(request, competition_id):
                 }
             )
 
-            # 2. Utwórz mecz
+            # 2. Create match
             match = form.save(commit=False)
             match.owner = request.user
             match.knockout_stage = extra_stage
             match.knockout_name = "Extra Match"
 
-            # Zapisujemy mecz.
-            # To uruchomi nasz "automat" w models.py, który stworzy wpisy w MatchPlayer.
+            # Save match.
+            # This triggers our "automaton" in models.py which creates MatchPlayer entries.
             match.save()
 
             messages.success(request, "Extra Match created successfully!")
@@ -817,17 +817,17 @@ def add_matches_to_competition(request, competition_id):
 
 
 def create_temporary_match(request):
-    # Czyścimy sesję (bez zmian)
+    # Clear session (unchanged)
     if 'temp_match_id' in request.session:
         del request.session['temp_match_id']
 
     if request.method == 'POST':
         form = MatchForm(request.POST, request=request)
         if form.is_valid():
-            # To przypisuje dane z formularza do obiektu (w tym player1/player2 jeśli wybrano z listy)
+            # This assigns form data to object (including player1/player2 if selected from list)
             match = form.save(commit=False)
 
-            # Ustawienia zależne od logowania
+            # Login-dependent settings
             if request.user.is_authenticated:
                 match.owner = request.user
                 match.is_public = False
@@ -837,30 +837,30 @@ def create_temporary_match(request):
 
             match.is_temporary = True
 
-            # --- LOGIKA GRACZY ---
+            # --- PLAYER LOGIC ---
             create_temp = form.cleaned_data.get('create_temporary_players')
 
             if not request.user.is_authenticated or create_temp:
-                # SCENARIUSZ 1: Tworzymy nowych graczy tymczasowych
+                # SCENARIO 1: Create new temporary players
                 prefix = "Temporary Player"
 
-                # Tworzymy obiekty Player
+                # Create Player objects
                 p1 = Player.objects.create(first_name=f"{prefix} 1", is_temporary=True, owner=match.owner)
                 p2 = Player.objects.create(first_name=f"{prefix} 2", is_temporary=True, owner=match.owner)
 
-                # --- ZMIANA: Przypisujemy ich do foteli ---
+                # --- CHANGE: Assign them to seats ---
                 match.player1 = p1
                 match.player2 = p2
 
-                # Pola pomocnicze do sprzątania
+                # Helper fields for cleanup
                 match.temp_player1 = p1
                 match.temp_player2 = p2
 
-            # --- ZAPIS ---
-            # To wywołuje kod w models.py, który automatycznie tworzy MatchPlayer!
+            # --- SAVE ---
+            # This triggers code in models.py which automatically creates MatchPlayer!
             match.save()
 
-            # Zapisujemy sędziów (bo to relacja ManyToMany, wymaga zapisanego ID meczu)
+            # Save referees (ManyToMany relation requires saved match ID)
             form.save_m2m()
 
             if not request.user.is_authenticated:
@@ -879,13 +879,13 @@ def create_group_stage(request, competition_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    # 1. Sprawdzamy czy można dodać etap
+    # 1. Check if stage can be added
     next_order, error_msg = get_next_stage_order_or_block(competition, request)
     if error_msg:
         messages.error(request, error_msg)
         return redirect('competition_detail', pk=competition.id)
 
-    # 2. Logika formularza
+    # 2. Form logic
     winner_list, eliminated_list, other_list = get_sorted_players_for_stage(competition, request.user)
 
     if request.method == 'POST':
@@ -899,10 +899,10 @@ def create_group_stage(request, competition_id):
         if form.is_valid():
             stage = form.save(commit=False)
             stage.competition = competition
-            stage.order = next_order  # <--- AUTO ORDER (Wymuszamy)
+            stage.order = next_order  # <--- AUTO ORDER (Forced)
             stage.save()
 
-            # (Tu reszta logiki zapisu graczy i generowania meczów - bez zmian)
+            # (Rest of player saving and match generation logic - unchanged)
             selected_players = form.cleaned_data.get('players')
             if selected_players:
                 competition.players.add(*selected_players)
@@ -915,7 +915,7 @@ def create_group_stage(request, competition_id):
             messages.success(request, f"Group Stage '{stage.name}' created successfully.")
             return redirect('competition_detail', pk=competition.id)
     else:
-        # Przekazujemy next_order jako initial (dla pewności, choć pole jest ukryte)
+        # Pass next_order as initial (for safety, although field is hidden)
         form = GroupStageForm(
             initial={'order': next_order},
             competition=competition,
@@ -933,13 +933,13 @@ def create_knockout_stage(request, competition_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    # 1. Sprawdzamy czy można dodać etap
+    # 1. Check if stage can be added
     next_order, error_msg = get_next_stage_order_or_block(competition, request)
     if error_msg:
         messages.error(request, error_msg)
         return redirect('competition_detail', pk=competition.id)
 
-    # 2. Pobieramy graczy (z logiką awansu z grup, którą robiliśmy wcześniej)
+    # 2. Get players (with group qualification logic we did earlier)
     winners, eliminated, others = get_sorted_players_for_stage(competition, request.user)
 
     last_group_stage = competition.groupstage_stages.order_by('-order').first()
@@ -994,26 +994,26 @@ def register(request):
             user = form.save()
             login(request, user)
 
-            # --- PRZEJMOWANIE MECZU TYMCZASOWEGO ---
+            # --- CLAIMING TEMPORARY MATCH ---
             temp_match_id = request.session.get('temp_match_id')
 
             if temp_match_id:
                 try:
-                    # Szukamy meczu po ID z sesji
+                    # Find match by ID from session
                     match = Match.objects.get(pk=temp_match_id)
 
-                    # Jeśli mecz nie ma właściciela (jest sierotą), to go przejmujemy
+                    # If match has no owner (orphan), we claim it
                     if match.owner is None:
                         match.owner = user
-                        match.is_temporary = False  # To już nie jest tymczasowy mecz
-                        match.is_public = False  # Staje się prywatny
+                        match.is_temporary = False  # This is no longer a temporary match
+                        match.is_public = False  # Becomes private
                         match.save()
 
-                        # --- NAPRAWA: Iterujemy po konkretnych fotelach ---
+                        # --- REPAIR: Iterate over specific seats ---
                         players_to_check = [match.player1, match.player2]
 
                         for player in players_to_check:
-                            # Sprawdzamy 'if player', bo teoretycznie któryś fotel mógłby być pusty
+                            # Check 'if player', because theoretically a seat could be empty
                             if player and player.owner is None:
                                 player.owner = user
                                 player.is_temporary = False
@@ -1022,14 +1022,14 @@ def register(request):
 
                         messages.success(request, "Registration successful! Your temporary match has been saved to your account.")
 
-                        # Czyścimy sesję
+                        # Clear session
                         del request.session['temp_match_id']
 
-                        # Przekierowujemy od razu do tego meczu
+                        # Redirect immediately to this match
                         return redirect('match_detail', pk=match.pk)
 
                 except Match.DoesNotExist:
-                    # Mecz mógł zostać usunięty w międzyczasie, ignorujemy to
+                    # Match might have been deleted in the meantime, ignore it
                     pass
             # ---------------------------------------
 
@@ -1043,7 +1043,7 @@ def register(request):
 
 
 def home(request):
-    # Strona główna dostępna dla każdego (zalogowani widzą co innego w menu)
+    # Home page available for everyone (logged-in users see different menu)
     return render(request, 'home.html')
 
 
@@ -1090,7 +1090,7 @@ def add_players_to_competition(request, pk):
         competition.players.add(*players)
         return redirect('competition_detail', pk=competition.id)
     else:
-        # Pokaż tylko moich + publicznych graczy, którzy nie są w tym turnieju
+        # Show only my + public players who are not in this tournament
         available_players = Player.objects.filter(
             (Q(owner=request.user) | Q(is_public=True)) & Q(is_guest=False)
         ).exclude(competitions=competition)
@@ -1103,13 +1103,13 @@ def add_players_to_competition(request, pk):
 
 @login_required
 def achievement_list(request):
-    # Sortujemy np. po najwyższym breaku malejąco
-    # ZMIANA: Dodano warunek & Q(is_guest=False)
+    # Sort e.g. by highest break descending
+    # CHANGE: Added condition & Q(is_guest=False)
     players = Player.objects.filter(
         (Q(owner=request.user) | Q(is_public=True)) & Q(is_guest=False)
     ).order_by('-highest_break')
 
-    # Przekazujemy listę graczy do szablonu (zamiast achievements)
+    # Pass list of players to template (instead of achievements)
     return render(request, 'achievement_list.html', {'players': players})
 
 
@@ -1119,7 +1119,7 @@ client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 @csrf_exempt
 @require_POST
 def gpt_analysis(request):
-    # Zakomentowane na życzenie
+    # Commented out by request
     return JsonResponse({'error': 'Feature disabled'}, status=503)
 
 
@@ -1132,33 +1132,33 @@ def update_game_data(request):
         player_id = data.get('player_id')
         points = data.get('points')
 
-        # Opcjonalne: kolor bili do statystyk
+        # Optional: ball color for statistics
         ball_color = data.get('ball_color')
 
         if match_id is None or player_id is None or points is None:
             return JsonResponse({'status': 'error', 'message': 'Missing data fields'})
 
-        # KROK 1: Próbujemy znaleźć Frame'a
+        # STEP 1: Try to find the Frame
         try:
             frame = Frame.objects.filter(match_player__match_id=match_id).latest('frame_number')
         except Frame.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': 'No active frame found for this match'})
 
-        # KROK 2: Ustalamy, KTÓRY to gracz (1 czy 2?) - TYLKO TWARDE DANE
+        # STEP 2: Determine WHICH player it is (1 or 2?) - HARD DATA ONLY
         match_player = MatchPlayer.objects.filter(match_id=match_id, player_id=player_id).first()
 
         target_position = None
 
         if match_player:
-            # Ufamy tylko bazie danych
+            # Trust only the database
             target_position = match_player.position
         else:
-            # ZERO TOLERANCE: Jeśli gracza nie ma w MatchPlayer, to jest błąd krytyczny.
-            # Nie zgadujemy, nie sprawdzamy czy ID to "1" czy "2".
+            # ZERO TOLERANCE: If player is not in MatchPlayer, it's a critical error.
+            # We do not guess, we do not check if ID is "1" or "2".
             return JsonResponse(
                 {'status': 'error', 'message': f'Security: Player ID {player_id} is not assigned to Match {match_id}.'})
 
-        # KROK 3: Zapisujemy punkty we właściwej kolumnie
+        # STEP 3: Save points in the correct column
         if target_position == 1:
             frame.points_scored_player1 = (frame.points_scored_player1 or 0) + points
             if frame.break_points_player1 is None: frame.break_points_player1 = []
@@ -1170,7 +1170,7 @@ def update_game_data(request):
             frame.break_points_player2.append(points)
 
         else:
-            # To się teoretycznie nie powinno wydarzyć, jeśli MatchPlayer ma position 1 lub 2
+            # This theoretically shouldn't happen if MatchPlayer has position 1 or 2
             return JsonResponse({'status': 'error', 'message': f'Invalid player position: {target_position}'})
 
         frame.save()
@@ -1222,7 +1222,7 @@ def save_frame_result(request):
         data = json.loads(request.body.decode('utf-8'))
         match_id = data.get('match_id')
 
-        # --- ZABEZPIECZENIE API ---
+        # --- API SECURITY ---
         match = get_object_or_404(Match, pk=match_id)
 
         has_access = False
@@ -1246,7 +1246,7 @@ def save_frame_result(request):
         p2_score = data.get('p2_score')
         duration_seconds = data.get('duration', 0)
 
-        # Statystyki...
+        # Statistics...
         p1_fouls = data.get('p1_fouls', 0)
         p2_fouls = data.get('p2_fouls', 0)
         p1_foul_pts = data.get('p1_foul_pts', 0)
@@ -1269,21 +1269,21 @@ def save_frame_result(request):
 
         winner = get_object_or_404(Player, pk=winner_id)
 
-        # 1. Pobieramy graczy (CZYSTA LOGIKA)
+        # 1. Fetch players (PURE LOGIC)
         match_players = MatchPlayer.objects.filter(match=match).order_by('position')
 
         # --- ZERO TOLERANCE ---
-        # Jeśli nie ma graczy w MatchPlayer, przerywamy. Nie naprawiamy na siłę.
+        # If no players in MatchPlayer, abort. Do not force repair.
         if not match_players.exists():
             return JsonResponse({
                 'status': 'error',
                 'message': 'CRITICAL ERROR: Match data integrity violation. Players not found in MatchPlayer table. Please recreate the match.'
             })
 
-        # 2. Szukamy ostatniego frama
+        # 2. Find the last frame
         last_frame = Frame.objects.filter(match_player__in=match_players).order_by('-frame_number').first()
 
-        # --- SEKCJA RATUNKOWA FRAMA (To zostawiamy, bo tworzenie frama jest bezpieczne, jeśli mamy graczy) ---
+        # --- FRAME RESCUE SECTION (Keeping this, as creating a frame is safe if we have players) ---
         if not last_frame:
             last_frame = Frame.objects.create(
                 match_player=match_players.first(),
@@ -1293,7 +1293,7 @@ def save_frame_result(request):
                 active_player=match_players.first().player
             )
 
-        # --- OBLICZANIE SKUTECZNOŚCI ---
+        # --- CALCULATING SUCCESS RATES ---
         p1_attempts = p1_pots + p1_misses
         p1_success_rate = 0.0
         if p1_attempts > 0:
@@ -1304,7 +1304,7 @@ def save_frame_result(request):
         if p2_attempts > 0:
             p2_success_rate = round((p2_pots / p2_attempts) * 100, 2)
 
-        # 3. Zapisz wyniki
+        # 3. Save results
         last_frame.points_scored_player1 = p1_score
         last_frame.points_scored_player2 = p2_score
         last_frame.winner = winner
@@ -1343,7 +1343,7 @@ def save_frame_result(request):
 
         last_frame.save()
 
-        # 4. Aktualizacja statusu
+        # 4. Update status
         match.update_status_from_frames()
         game_status = match.get_game_status()
         match_over = game_status['is_finished']
@@ -1436,10 +1436,10 @@ def mass_edit_matches(request, competition_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    # 1. Pobieramy mecze (Grupy + Puchar)
-    # --- WAŻNA ZMIANA SORTOWANIA ---
-    # Musimy sortować najpierw po ETAPIE, potem po GRUPIE/RUNDZIE, a dopiero na końcu po CZASIE.
-    # Dzięki temu w HTML tag {% ifchanged %} ładnie pogrupuje mecze belkami.
+    # 1. Fetch matches (Groups + Knockout)
+    # --- IMPORTANT SORTING CHANGE ---
+    # Sort by STAGE first, then by GROUP/ROUND, and finally by TIME.
+    # This ensures the {% ifchanged %} tag in HTML groups matches nicely with headers.
     matches = (Match.objects.filter(
         Q(group_stage__competition=competition) |
         Q(knockout_stage__competition=competition)
@@ -1447,15 +1447,15 @@ def mass_edit_matches(request, competition_id):
     .exclude(player1__isnull=True) \
     .exclude(player2__isnull=True) \
     .order_by(
-        'group_stage',  # Najpierw etap grupowy
-        'group',  # Potem konkretna grupa (1, 2, 3...)
-        'knockout_stage',  # Potem etap pucharowy
-        'round_number',  # Potem numer kolejki/rundy (TO JEST KLUCZOWE!)
-        'date',  # Dopiero teraz data
-        'time'  # I godzina
+        'group_stage',  # Group stage first
+        'group',  # Then specific group (1, 2, 3...)
+        'knockout_stage',  # Then knockout stage
+        'round_number',  # Then round number (THIS IS KEY!)
+        'date',  # Date only now
+        'time'  # And time
     ))
 
-    # Tworzymy klasę Formsetu
+    # Create Formset class
     MatchFormSet = modelformset_factory(
         Match,
         form=MassMatchEditForm,
@@ -1466,37 +1466,37 @@ def mass_edit_matches(request, competition_id):
     if request.method == 'POST':
         formset = MatchFormSet(request.POST, queryset=matches)
         if formset.is_valid():
-            # Zapis formularzy
+            # Save forms
             formset.save()
             messages.success(request, "Matches updated successfully.")
             return redirect('competition_detail', pk=competition.id)
     else:
         formset = MatchFormSet(queryset=matches)
 
-    # --- FILTROWANIE DROPDOWNÓW ---
+    # --- DROPDOWN FILTERING ---
     my_referees = Referee.objects.filter(Q(owner=request.user) | Q(is_public=True))
 
-    # Pobieramy bazową listę wszystkich graczy w turnieju
+    # Get base list of all players in tournament
     all_tournament_players = competition.players.all()
 
     for form in formset:
-        # 1. Sędziowie (bez zmian)
+        # 1. Referees (unchanged)
         form.fields['referees'].queryset = my_referees
 
-        # 2. Pobieramy instancję meczu dla tego wiersza
+        # 2. Get match instance for this row
         match = form.instance
 
-        # 3. Ustalamy, kogo można wybrać w tym wierszu
-        # Domyślnie: Wszyscy z turnieju (dla Play-off)
+        # 3. Determine who can be selected in this row
+        # Default: All from tournament (for Play-offs)
         allowed_players = all_tournament_players
 
-        # Jeśli mecz należy do GRUPY -> zawężamy listę tylko do członków tej grupy
+        # If match belongs to a GROUP -> narrow list to members of that group
         if match.group:
-            # Pobieramy ID graczy z tabeli tej konkretnej grupy
+            # Get player IDs from the standings of this specific group
             group_ids = match.group.standings.values_list('player_id', flat=True)
             allowed_players = all_tournament_players.filter(id__in=group_ids)
 
-        # 4. Przypisujemy "skrojoną na miarę" listę do pól
+        # 4. Assign "tailor-made" list to fields
         if 'player1' in form.fields:
             form.fields['player1'].queryset = allowed_players
         if 'player2' in form.fields:
@@ -1508,44 +1508,44 @@ def mass_edit_matches(request, competition_id):
     })
 
 
-# --- FUNKCJA POMOCNICZA W VIEWS.PY ---
+# --- HELPER FUNCTION IN VIEWS.PY ---
 
 def get_sorted_players_for_stage(competition, user):
     """
-    Zwraca trzy listy graczy:
-    1. winners: Zwycięzcy ostatniego etapu
-    2. eliminated: Przegrani w ostatnim etapie
-    3. others: Wszyscy pozostali gracze użytkownika (bez tymczasowych),
-       którzy nie grali w ostatnim etapie.
+    Returns three lists of players:
+    1. winners: Winners of the last stage
+    2. eliminated: Losers of the last stage
+    3. others: All other players of the user (excluding temporary),
+       who did not play in the last stage.
     """
 
-    # 1. Znajdź wszystkie etapy i posortuj
+    # 1. Find all stages and sort
     group_stages = list(competition.groupstage_stages.all())
     knockout_stages = list(competition.knockoutstage_stages.all())
     all_stages = sorted(group_stages + knockout_stages, key=lambda x: x.order)
 
-    # Pobieramy tylko tych graczy, którzy są uczestnikami TEGO turnieju
+    # Get only players who are participants of THIS tournament
     all_user_players = set(competition.players.all())
 
-    # Jeśli to pierwszy etap (brak historii etapów), wszyscy Twoi gracze trafiają do 'others'
+    # If first stage (no history), all your players go to 'others'
     if not all_stages:
         return [], [], list(all_user_players)
 
-    # 3. Pobierz ostatni etap
+    # 3. Get last stage
     last_stage = all_stages[-1]
 
-    # Pobierz mecze
+    # Get matches
     if hasattr(last_stage, 'matches'):
         matches = last_stage.matches.filter(status='FINISHED')
     else:
         matches = []
 
-    # 4. Sortowanie uczestników ostatniego etapu
+    # 4. Sorting participants of the last stage
     winners = set()
-    participants = set()  # Wszyscy, którzy grali w ostatnim etapie
+    participants = set()  # All who played in the last stage
 
     for match in matches:
-        # Sprawdzamy konkretne fotele
+        # Check specific seats
         if match.player1:
             participants.add(match.player1)
         if match.player2:
@@ -1555,16 +1555,16 @@ def get_sorted_players_for_stage(competition, user):
         if match.winner:
             winners.add(match.winner)
 
-    # Przegrani to: Uczestnicy ostatniego etapu MINUS Zwycięzcy
+    # Eliminated are: Last stage participants MINUS Winners
     eliminated = participants - winners
 
-    # Inni to: Wszyscy Twoi gracze z bazy MINUS ci, którzy brali udział w ostatnim etapie
+    # Others are: All your DB players MINUS those who participated in the last stage
     others = all_user_players - participants
 
     return list(winners), list(eliminated), list(others)
 
 
-# --- ZAMYKANIE ETAPÓW I TURNIEJU ---
+# --- CLOSING STAGES AND TOURNAMENT ---
 
 @login_required
 def end_group_stage(request, stage_id):
@@ -1596,8 +1596,8 @@ def end_competition(request, competition_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    # Ustawiamy status turnieju na FINISHED
-    # (Upewnij się, że masz takie pole w modelu Competition, jeśli nie - dodaj je)
+    # Set tournament status to FINISHED
+    # (Ensure this field exists in Competition model, if not - add it)
     competition.status = 'FINISHED'
     competition.save()
 
@@ -1608,23 +1608,23 @@ def end_competition(request, competition_id):
 @receiver(user_logged_in)
 def claim_temporary_match(sender, user, request, **kwargs):
     """
-    Funkcja uruchamia się AUTOMATYCZNIE po każdym poprawnym zalogowaniu.
-    Sprawdza, czy w sesji jest ID tymczasowego meczu i przypisuje go do użytkownika.
+    Function runs AUTOMATICALLY after every successful login.
+    Checks if a temporary match ID exists in session and assigns it to the user.
     """
     temp_match_id = request.session.get('temp_match_id')
 
     if temp_match_id:
         try:
-            # Szukamy meczu, który nie ma właściciela (jest gościa)
+            # Find match that has no owner (is guest match)
             match = Match.objects.get(id=temp_match_id, owner__isnull=True)
 
-            # 1. Przypisujemy mecz do użytkownika
+            # 1. Assign match to user
             match.owner = user
             match.save()
 
-            # 2. Przypisujemy też graczy tymczasowych do tego użytkownika!
-            # Tworzymy listę potencjalnych graczy do sprawdzenia
-            # (może być None, dlatego w pętli sprawdzamy 'if player')
+            # 2. Also assign temporary players to this user!
+            # Create list of potential players to check
+            # (can be None, so we check 'if player' in loop)
             players_to_check = [match.player1, match.player2]
 
             for player in players_to_check:
@@ -1650,7 +1650,7 @@ def substitute_player(request, stage_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    # Blokada dla zakończonego etapu
+    # Block for finished stage
     if stage.is_finished:
         messages.error(request, "Cannot substitute players in a finished stage.")
         return redirect('competition_detail', pk=competition.id)
@@ -1661,13 +1661,13 @@ def substitute_player(request, stage_id):
             player_out = form.cleaned_data['player_out']
             player_in = form.cleaned_data['player_in']
 
-            # --- OPERACJA PODMIANY (Transakcja atomowa dla bezpieczeństwa) ---
+            # --- SUBSTITUTION OPERATION (Atomic transaction for safety) ---
             with transaction.atomic():
-                # 1. Dodaj nowego gracza do turnieju (jeśli go nie ma)
+                # 1. Add new player to tournament (if not present)
                 competition.players.add(player_in)
 
-                # 2. Podmień w TABELI (GroupStanding)
-                # Szukamy wpisu starego gracza w tym etapie
+                # 2. Swap in STANDINGS (GroupStanding)
+                # Find old player entry in this stage
                 standing = GroupStanding.objects.filter(
                     group__stage=stage,
                     player=player_out
@@ -1677,13 +1677,13 @@ def substitute_player(request, stage_id):
                     standing.player = player_in
                     standing.save()
 
-                # 3. Podmień w MECZACH (Player 1)
+                # 3. Swap in MATCHES (Player 1)
                 matches_p1 = Match.objects.filter(group_stage=stage, player1=player_out)
                 for match in matches_p1:
                     match.player1 = player_in
                     match.save()
 
-                # 4. Podmień w MECZACH (Player 2)
+                # 4. Swap in MATCHES (Player 2)
                 matches_p2 = Match.objects.filter(group_stage=stage, player2=player_out)
                 for match in matches_p2:
                     match.player2 = player_in
@@ -1709,31 +1709,31 @@ def manage_groups(request, stage_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    # BLOKADA BEZPIECZEŃSTWA
+    # SECURITY LOCK
     if stage.matches.filter(status='FINISHED').exists():
         messages.error(request, "Cannot edit groups because matches have already been played.")
         return redirect('competition_detail', pk=competition.id)
 
-    # Definiujemy Formset (Tabela edycji dla wszystkich graczy)
+    # Define Formset (Edit table for all players)
     StandingFormSet = modelformset_factory(
         GroupStanding,
         form=GroupAssignmentForm,
-        extra=0,  # Nie chcemy pustych wierszy automat
-        can_delete=True  # Włączamy obsługę usuwania
+        extra=0,  # We don't want automatic empty rows
+        can_delete=True  # Enable deletion support
     )
-    # Musimy przekazać 'stage' do formularza wewnątrz formsetu, więc używamy form_kwargs
+    # We need to pass 'stage' to the form inside formset, so use form_kwargs
     formset_queryset = GroupStanding.objects.filter(group__stage=stage).order_by('group__name', 'player__last_name')
 
     if request.method == 'POST':
-        # Sprawdzamy czy to akcja dodawania nowego gracza
+        # Check if this is the add new player action
         if 'add_player_submit' in request.POST:
             add_form = AddPlayerToGroupForm(request.POST, stage=stage, owner=request.user)
             if add_form.is_valid():
                 new_player = add_form.cleaned_data['player']
                 target_group = add_form.cleaned_data['group']
-                competition.players.add(new_player)  # Upewniamy się, że jest w turnieju
+                competition.players.add(new_player)  # Ensure player is in tournament
 
-                # Tworzymy wpis w tabeli
+                # Create table entry
                 GroupStanding.objects.create(
                     group=target_group, player=new_player,
                     matches_played=0, matches_won=0, matches_drawn=0, matches_lost=0,
@@ -1741,17 +1741,17 @@ def manage_groups(request, stage_id):
                     small_points_scored=0, small_points_conceded=0, highest_break=0
                 )
                 messages.success(request, f"Added {new_player} to Group {target_group.name}.")
-                # Po dodaniu od razu regenerujemy mecze
+                # Regenerate matches immediately after adding
                 stage.regenerate_schedule()
                 return redirect('manage_groups', stage_id=stage.id)
 
-        # Sprawdzamy czy to akcja zapisu zmian w grupach (Formset)
+        # Check if this is the save group changes action (Formset)
         else:
             formset = StandingFormSet(request.POST, queryset=formset_queryset, form_kwargs={'stage': stage})
             if formset.is_valid():
-                formset.save()  # Zapisuje zmiany grup i usuwa zaznaczonych graczy
+                formset.save()  # Saves group changes and deletes selected players
 
-                # REGENERACJA TERMINARZA
+                # SCHEDULE REGENERATION
                 success, msg = stage.regenerate_schedule()
                 if success:
                     messages.success(request, "Groups updated and schedule regenerated successfully.")
@@ -1783,7 +1783,7 @@ def manage_knockout(request, stage_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    # Pobieramy mecze 1. rundy do wyświetlenia (żebyś widział kogo zamieniasz)
+    # Get 1st round matches for display (so you see who you are swapping)
     matches_r1 = Match.objects.filter(knockout_stage=stage, round_number=1).order_by('id')
 
     if request.method == 'POST':
@@ -1792,29 +1792,29 @@ def manage_knockout(request, stage_id):
             p1 = form.cleaned_data['player_1']
             p2 = form.cleaned_data['player_2']
 
-            # --- LOGIKA SWAP (ZAMIANA) ---
-            # Musimy znaleźć mecze, w których Ci gracze są
-            # Uwaga: Mogą być w tym samym meczu (zamiana gospodarz/gość) lub w różnych
+            # --- SWAP LOGIC ---
+            # We need to find matches where these players are
+            # Note: They can be in the same match (host/guest swap) or in different ones
 
-            # Szukamy meczu dla P1
+            # Find match for P1
             m1 = matches_r1.filter(player1=p1).first() or matches_r1.filter(player2=p1).first()
-            # Szukamy meczu dla P2
+            # Find match for P2
             m2 = matches_r1.filter(player1=p2).first() or matches_r1.filter(player2=p2).first()
 
             if m1 and m2:
-                # Jeśli to ten sam mecz -> prosta zamiana stron
+                # If it's the same match -> simple side swap
                 if m1 == m2:
                     m1.player1, m1.player2 = m1.player2, m1.player1
                     m1.save()
                 else:
-                    # Różne mecze -> Krzyżowa zamiana
-                    # 1. Gdzie w m1 jest p1?
+                    # Different matches -> Cross swap
+                    # 1. Where is p1 in m1?
                     if m1.player1 == p1:
                         m1.player1 = p2
                     else:
                         m1.player2 = p2
 
-                    # 2. Gdzie w m2 jest p2?
+                    # 2. Where is p2 in m2?
                     if m2.player1 == p2:
                         m2.player1 = p1
                     else:
@@ -1845,9 +1845,9 @@ def substitute_player_knockout(request, competition_id):
     if competition.owner != request.user:
         raise PermissionDenied
 
-    # 1. POBIERAMY ETAP PUCHAROWY
-    # Musimy znaleźć KnockoutStage przypisany do tego turnieju.
-    # Używamy .first(), zakładając że jest jeden (standard w turniejach).
+    # 1. GET KNOCKOUT STAGE
+    # Must find KnockoutStage assigned to this tournament.
+    # Using .first(), assuming there is one (standard in tournaments).
     knockout_stage = competition.knockoutstage_stages.first()
 
     if not knockout_stage:
@@ -1855,7 +1855,7 @@ def substitute_player_knockout(request, competition_id):
         return redirect('competition_detail', pk=competition.id)
 
     if request.method == 'POST':
-        # ZMIANA: Przekazujemy 'stage', a nie 'competition'
+        # CHANGE: Passing 'stage', not 'competition'
         form = SubstitutePlayerForm(request.POST, stage=knockout_stage, owner=request.user)
 
         if form.is_valid():
@@ -1863,18 +1863,18 @@ def substitute_player_knockout(request, competition_id):
             p_in = form.cleaned_data['player_in']
 
             with transaction.atomic():
-                # A. Aktualizacja listy uczestników turnieju (M2M na modelu Competition)
+                # A. Update tournament participants list (M2M on Competition model)
                 competition.players.remove(p_out)
                 competition.players.add(p_in)
 
-                # B. Znalezienie meczów w fazie pucharowej
+                # B. Find matches in knockout stage
                 matches_to_fix = Match.objects.filter(
                     knockout_stage=knockout_stage
                 ).filter(
                     Q(player1=p_out) | Q(player2=p_out)
                 )
 
-                # C. Podmiana w meczach
+                # C. Substitution in matches
                 count = 0
                 for match in matches_to_fix:
                     changed = False
@@ -1887,13 +1887,13 @@ def substitute_player_knockout(request, competition_id):
                         changed = True
 
                     if changed:
-                        match.save()  # Naprawa MatchPlayer
+                        match.save()  # MatchPlayer repair
                         count += 1
 
                 messages.success(request, f"Successfully substituted {p_out} with {p_in} in {count} matches.")
                 return redirect('competition_detail', pk=competition.id)
     else:
-        # ZMIANA: Tutaj też przekazujemy 'stage'
+        # CHANGE: Passing 'stage' here too
         form = SubstitutePlayerForm(stage=knockout_stage, owner=request.user)
 
     return render(request, 'substitute_player.html', {
@@ -1903,14 +1903,14 @@ def substitute_player_knockout(request, competition_id):
     })
 
 
-# 1. GENEROWANIE KODU (Dla Gościa)
+# 1. TOKEN GENERATION (For Guest)
 @login_required
 def generate_token(request):
-    """Generuje 6-cyfrowy kod ważny 90 sekund i odsyła go (np. do modala)."""
-    # Usuwamy stare tokeny usera, żeby nie śmiecić
+    """Generates a 6-digit code valid for 90 seconds and sends it back (e.g., to a modal)."""
+    # Remove old user tokens to avoid clutter
     SharingToken.objects.filter(owner=request.user).delete()
 
-    # Generujemy cyfry
+    # Generate digits
     new_code = get_random_string(length=6, allowed_chars='0123456789')
 
     SharingToken.objects.create(
@@ -1918,14 +1918,14 @@ def generate_token(request):
         code=new_code
     )
 
-    # Jeśli to żądanie AJAX, można zwrócić JSON, ale tutaj proste przekierowanie/message
-    # W praktyce najlepiej zrobić to jako API, ale na razie zróbmy prosto:
+    # If AJAX request, return JSON, but here simple redirect/message
+    # In practice, best as API, but let's keep it simple for now:
     messages.success(request, f"Your Code: {new_code} (Valid for 90 seconds)")
-    # Przekieruj tam skąd przyszedł (np. do profilu)
+    # Redirect to where they came from (e.g., profile)
     return redirect(request.META.get('HTTP_REFERER', 'player_list'))
 
 
-# 2. IMPORTOWANIE GRACZY (Dla Organizatora)
+# 2. IMPORTING PLAYERS (For Organizer)
 
 
 @login_required
@@ -1937,14 +1937,14 @@ def import_players_to_competition(request, comp_id):
     token_owner = None
 
     if request.method == 'POST':
-        # --- KROK 1: Sprawdzenie kodu ---
+        # --- STEP 1: Code Verification ---
         if 'check_code' in request.POST and code_form.is_valid():
             code = code_form.cleaned_data['code']
             try:
                 token = SharingToken.objects.get(code=code)
                 if token.is_valid():
                     token_owner = token.owner
-                    # Szukamy graczy u właściciela tokena
+                    # Find players of the token owner
                     found_players = Player.objects.filter(owner=token_owner)
 
                     if not found_players.exists():
@@ -1956,7 +1956,7 @@ def import_players_to_competition(request, comp_id):
             except SharingToken.DoesNotExist:
                 code_form.add_error('code', "Invalid code.")
 
-        # --- KROK 2: Import (Klonowanie jako GOŚĆ) ---
+        # --- STEP 2: Import (Cloning as GUEST) ---
         elif 'confirm_import' in request.POST:
             player_ids = request.POST.getlist('selected_players')
             if player_ids:
@@ -1966,7 +1966,7 @@ def import_players_to_competition(request, comp_id):
                 for source in source_players:
                     suffix = f" ({source.owner.username})"
 
-                    # Logika nazwy (żeby była unikalna i czytelna)
+                    # Name logic (to be unique and readable)
                     new_last_name = source.last_name + suffix if source.last_name else ""
                     new_first_name = source.first_name
                     new_nickname = source.nickname
@@ -1977,28 +1977,28 @@ def import_players_to_competition(request, comp_id):
                         else:
                             new_first_name += suffix
 
-                    # Sprawdzenie konfliktu w turnieju (czy taki gracz już tu jest?)
-                    # Sprawdzamy po nazwisku/imieniu LUB po relacji OneToOne z Userem (jeśli istnieje)
+                    # Check tournament conflict (is this player already here?)
+                    # Check by name/surname OR by OneToOne relation with User (if exists)
                     is_conflict = False
                     if source.user:
                         is_conflict = competition.players.filter(user=source.user).exists()
 
-                    # Możesz tu dodać sprawdzenie po nazwach stringowych, jeśli chcesz być bardzo ścisły
+                    # You can add string name check here if you want to be very strict
 
                     if not is_conflict:
-                        # TWORZYMY KLONA-GOŚCIA
+                        # CREATE CLONE-GUEST
                         new_guest = Player.objects.create(
                             owner=request.user,
-                            # user=source.user,  <-- USUWAMY TO (Klon nie może być podpięty pod konto Usera oryginału)
-                            cloned_from=source,  # <--- DODAJEMY TO (Nasz nowy most)
+                            # user=source.user,  <-- REMOVE THIS (Clone cannot be linked to the original User account)
+                            cloned_from=source,  # <--- ADDING THIS (Our new bridge)
                             is_guest=True,
                             first_name=source.first_name,
-                            # Tu była literówka w zmiennych, lepiej brać prosto z source albo z Twoich zmiennych wyżej
-                            last_name=new_last_name,  # Używamy Twojej logiki z suffixem
-                            nickname=new_nickname,  # Używamy Twojej logiki z suffixem
+                            # Typo in variables here, better to take straight from source or your variables above
+                            last_name=new_last_name,  # Using your suffix logic
+                            nickname=new_nickname,  # Using your suffix logic
                             # photo=source.photo
                         )
-                        # Dodajemy go do turnieju
+                        # Add to tournament
                         competition.players.add(new_guest)
                         count += 1
 
@@ -2008,7 +2008,7 @@ def import_players_to_competition(request, comp_id):
                 messages.error(request, "No players selected.")
 
     return render(request, 'import_players.html', {
-        'competition': competition,  # Ważne dla przycisku Cancel
+        'competition': competition,  # Important for Cancel button
         'code_form': code_form,
         'select_form': select_form,
         'token_owner': token_owner
@@ -2018,26 +2018,26 @@ def import_players_to_competition(request, comp_id):
 @login_required
 def import_guest_for_match(request):
     """
-    Importuje gościa specjalnie dla pojedynczego meczu.
-    Po sukcesie wraca do add_match z parametrem ?guest=ID
+    Imports guest specifically for a single match.
+    On success returns to add_match with parameter ?guest=ID
     """
     code_form = ImportCodeForm(request.POST or None)
 
-    # Jeśli wejście GET (wyświetlenie formularza)
+    # If GET request (show form)
     if request.method == 'GET':
         return render(request, 'import_players.html', {
             'code_form': code_form,
-            'is_match_import': True  # Flaga dla template'u
+            'is_match_import': True  # Flag for template
         })
 
-    # Jeśli wejście POST (zatwierdzenie kodu)
+    # If POST request (confirm code)
     if request.method == 'POST':
         if 'check_code' in request.POST and code_form.is_valid():
             code = code_form.cleaned_data['code']
             try:
                 token = SharingToken.objects.get(code=code)
                 if token.is_valid():
-                    # Pokaż formularz wyboru (ten sam mechanizm co wcześniej)
+                    # Show selection form (same mechanism as before)
                     found_players = Player.objects.filter(owner=token.owner)
                     select_form = SelectImportedPlayersForm(found_players=found_players)
                     return render(request, 'import_players.html', {
@@ -2054,8 +2054,8 @@ def import_guest_for_match(request):
         elif 'confirm_import' in request.POST:
             player_ids = request.POST.getlist('selected_players')
             if player_ids:
-                # Bierzemy pierwszego zaznaczonego (do meczu zazwyczaj 1 vs 1)
-                # Ale pętla obsłuży, jakbyś zaznaczył kilku, weźmiemy ostatniego jako "Active"
+                # Take first selected (match is usually 1 vs 1)
+                # Loop handles multiple selections, taking the last one as "Active"
                 last_created_id = None
 
                 source_players = Player.objects.filter(id__in=player_ids)
@@ -2072,11 +2072,11 @@ def import_guest_for_match(request):
                         else:
                             new_first_name += suffix
 
-                            # Tworzymy Gościa (is_guest=True)
+                            # Create Guest (is_guest=True)
                             new_guest = Player.objects.create(
                                 owner=request.user,
-                                # user=source.user,  <-- USUWAMY TO
-                                cloned_from=source,  # <--- DODAJEMY TO
+                                # user=source.user,  <-- REMOVE THIS
+                                cloned_from=source,  # <--- ADD THIS
                                 is_guest=True,
                                 first_name=new_first_name,
                                 last_name=new_last_name,
@@ -2085,7 +2085,7 @@ def import_guest_for_match(request):
                     last_created_id = new_guest.id
 
                 messages.success(request, "Guest imported for the match.")
-                # WRACAMY DO ADD MATCH Z ID GRACZA
+                # RETURN TO ADD MATCH WITH PLAYER ID
                 return redirect(f"{reverse('add_match')}?guest_id={last_created_id}")
             else:
                 messages.error(request, "No players selected.")
@@ -2096,12 +2096,12 @@ def import_guest_for_match(request):
 @login_required
 def my_global_stats(request):
     """
-    Sumuje statystyki ze wszystkich 'wcieleń' gracza (Oryginał + Klony u innych).
+    Sums statistics from all player 'avatars' (Original + Clones owned by others).
     """
-    # Znajdź wszystkie instancje graczy powiązane z Twoim kontem User
+    # Find all player instances linked to your User account
     my_avatars = Player.objects.filter(user=request.user)
 
-    # Agregacja danych
+    # Aggregate data
     stats = my_avatars.aggregate(
         total_wins=Sum('matches_won'),
         total_matches=Sum('matches_played'),
@@ -2112,7 +2112,7 @@ def my_global_stats(request):
 
     return render(request, 'global_stats.html', {
         'stats': stats,
-        'avatars_count': my_avatars.count()  # Ile razy zostałeś sklonowany/użyty
+        'avatars_count': my_avatars.count()  # How many times you were cloned/used
     })
 
 
@@ -2120,8 +2120,8 @@ def my_global_stats(request):
 def competition_ranking(request, competition_id):
     competition = get_object_or_404(Competition, pk=competition_id)
 
-    # Opcjonalnie: Przeliczaj tylko jeśli turniej zakończony lub na żądanie.
-    # Ale dla bezpieczeństwa przeliczmy zawsze przy wejściu (lub dodaj przycisk "Recalculate")
+    # Optional: Recalculate only if tournament finished or on demand.
+    # But for safety, let's always recalculate on entry (or add "Recalculate" button)
     calculate_competition_results(competition)
 
     results = CompetitionResult.objects.filter(competition=competition).order_by('rank', 'player__last_name')
@@ -2136,22 +2136,22 @@ def competition_ranking(request, competition_id):
 def player_match_history(request, pk):
     player = get_object_or_404(Player, pk=pk)
 
-    # 1. Pobieramy WSZYSTKIE mecze gracza
+    # 1. Fetch ALL matches of the player
     matches_qs = Match.objects.filter(
         Q(player1=player) | Q(player2=player)
     ).order_by('-date', '-time')
 
-    # --- FILTR H2H (Head-to-Head) ---
+    # --- H2H FILTER (Head-to-Head) ---
     opponent_id = request.GET.get('opponent')
     opponent = None
     stats = {}
 
     if opponent_id:
         opponent = get_object_or_404(Player, pk=opponent_id)
-        # Filtrujemy tylko mecze z tym rywalem
+        # Filter only matches with this opponent
         matches_qs = matches_qs.filter(Q(player1=opponent) | Q(player2=opponent))
 
-        # Obliczamy szybkie statystyki H2H
+        # Calculate quick H2H stats
         total = matches_qs.count()
         wins = 0
         for m in matches_qs:
@@ -2165,21 +2165,21 @@ def player_match_history(request, pk):
             'win_rate': (wins / total * 100) if total > 0 else 0
         }
 
-    # 2. Lista wszystkich rywali do listy rozwijanej (dla filtra)
-    # Pobieramy ID wszystkich przeciwników z meczów gracza
-    # To zapytanie może być trochę ciężkie przy tysiącach graczy, ale na razie OK
+    # 2. List of all opponents for dropdown (for filter)
+    # Get IDs of all opponents from player's matches
+    # This query might be heavy with thousands of players, but OK for now
     p1_ids = Match.objects.filter(player2=player).values_list('player1', flat=True)
     p2_ids = Match.objects.filter(player1=player).values_list('player2', flat=True)
     all_opponent_ids = list(set(list(p1_ids) + list(p2_ids)))
 
     possible_opponents = Player.objects.filter(id__in=all_opponent_ids).order_by('last_name')
 
-    # --- PAGINACJA (LOAD MORE) ---
-    paginator = Paginator(matches_qs, 10)  # 10 meczów na "stronę" (kliknięcie)
+    # --- PAGINATION (LOAD MORE) ---
+    paginator = Paginator(matches_qs, 10)  # 10 matches per "page" (click)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    # 3. Jeśli to zapytanie AJAX (Load More), zwracamy tylko wiersze tabeli
+    # 3. If AJAX request (Load More), return only table rows
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         html = render_to_string('partials/match_rows.html', {
             'matches': page_obj,
@@ -2191,10 +2191,10 @@ def player_match_history(request, pk):
             'has_next': page_obj.has_next()
         })
 
-    # 4. Standardowe wyświetlenie strony
+    # 4. Standard page render
     return render(request, 'player_match_history.html', {
         'player': player,
-        'matches': page_obj,  # Pierwsza strona
+        'matches': page_obj,  # First page
         'possible_opponents': possible_opponents,
         'selected_opponent': opponent,
         'stats': stats
@@ -2205,7 +2205,7 @@ def player_match_history(request, pk):
 def equipment_list(request, player_id):
     player = get_object_or_404(Player, pk=player_id)
 
-    # Podział na sprzęt AKTUALNY i HISTORYCZNY
+    # Split into CURRENT and ARCHIVED equipment
     current_gear = player.equipment.filter(end_date__isnull=True).order_by('item_type')
     archive_gear = player.equipment.filter(end_date__isnull=False).order_by('-end_date')
 
@@ -2227,15 +2227,15 @@ def add_equipment(request, player_id):
             new_eq.owner = request.user
             new_eq.player = player
 
-            # --- LOGIKA AUTO-ARCHIWIZACJI ---
-            # Jeśli nowy sprzęt jest AKTYWNY (brak end_date), zamknij stary tego samego typu
+            # --- AUTO-ARCHIVING LOGIC ---
+            # If new equipment is ACTIVE (no end_date), close old one of same type
             if new_eq.end_date is None:
                 old_active = Equipment.objects.filter(
                     player=player,
                     item_type=new_eq.item_type,
                     end_date__isnull=True
                 )
-                # Ustaw datę końca starego na datę startu nowego
+                # Set end date of old to start date of new
                 for old in old_active:
                     old.end_date = new_eq.start_date
                     old.save()
@@ -2286,12 +2286,12 @@ def delete_equipment(request, pk):
     player_id = equipment.player.id
 
     if request.method == 'POST':
-        # Jeśli użytkownik kliknął "Yes, Delete" na stronie potwierdzenia
+        # If user clicked "Yes, Delete" on confirmation page
         equipment.delete()
         messages.success(request, f"Equipment '{equipment.name}' deleted.")
         return redirect('equipment_list', player_id=player_id)
 
-    # Jeśli to zwykłe wejście (kliknięcie w kosz) -> pokaż stronę potwierdzenia
+    # If standard entry (trash icon click) -> show confirmation page
     return render(request, 'equipment/confirm_delete.html', {
         'item': equipment
     })
@@ -2299,14 +2299,14 @@ def delete_equipment(request, pk):
 
 @login_required
 def use_equipment_again(request, pk):
-    # 1. Pobieramy stary sprzęt z archiwum
+    # 1. Get old equipment from archive
     old_item = get_object_or_404(Equipment, pk=pk)
 
-    # --- NOWOŚĆ: Zapisujemy sobie listę zdjęć starego przedmiotu ---
-    # Musimy to zrobić TERAZ, zanim zresetujemy ID obiektu old_item
+    # --- NEW: Save list of photos of old item ---
+    # Must do this NOW, before resetting old_item ID
     photos_to_copy = list(old_item.photos.all())
 
-    # 2. Archiwizujemy AKTUALNY sprzęt tego samego typu
+    # 2. Archive CURRENT equipment of same type
     current_active = Equipment.objects.filter(
         player=old_item.player,
         item_type=old_item.item_type,
@@ -2317,22 +2317,22 @@ def use_equipment_again(request, pk):
         active.save()
         messages.info(request, f"Moved {active.name} to archive.")
 
-    # 3. Tworzymy NOWY sprzęt na bazie starego
+    # 3. Create NEW equipment based on old one
     old_item.pk = None
     old_item.start_date = date.today()
     old_item.end_date = None
 
-    # Dodajemy notkę o powrocie
+    # Add reactivation note
     old_item.notes = (old_item.notes or "") + f"\n[Re-activated on {date.today()}]"
 
-    old_item.save()  # W tym momencie old_item to już NOWY wpis w bazie z nowym ID
+    old_item.save()  # At this point old_item is a NEW DB entry with new ID
 
-    # 4. Kopiujemy zdjęcia
+    # 4. Copy photos
     for photo in photos_to_copy:
         EquipmentPhoto.objects.create(
-            equipment=old_item,  # Przypisujemy do tego nowego sprzętu
-            image=photo.image,  # Wskazujemy na ten sam plik na dysku (oszczędność miejsca)
-            is_main=photo.is_main  # Zachowujemy info, czy to było główne zdjęcie
+            equipment=old_item,  # Assign to this new equipment
+            image=photo.image,  # Point to same file on disk (save space)
+            is_main=photo.is_main  # Keep info if it was main photo
         )
 
     messages.success(request, f"Welcome back! {old_item.name} is active again (with photos).")
@@ -2370,7 +2370,7 @@ def profile_settings(request):
             u_form.save()
             p_form.save()
             messages.success(request, 'Your profile has been updated!')
-            return redirect('profile_settings')  # Przeładowanie strony (PRG pattern)
+            return redirect('profile_settings')  # Reload page (PRG pattern)
 
     else:
         u_form = UserUpdateForm(instance=request.user)
@@ -2388,7 +2388,7 @@ def export_data_excel(request):
     workbook = openpyxl.Workbook()
 
     # =========================================================
-    # ARKUSZ 1: GENERAL STATS (Dashboard)
+    # SHEET 1: GENERAL STATS (Dashboard)
     # =========================================================
     ws_dash = workbook.active
     ws_dash.title = "General Stats"
@@ -2398,7 +2398,7 @@ def export_data_excel(request):
     total_players = Player.objects.filter(owner=request.user).count()
     total_tournaments = Competition.objects.filter(owner=request.user).count()
 
-    # Dodajemy też liczbę treningów do dashboardu
+    # Also adding training count to dashboard
     total_trainings = TrainingSession.objects.filter(owner=request.user).count()
 
     # --- Club Highest Break ---
@@ -2416,7 +2416,7 @@ def export_data_excel(request):
     ws_dash.append(['Club Highest Break', global_max_break])
 
     # =========================================================
-    # ARKUSZ 2: FULL PLAYER STATISTICS
+    # SHEET 2: FULL PLAYER STATISTICS
     # =========================================================
     ws_stats = workbook.create_sheet(title="Full Player Statistics")
 
@@ -2474,7 +2474,7 @@ def export_data_excel(request):
         ws_stats.append(row)
 
     # =========================================================
-    # ARKUSZ 3: TOURNAMENTS ARCHIVE
+    # SHEET 3: TOURNAMENTS ARCHIVE
     # =========================================================
     ws_tour = workbook.create_sheet(title="Tournaments Archive")
     ws_tour.append(['Name', 'Start Date', 'Variant', 'Status', 'Winner', 'Max Break', 'Max Break Player'])
@@ -2491,7 +2491,7 @@ def export_data_excel(request):
         ])
 
     # =========================================================
-    # ARKUSZ 4: REFEREES
+    # SHEET 4: REFEREES
     # =========================================================
     ws_ref = workbook.create_sheet(title="Referees")
     ws_ref.append(['Name', 'License', 'Matches Officiated', 'Last Match Date'])
@@ -2505,7 +2505,7 @@ def export_data_excel(request):
         ws_ref.append([str(r), r.license_number, count, last_date])
 
     # =========================================================
-    # ARKUSZ 5: MATCH HISTORY
+    # SHEET 5: MATCH HISTORY
     # =========================================================
     ws_matches = workbook.create_sheet(title="Match History")
     ws_matches.append(['Date', 'Player 1', 'Score', 'Player 2', 'Winner'])
@@ -2518,7 +2518,7 @@ def export_data_excel(request):
         ws_matches.append([date_str, str(m.player1), score_str, str(m.player2), str(m.winner)])
 
     # =========================================================
-    # ARKUSZ 6: TRAINING DIARY (NOWOŚĆ)
+    # SHEET 6: TRAINING DIARY (NEW)
     # =========================================================
     ws_train = workbook.create_sheet(title="Training Diary")
     ws_train.append(['Date', 'Type', 'Venue', 'Duration (min)', 'Rating (1-10)', 'Notes'])
@@ -2530,13 +2530,13 @@ def export_data_excel(request):
         t_type = t.get_session_type_display()
         t_venue = t.venue.name if t.venue else "Unknown/Private"
         t_rating = f"{t.rating}/10"
-        # Notatki skracamy do 100 znaków w Excelu, żeby nie robić bałaganu
+        # Shorten notes to 100 chars in Excel to avoid mess
         t_notes = str(t.notes)[:100] + "..." if t.notes and len(str(t.notes)) > 100 else (t.notes or "")
 
         ws_train.append([t_date, t_type, t_venue, t.duration_minutes, t_rating, t_notes])
 
     # =========================================================
-    # ZAPIS
+    # SAVE
     # =========================================================
     now_str = timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M')
     filename = f"snooker_report_{now_str}.xlsx"
@@ -2547,14 +2547,14 @@ def export_data_excel(request):
     return response
 
 
-@user_passes_test(lambda u: u.is_superuser)  # Tylko dla Superusera!
+@user_passes_test(lambda u: u.is_superuser)  # Only for Superuser!
 def admin_backup_json(request):
-    # Tworzymy bufor w pamięci (taki wirtualny plik)
+    # Create memory buffer (virtual file)
     output = StringIO()
 
-    # Wywołujemy komendę dumpdata (zrzut bazy)
-    # exclude: pomijamy sesje i logi admina, bo to śmieci, które tylko zajmują miejsce
-    # indent: ładne wcięcia w pliku (czytelność)
+    # Call dumpdata command (db dump)
+    # exclude: skip sessions and admin logs, as they are junk taking up space
+    # indent: nice indentation in file (readability)
     call_command(
         'dumpdata',
         exclude=['contenttypes', 'sessions', 'admin.logentry'],
@@ -2562,10 +2562,10 @@ def admin_backup_json(request):
         stdout=output
     )
 
-    # Przewijamy bufor na początek, żeby móc go odczytać
+    # Rewind buffer to start to read it
     output.seek(0)
 
-    # Przygotowujemy plik do pobrania
+    # Prepare file for download
     now_str = timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M')
     filename = f"FULL_DB_BACKUP_{now_str}.json"
 
@@ -2575,7 +2575,7 @@ def admin_backup_json(request):
     return response
 
 
-# --- 1. LISTA TRENINGÓW ---
+# --- 1. TRAINING LIST ---
 class TrainingListView(LoginRequiredMixin, ListView):
     model = TrainingSession
     template_name = 'training_list.html'
@@ -2583,41 +2583,41 @@ class TrainingListView(LoginRequiredMixin, ListView):
     paginate_by = 10
 
     def get_queryset(self):
-        # 1. Sprawdzamy, czy w URL jest podane ID gracza
+        # 1. Check if player ID is in URL
         player_id = self.kwargs.get('pk')
 
         if player_id:
-            # Jeśli tak: filtrujemy treningi TYLKO dla tego gracza
+            # If yes: filter trainings ONLY for this player
             self.player = get_object_or_404(Player, pk=player_id, owner=self.request.user)
             return TrainingSession.objects.filter(player=self.player).order_by('-date', '-created_at')
         else:
-            # Jeśli nie (widok ogólny): pokaż wszystkie treningi usera
+            # If not (general view): show all user trainings
             self.player = None
             return TrainingSession.objects.filter(owner=self.request.user).order_by('-date', '-created_at')
 
     def get_context_data(self, **kwargs):
-        # Przekazujemy obiekt 'player' do szablonu, żeby przyciski działały
+        # Pass 'player' object to template so buttons work
         context = super().get_context_data(**kwargs)
         context['player'] = getattr(self, 'player', None)
         return context
 
-# --- 2. DODAWANIE TRENINGU ---
+# --- 2. ADD TRAINING ---
 class TrainingCreateView(LoginRequiredMixin, CreateView):
     model = TrainingSession
     form_class = TrainingSessionForm
     template_name = 'training_form.html'
 
     def get_success_url(self):
-        # Przekieruj do listy treningów TEGO gracza, którego wybrano w formularzu
+        # Redirect to training list of THE player selected in form
         return reverse('player_training_list', kwargs={'pk': self.object.player.pk})
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['user'] = self.request.user
 
-        # SPRAWDZAMY CZY W ADRESIE JEST 'player_id'
+        # CHECK IF 'player_id' IS IN URL
         if 'player_id' in self.kwargs:
-            # Jeśli tak, pobieramy gracza i przekazujemy do formularza
+            # If yes, get player and pass to form
             from .models import Player
             from django.shortcuts import get_object_or_404
 
@@ -2627,15 +2627,15 @@ class TrainingCreateView(LoginRequiredMixin, CreateView):
         return kwargs
 
     def form_valid(self, form):
-        # Automatycznie przypisz właściciela (owner = user)
+        # Automatically assign owner (owner = user)
         form.instance.owner = self.request.user
         return super().form_valid(form)
 
-# --- 3. EDYCJA TRENINGU ---
+# --- 3. EDIT TRAINING ---
 class TrainingUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = TrainingSession
     form_class = TrainingSessionForm
-    template_name = 'training_form.html' # Używamy tego samego szablonu co przy dodawaniu
+    template_name = 'training_form.html' # Use the same template as for adding
 
     def get_success_url(self):
         return reverse('player_training_list', kwargs={'pk': self.object.player.pk})
@@ -2646,53 +2646,53 @@ class TrainingUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         return kwargs
 
     def test_func(self):
-        # Zabezpieczenie: Tylko właściciel może edytować swój trening
+        # Security: Only owner can edit their training
         session = self.get_object()
         return session.owner == self.request.user
 
-# --- 4. USUWANIE TRENINGU ---
+# --- 4. DELETE TRAINING ---
 class TrainingDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
     model = TrainingSession
     template_name = 'training_confirm_delete.html'
 
     def get_success_url(self):
-        # Wracamy do listy gracza, do którego należał usunięty trening
+        # Return to list of player who owned the deleted training
         return reverse('player_training_list', kwargs={'pk': self.object.player.pk})
 
     def test_func(self):
-        # Zabezpieczenie: Tylko właściciel może usunąć
+        # Security: Only owner can delete
         session = self.get_object()
         return session.owner == self.request.user
 
 
-# --- 5. SZCZEGÓŁY TRENINGU (PODGLĄD) ---
+# --- 5. TRAINING DETAILS (PREVIEW) ---
 class TrainingDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
     model = TrainingSession
     template_name = 'training_detail.html'
     context_object_name = 'session'
 
     def test_func(self):
-        # Tylko właściciel może podglądać swoje notatki
+        # Only owner can view their notes
         session = self.get_object()
         return session.owner == self.request.user
 
 
-# --- 6. STATYSTYKI TRENINGOWE (DASHBOARD DLA GRACZA) ---
+# --- 6. TRAINING STATISTICS (PLAYER DASHBOARD) ---
 class TrainingStatsView(LoginRequiredMixin, TemplateView):
     template_name = 'training_stats.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # 1. Pobieramy gracza z URL-a (PK/ID)
-        # Zakładam, że w urls.py masz: path('player/<int:pk>/stats/', ...)
+        # 1. Get player from URL (PK/ID)
+        # Assuming urls.py has: path('player/<int:pk>/stats/', ...)
         player_id = self.kwargs.get('pk')
         player = get_object_or_404(Player, pk=player_id)
 
-        # Opcjonalne zabezpieczenie: Czy to Twój gracz?
+        # Optional security: Is this your player?
         # if player.owner != self.request.user: raise PermissionDenied
 
-        # 2. Pobieranie parametrów filtra (Rok / Miesiąc)
+        # 2. Get filter parameters (Year / Month)
         today = datetime.date.today()
         try:
             selected_year = int(self.request.GET.get('year', today.year))
@@ -2704,14 +2704,14 @@ class TrainingStatsView(LoginRequiredMixin, TemplateView):
         except ValueError:
             selected_month = 0
 
-        # 3. Filtrowanie QuerySetu PO GRACZU (nie po Userze!)
+        # 3. Filter QuerySet BY PLAYER (not by User!)
         stats_qs = TrainingSession.objects.filter(player=player, date__year=selected_year)
 
-        # Jeśli wybrano konkretny miesiąc, zawężamy
+        # If specific month selected, narrow down
         if selected_month > 0:
             stats_qs = stats_qs.filter(date__month=selected_month)
 
-        # 4. OBLICZENIA (KPI)
+        # 4. CALCULATIONS (KPI)
         aggregates = stats_qs.aggregate(
             total_minutes=Sum('duration_minutes'),
             avg_rating=Avg('rating'),
@@ -2722,7 +2722,7 @@ class TrainingStatsView(LoginRequiredMixin, TemplateView):
         total_hours = round(total_minutes / 60, 1)
         avg_rating = aggregates['avg_rating'] or 0
 
-        # 5. DANE DO WYKRESÓW
+        # 5. CHART DATA
         focus_data = stats_qs.values('main_focus').annotate(minutes=Sum('duration_minutes')).order_by('-minutes')
 
         focus_labels = []
@@ -2734,9 +2734,9 @@ class TrainingStatsView(LoginRequiredMixin, TemplateView):
             focus_labels.append(readable_name)
             focus_values.append(item['minutes'])
 
-        # 6. Przekazanie wszystkiego do kontekstu
+        # 6. Pass everything to context
         context.update({
-            'player': player,  # Przekazujemy gracza, żeby wyświetlić jego imię
+            'player': player,  # Pass player to display their name
             'selected_year': selected_year,
             'selected_month': selected_month,
             'years_range': range(2023, today.year + 2),
@@ -2762,32 +2762,32 @@ class CompetitionMatchListPrintView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # 1. Pobieramy mecze (używamy select_related dla wydajności)
+        # 1. Get matches (use select_related for performance)
         matches_qs = Match.objects.filter(
             Q(group_stage__competition=self.object) |
             Q(knockout_stage__competition=self.object)
         ).select_related('group', 'knockout_stage', 'player1', 'player2').order_by('date', 'time')
 
-        # 2. Przerabiamy QuerySet na listę i dodajemy "ładne nazwy"
+        # 2. Convert QuerySet to list and add "nice names"
         matches = []
         for m in matches_qs:
-            # Domyślna nazwa (jeśli nic nie pasuje)
+            # Default name (if nothing matches)
             display_name = ""
 
             if m.group:
                 display_name = f"Gr {m.group.name}"
 
             elif m.knockout_stage:
-                # --- LOGIKA NAZEWNICTWA RUND ---
+                # --- ROUND NAMING LOGIC ---
 
-                # A. Mecz o 3 miejsce (zazwyczaj runda 99 lub nazwa zawiera "3rd")
+                # A. 3rd place match (usually round 99 or name contains "3rd")
                 if m.round_number == 99 or (m.knockout_name and "3rd" in m.knockout_name):
                     display_name = "3rd Place"
                 else:
-                    # B. Obliczamy nazwę na podstawie całkowitej liczby rund
-                    # Jeśli turniej ma 2 rundy (4 graczy):
-                    # Runda 1 (2-1=1) -> 1/2
-                    # Runda 2 (2-2=0) -> Final
+                    # B. Calculate name based on total number of rounds
+                    # If tournament has 2 rounds (4 players):
+                    # Round 1 (2-1=1) -> 1/2
+                    # Round 2 (2-2=0) -> Final
 
                     total = m.knockout_stage.num_rounds or 0
                     current = m.round_number
@@ -2804,7 +2804,7 @@ class CompetitionMatchListPrintView(LoginRequiredMixin, DetailView):
                     else:
                         display_name = f"Rd {current}"
 
-            # Doklejamy nazwę do obiektu (jako nowy atrybut 'print_stage_name')
+            # Attach name to object (as new attribute 'print_stage_name')
             m.print_stage_name = display_name
             matches.append(m)
 
@@ -2821,11 +2821,11 @@ class CompetitionGroupsPrintView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # Pytamy: "Daj mi GroupStage, który należy do tego turnieju (self.object)"
+        # Query: "Get me GroupStage belonging to this tournament (self.object)"
         group_stage = GroupStage.objects.filter(competition=self.object).first()
 
         if group_stage:
-            # Jeśli znaleźliśmy etap, pobieramy jego grupy
+            # If stage found, get its groups
             groups = group_stage.groups.all().prefetch_related(
                 'standings__player',
                 'matches__player1',
@@ -2853,26 +2853,26 @@ class CompetitionBracketPrintView(LoginRequiredMixin, DetailView):
         match_3rd_place = None
 
         if knockout_stage:
-            # Pobieramy mecze
+            # Get matches
             matches = Match.objects.filter(knockout_stage=knockout_stage).order_by('round_number', 'id')
 
-            # Szukamy meczu o 3 miejsce (zakładam runda 99 lub nazwa)
+            # Find 3rd place match (assume round 99 or name)
             match_3rd_place = matches.filter(
                 Q(round_number=99) | Q(knockout_name__icontains="3rd")
             ).first()
 
             total_rounds = knockout_stage.num_rounds
 
-            # --- ZMIANA: Pokaż maksymalnie 5 ostatnich rund (czyli od 1/16 do Finału) ---
-            # Jeśli chcesz od 1/8, zmień liczbę 4 na 3.
-            # Jeśli chcesz od 1/16, zostaw 4 (bo runda finałowa to 0 'wstecz', więc 4 wstecz to 5 rund)
+            # --- CHANGE: Show max last 5 rounds (i.e., from Last 32 to Final) ---
+            # If you want from Last 16, change 4 to 3.
+            # If you want from Last 32, leave 4 (because final is 0 'back', so 4 back is 5 rounds)
             start_round = max(1, total_rounds - 3)
 
             for r in range(start_round, total_rounds + 1):
-                # Filtrujemy mecze tylko dla danej rundy
+                # Filter matches only for given round
                 current_round_matches = matches.filter(round_number=r)
 
-                # --- LOGIKA NAZEWNICTWA (tak jak w harmonogramie) ---
+                # --- NAMING LOGIC (same as schedule) ---
                 diff = total_rounds - r
                 if diff == 0:
                     round_name = "Final"
@@ -2887,12 +2887,12 @@ class CompetitionBracketPrintView(LoginRequiredMixin, DetailView):
 
                 rounds_data.append({
                     'number': r,
-                    'name': round_name,  # <--- Nowe pole z ładną nazwą
+                    'name': round_name,  # <--- New field with nice name
                     'matches': current_round_matches
                 })
 
         context['rounds_data'] = rounds_data
-        context['match_3rd_place'] = match_3rd_place  # Przekazujemy osobno do szablonu
+        context['match_3rd_place'] = match_3rd_place  # Pass separately to template
         context['now'] = timezone.now()
         return context
 
@@ -2901,10 +2901,10 @@ class CustomLoginView(LoginView):
     template_name = 'login.html'
 
     def post(self, request, *args, **kwargs):
-        # 1. Sprawdzamy, czy użytkownik (IP) ma blokadę
+        # 1. Check if user (IP) is blocked
         ip = request.META.get('REMOTE_ADDR')
         if cache.get(f'block_ip_{ip}'):
-            # Jeśli zablokowany - zwracamy stronę z błędem, nie sprawdzając nawet hasła
+            # If blocked - return error page without checking password
             form = self.get_form()
             form.add_error(None, "Too many failed attempts. Please try again in 5 minutes.")
             return self.render_to_response(self.get_context_data(form=form))
@@ -2921,8 +2921,8 @@ class CustomLoginView(LoginView):
         if attempts >= 5:
             cache.set(f'block_ip_{ip}', True, 300)
 
-            # --- Czyścimy standardowy błąd Django ("Please enter correct...") ---
-            # Żeby użytkownik widział tylko konkret: "Zablokowano"
+            # --- Clear standard Django error ("Please enter correct...") ---
+            # So user sees only specifics: "Locked"
             if form._errors:
                 form._errors.clear()
 
@@ -2931,8 +2931,8 @@ class CustomLoginView(LoginView):
         return super().form_invalid(form)
 
     def form_valid(self, form):
-        # 3. To się uruchamia, gdy wpiszesz DOBRE hasło
-        # Czyścimy historię błędów
+        # 3. This triggers when you enter CORRECT password
+        # Clear error history
         ip = self.request.META.get('REMOTE_ADDR')
         cache.delete(f'login_errors_{ip}')
         cache.delete(f'block_ip_{ip}')

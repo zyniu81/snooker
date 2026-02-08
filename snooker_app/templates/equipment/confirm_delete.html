@@ -23,12 +23,12 @@
                     <form method="post">
                         {% csrf_token %}
                         <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
-                            {# Przycisk zatwierdzający (POST) #}
+                            {# Submit button (POST) #}
                             <button type="submit" class="btn btn-danger px-4 fw-bold">
                                 <i class="bi bi-trash-fill me-1"></i> Yes, Delete
                             </button>
 
-                            {# Przycisk Anuluj - wraca do listy gracza #}
+                            {# Cancel button - returns to player list #}
                             <a href="{% url 'equipment_list' item.player.id %}" class="btn btn-secondary px-4">Cancel</a>
                         </div>
                     </form>

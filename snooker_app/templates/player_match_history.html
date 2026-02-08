@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container mt-4 mb-5" style="max-width: 800px;">
 
-    {# HEADER I POWRÓT #}
+    {# HEADER AND RETURN #}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <a href="{% url 'player_detail' player.id %}" class="text-decoration-none text-muted small fw-bold">
@@ -14,7 +14,7 @@
             <h2 class="fw-bold mt-1">Match History</h2>
         </div>
 
-        {# FILTR H2H (SELECT) #}
+        {# H2H FILTER (SELECT) #}
         <form method="get" class="d-flex align-items-center">
             <select name="opponent" class="form-select border-primary shadow-sm" onchange="this.form.submit()" style="max-width: 250px;">
                 <option value="">-- All Opponents --</option>
@@ -27,31 +27,30 @@
         </form>
     </div>
 
-    {# --- SEKCJA H2H STATS (Widoczna tylko jak wybrano rywala) --- #}
+    {# --- H2H STATS SECTION (Visible only when opponent selected) --- #}
     {% if selected_opponent %}
     <div class="card bg-dark text-white shadow mb-4 border-0 overflow-hidden">
         <div class="card-body p-4 position-relative">
             <i class="bi bi-people-fill position-absolute text-white opacity-10" style="font-size: 8rem; right: -20px; top: -30px;"></i>
 
             <div class="row align-items-center text-center position-relative" style="z-index: 1;">
-                {# TY #}
+                {# YOU #}
                 <div class="col-4">
-                    {# Zamiast player.first_name dajemy player (użyje __str__) #}
+                    {# Instead of player.first_name we use player (uses __str__) #}
                     <h5 class="fw-bold mb-1">{{ player }}</h5>
                     <div class="display-4 fw-bold text-success">{{ stats.wins }}</div>
                     <small class="text-white-50">Wins</small>
                 </div>
 
-                {# ŚRODEK #}
+                {# MIDDLE #}
                 <div class="col-4">
                     <div class="text-uppercase small fw-bold text-white-50 mb-2">Total Matches</div>
                     <div class="fs-1 fw-bold">{{ stats.total }}</div>
                     <div class="badge bg-light text-dark mt-2">{{ stats.win_rate|floatformat:0 }}% Win Rate</div>
                 </div>
 
-                {# PRZECIWNIK #}
+                {# OPPONENT #}
                 <div class="col-4">
-                    {# TU BYŁ BŁĄD: Zamiast selected_opponent.first_name dajemy selected_opponent #}
                     <h5 class="fw-bold mb-1">{{ selected_opponent }}</h5>
                     <div class="display-4 fw-bold text-danger">{{ stats.losses }}</div>
                     <small class="text-white-50">Wins</small>
@@ -61,14 +60,14 @@
     </div>
     {% endif %}
 
-    {# --- LISTA MECZÓW --- #}
+    {# --- MATCH LIST --- #}
     <div class="card shadow-sm border-0">
         <div class="list-group list-group-flush" id="match-list-container">
-            {# Tutaj wczytujemy pierwszą stronę (partials) #}
+            {# Here we load the first page (partials) #}
             {% include 'partials/match_rows.html' %}
         </div>
 
-        {# KOMUNIKATY I PRZYCISK LOAD MORE #}
+        {# MESSAGES AND LOAD MORE BUTTON #}
         <div class="card-footer bg-white text-center py-3 border-0">
             {% if matches.has_next %}
                 <button id="load-more-btn" class="btn btn-outline-primary rounded-pill px-4 fw-bold" data-page="2">
@@ -85,7 +84,7 @@
 
 </div>
 
-{# --- SKRYPT DO ŁADOWANIA (AJAX) --- #}
+{# --- LOADING SCRIPT (AJAX) --- #}
 <script>
     document.getElementById('load-more-btn')?.addEventListener('click', function() {
         var btn = this;
@@ -93,11 +92,11 @@
         var page = btn.getAttribute('data-page');
         var spinner = btn.querySelector('.spinner-border');
 
-        // Blokujemy przycisk i pokazujemy spinner
+        // Disable button and show spinner
         btn.classList.add('disabled');
         spinner.classList.remove('d-none');
 
-        // Zachowujemy obecne filtry (np. opponent)
+        // Keep current filters (e.g. opponent)
         var url = new URL(window.location.href);
         url.searchParams.set('page', page);
 
@@ -106,16 +105,16 @@
         })
         .then(response => response.json())
         .then(data => {
-            // Dodajemy nowe wiersze
+            // Append new rows
             container.insertAdjacentHTML('beforeend', data.html);
 
-            // Aktualizujemy przycisk
+            // Update button
             if (data.has_next) {
                 btn.setAttribute('data-page', parseInt(page) + 1);
                 btn.classList.remove('disabled');
                 spinner.classList.add('d-none');
             } else {
-                btn.remove(); // Usuwamy przycisk
+                btn.remove(); // Remove button
                 document.getElementById('no-more-msg').classList.remove('d-none');
             }
         })

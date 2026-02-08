@@ -3,52 +3,52 @@
 {% block content %}
 
 <style>
-    /* Styl INPUTÓW - Wymuszamy !important */
+    /* INPUT STYLES - Force !important */
     .form-control, .form-select {
-        background-color: #f1f3f5 !important; /* Wyraźniejsze szare tło */
-        border: 2px solid transparent !important; /* Brak ramki na start */
-        border-radius: 12px !important;       /* Mocne zaokrąglenie */
-        padding: 12px 15px !important;        /* Wyższe pola */
+        background-color: #f1f3f5 !important; /* Clearer gray background */
+        border: 2px solid transparent !important; /* No border initially */
+        border-radius: 12px !important;       /* Strong rounding */
+        padding: 12px 15px !important;        /* Taller fields */
         font-weight: 600 !important;
         color: #495057 !important;
-        box-shadow: none !important;          /* Usuwamy domyślne cienie */
+        box-shadow: none !important;          /* Remove default shadows */
     }
 
-    /* Stan po kliknięciu (FOCUS) */
+    /* State on click (FOCUS) */
     .form-control:focus, .form-select:focus {
-        background-color: #ffffff !important; /* Robi się białe */
-        border-color: #000000 !important;     /* Czarna, elegancka ramka */
-        box-shadow: 0 4px 10px rgba(0,0,0,0.05) !important; /* Lekki cień pod spodem */
+        background-color: #ffffff !important; /* Turns white */
+        border-color: #000000 !important;     /* Black, elegant border */
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05) !important; /* Light shadow underneath */
     }
 
-    /* Styl ETYKIET */
+    /* LABEL Styles */
     .form-label {
         font-size: 0.7rem;
         font-weight: 800;
         text-transform: uppercase;
         color: #adb5bd;
-        margin-left: 10px; /* Przesunięcie nad pole */
+        margin-left: 10px; /* Offset above field */
         margin-bottom: 5px;
     }
 
-    /* --- POPRAWKA DLA GRUP (WAGA/DŁUGOŚĆ) --- */
+    /* --- FIX FOR GROUPS (WEIGHT/LENGTH) --- */
 
-    /* Input (Lewa strona) */
+    /* Input (Left side) */
     .input-group > .form-control {
         border-top-right-radius: 0 !important;
         border-bottom-right-radius: 0 !important;
     }
 
-    /* Jednostka (Prawa strona) */
+    /* Unit (Right side) */
     .input-group > .form-select {
         border-top-left-radius: 0 !important;
         border-bottom-left-radius: 0 !important;
-        background-color: #e2e6ea !important; /* Ciemniejszy odcień dla jednostki */
-        border-left: 1px solid rgba(0,0,0,0.1) !important; /* Kreska oddzielająca */
+        background-color: #e2e6ea !important; /* Darker shade for unit */
+        border-left: 1px solid rgba(0,0,0,0.1) !important; /* Separator line */
         color: #000 !important;
     }
 
-    /* Żeby inputy się nie rozjeżdżały */
+    /* Prevent inputs from misaligning */
     .input-group {
         align-items: stretch;
     }

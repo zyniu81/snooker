@@ -14,10 +14,10 @@ import random
 # Create your models here.
 
 class Player(models.Model):
-    # --- 1. DANE OSOBOWE I KONFIGURACJA ---
+    # --- 1. PERSONAL DATA AND CONFIGURATION ---
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='players', null=True, blank=True)
     user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='player_profile')
-    # Nowe pole - link do oryginału:
+    # New field - link to original:
     cloned_from = models.ForeignKey(
         'self',
         on_delete=models.SET_NULL,
@@ -36,46 +36,46 @@ class Player(models.Model):
     nickname = models.CharField(max_length=30, blank=True, null=True)
     photo = models.ImageField(upload_to='players_photos/', blank=True, null=True)
 
-    # --- 2. STATYSTYKI MECZOWE (Kariera) ---
+    # --- 2. MATCH STATISTICS (Career) ---
     matches_played = models.IntegerField(default=0)
     matches_won = models.IntegerField(default=0)
     matches_drawn = models.IntegerField(default=0)
     matches_lost = models.IntegerField(default=0)
 
-    # --- 3. STATYSTYKI FRAME'ÓW (Kariera) ---
+    # --- 3. FRAME STATISTICS (Career) ---
     frames_played = models.IntegerField(default=0)
     frames_won = models.IntegerField(default=0)
     frames_lost = models.IntegerField(default=0)
-    fastest_frame_time = models.DurationField(blank=True, null=True, help_text="Najkrótsza rozegrana partia")
-    longest_frame_time = models.DurationField(blank=True, null=True, help_text="Najdłuższa rozegrana partia")
-    avg_frame_time = models.DurationField(blank=True, null=True, help_text="Średni czas trwania partii")
+    fastest_frame_time = models.DurationField(blank=True, null=True, help_text="Shortest played frame")
+    longest_frame_time = models.DurationField(blank=True, null=True, help_text="Longest played frame")
+    avg_frame_time = models.DurationField(blank=True, null=True, help_text="Average frame duration")
 
-    # --- 4. PUNKTY I TECHNIKA ---
-    total_career_points = models.BigIntegerField(default=0, help_text="Suma wszystkich wbitych punktów")
-    global_pot_success = models.FloatField(default=0.0, help_text="Średnia skuteczność wbić z kariery (%)")
-    global_safety_success = models.FloatField(default=0.0, help_text="Średnia skuteczność odstawnych z kariery (%)")
-    avg_shot_time = models.DurationField(blank=True, null=True, help_text="Średni czas na uderzenie")
+    # --- 4. POINTS AND TECHNIQUE ---
+    total_career_points = models.BigIntegerField(default=0, help_text="Sum of all points scored")
+    global_pot_success = models.FloatField(default=0.0, help_text="Average career pot success (%)")
+    global_safety_success = models.FloatField(default=0.0, help_text="Average career safety success (%)")
+    avg_shot_time = models.DurationField(blank=True, null=True, help_text="Average shot time")
 
-    # --- 5. BREAKI (Prestiż) ---
+    # --- 5. BREAKS (Prestige) ---
     highest_break = models.IntegerField(default=0)
-    centuries_count = models.IntegerField(default=0, help_text="Liczba breaków 100+")
-    fifties_count = models.IntegerField(default=0, help_text="Liczba breaków 50+")
-    max_breaks_count = models.IntegerField(default=0, help_text="Liczba breaków maksymalnych (147, 155, 167)")
+    centuries_count = models.IntegerField(default=0, help_text="Number of century breaks (100+)")
+    fifties_count = models.IntegerField(default=0, help_text="Number of 50+ breaks")
+    max_breaks_count = models.IntegerField(default=0, help_text="Number of maximum breaks (147, 155, 167)")
 
-    # Histogram breaków kariery (np. {"10-19": 150, "20-29": 40...})
+    # Career break histogram (e.g. {"10-19": 150, "20-29": 40...})
     career_break_stats = models.JSONField(default=dict, blank=True)
 
-    # --- 6. SPECJALNE OSIĄGNIĘCIA (Nowość) ---
-    deciders_played = models.IntegerField(default=0, help_text="Liczba rozegranych partii rozstrzygających")
-    deciders_won = models.IntegerField(default=0, help_text="Liczba wygranych partii rozstrzygających")
-    whitewashes_count = models.IntegerField(default=0, help_text="Liczba meczów wygranych do zera")
+    # --- 6. SPECIAL ACHIEVEMENTS (New) ---
+    deciders_played = models.IntegerField(default=0, help_text="Number of deciders played")
+    deciders_won = models.IntegerField(default=0, help_text="Number of deciders won")
+    whitewashes_count = models.IntegerField(default=0, help_text="Number of whitewash wins")
 
-    # --- 7. SERIE (Streaks) ---
-    consecutive_matches_won = models.IntegerField(default=0, help_text="Rekordowa seria wygranych meczów z rzędu")
-    current_match_streak = models.IntegerField(default=0, help_text="Aktualna seria wygranych meczów (robocze)")
+    # --- 7. STREAKS ---
+    consecutive_matches_won = models.IntegerField(default=0, help_text="Record streak of consecutive match wins")
+    current_match_streak = models.IntegerField(default=0, help_text="Current match win streak (working)")
 
-    consecutive_frames_won = models.IntegerField(default=0, help_text="Rekordowa seria wygranych frame'ów z rzędu")
-    current_frame_streak = models.IntegerField(default=0, help_text="Aktualna seria wygranych frame'ów (robocze)")
+    consecutive_frames_won = models.IntegerField(default=0, help_text="Record streak of consecutive frame wins")
+    current_frame_streak = models.IntegerField(default=0, help_text="Current frame win streak (working)")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -123,11 +123,11 @@ class Player(models.Model):
         return self._format_duration(self.avg_frame_time)
 
     def _format_duration(self, duration):
-        """Pomocnicza funkcja do formatowania czasu MM:SS"""
+        """Helper function to format time as MM:SS"""
         if duration:
             total_seconds = int(duration.total_seconds())
             minutes, seconds = divmod(total_seconds, 60)
-            # Jeśli gra trwała ponad godzinę, dodaj godziny (opcjonalnie)
+            # If game lasted over an hour, add hours (optional)
             hours, minutes = divmod(minutes, 60)
             if hours > 0:
                 return f'{hours}:{minutes:02}:{seconds:02}'
@@ -145,24 +145,24 @@ class Venue(models.Model):
     # Image
     image = models.ImageField(upload_to='venue_images/', blank=True, null=True)
 
-    # Kontakt
+    # Contact
     phone = models.CharField(max_length=20, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
     website = models.URLField(blank=True, null=True)
 
-    # Szczegóły techniczne
+    # Technical details
     tables_count = models.PositiveIntegerField(
         blank=True, null=True,
         validators=[MinValueValidator(0)],
-        help_text="Liczba stołów"
+        help_text="Number of tables"
     )
     table_info = models.CharField(
         max_length=100, blank=True, null=True,
-        help_text="Np. Star Tables, Strachan Cloth"
+        help_text="E.g. Star Tables, Strachan Cloth"
     )
     price_per_hour = models.DecimalField(
         max_digits=6, decimal_places=2, blank=True, null=True,
-        help_text="Cena za godzinę (PLN)"
+        help_text="Price per hour ($)"
     )
 
     capacity = models.PositiveIntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
@@ -172,7 +172,7 @@ class Venue(models.Model):
 
 
 class Referee(models.Model):
-    # --- NOWE POLA WŁASNOŚCI ---
+    # --- NEW OWNERSHIP FIELDS ---
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='referees')
     is_public = models.BooleanField(default=False)
     # ---------------------------
@@ -197,11 +197,11 @@ class Referee(models.Model):
 
 
 class Group(models.Model):
-    """Reprezentuje konkretną grupę (np. Grupa 1) w ramach etapu grupowego"""
+    """Represents a specific group (e.g. Group 1) within a group stage"""
     stage = models.ForeignKey('GroupStage', on_delete=models.CASCADE, related_name='groups')
     name = models.CharField(max_length=10, help_text="Group number, e.g. '1', '2'")
 
-    # Status zakończenia konkretnej grupy
+    # Completion status of specific group
     is_finished = models.BooleanField(default=False)
 
     def __str__(self):
@@ -213,38 +213,37 @@ class Group(models.Model):
 
 class GroupStanding(models.Model):
     """
-    Tabela wyników dla konkretnego gracza w grupie.
-
+    Results table for a specific player in a group.
     """
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='standings')
     player = models.ForeignKey('Player', on_delete=models.CASCADE)
 
-    # 1. MECZE
+    # 1. MATCHES
     matches_played = models.IntegerField(default=0)
     matches_won = models.IntegerField(default=0)
     matches_drawn = models.IntegerField(default=0)
     matches_lost = models.IntegerField(default=0)
 
-    # 2. FRAMY (Kluczowe dla tabeli)
+    # 2. FRAMES (Key for table)
     frames_won = models.IntegerField(default=0)
     frames_lost = models.IntegerField(default=0)
 
-    # 3. MAŁE PUNKTY (Suma punktów wbitych w meczach)
+    # 3. SMALL POINTS (Sum of points scored in matches)
     small_points_scored = models.IntegerField(default=0, help_text="Total of all points scored")
     small_points_conceded = models.IntegerField(default=0, help_text="Total of all points lost")
 
-    # 4. DODATKI
+    # 4. EXTRAS
     highest_break = models.IntegerField(default=0, help_text="The highest break in this group")
 
-    # Status awansu (do kolorowania tabeli)
+    # Qualification status (for table coloring)
     is_qualified = models.BooleanField(default=False, help_text="Has the player advanced further?")
     final_rank = models.PositiveIntegerField(null=True, blank=True, help_text="Place taken (after group end)")
 
-    # 5. GŁÓWNA PUNKTACJA
+    # 5. MAIN SCORING
     points = models.IntegerField(default=0, help_text="Points in the table")
 
     class Meta:
-        # Sortowanie: Punkty > Różnica Frame'ów > Wygrane Frame'y > Różnica Małych Punktów
+        # Sort: Points > Frame Difference > Frames Won > Small Points Difference
         ordering = ['-points', '-frames_won', 'frames_lost', '-small_points_scored']
         unique_together = ['group', 'player']
 
@@ -261,7 +260,7 @@ class GroupStanding(models.Model):
 
 
 class Match(models.Model):
-    # --- 1. KONFIGURACJA PODSTAWOWA ---
+    # --- 1. BASIC CONFIGURATION ---
     STATUS_CHOICES = [
         ('SCHEDULED', 'Scheduled'),
         ('IN_PROGRESS', 'In Progress'),
@@ -286,25 +285,25 @@ class Match(models.Model):
     time = models.TimeField()
     venue = models.ForeignKey('Venue', on_delete=models.SET_NULL, blank=True, null=True)
     table_number = models.CharField(max_length=10, blank=True, null=True, help_text="e.g. 1, 12, A1, other")
-    round_number = models.PositiveIntegerField(default=1, help_text="Numer kolejki (Grupy) lub Rundy (Puchar)")
+    round_number = models.PositiveIntegerField(default=1, help_text="Round number (Group) or Round (Cup/Knockout)")
 
     number_of_frames = models.PositiveIntegerField()
     allow_draws = models.BooleanField(default=False)
 
-    # --- 2. GRACZE I SĘDZIOWIE ---
+    # --- 2. PLAYERS AND REFEREES ---
     player1 = models.ForeignKey('Player', on_delete=models.SET_NULL, null=True, blank=True,
                                 related_name='matches_as_p1')
     player2 = models.ForeignKey('Player', on_delete=models.SET_NULL, null=True, blank=True,
                                 related_name='matches_as_p2')
     referees = models.ManyToManyField('Referee', blank=True, related_name='matches')
 
-    # Cache nazw (tekstowe)
+    # Name cache (text)
     player_names = models.TextField(blank=True, null=True)
     referee_names = models.TextField(blank=True, null=True)
     player_ids = models.TextField(blank=True, null=True)
     referee_ids = models.TextField(blank=True, null=True)
 
-    # --- 3. STRUKTURA TURNIEJOWA ---
+    # --- 3. TOURNAMENT STRUCTURE ---
     group_stage = models.ForeignKey('GroupStage', on_delete=models.CASCADE, null=True, blank=True,
                                     related_name='matches')
     knockout_stage = models.ForeignKey('KnockoutStage', on_delete=models.CASCADE, null=True, blank=True,
@@ -313,19 +312,19 @@ class Match(models.Model):
     group_name = models.CharField(max_length=10, blank=True, null=True)
     knockout_name = models.CharField(max_length=100, blank=True, null=True)
 
-    # --- 4. WYNIKI KOŃCOWE (Podsumowanie) ---
+    # --- 4. FINAL RESULTS (Summary) ---
     winner = models.ForeignKey('Player', on_delete=models.SET_NULL, null=True, blank=True, related_name='won_matches')
 
-    final_score_player1 = models.IntegerField(default=0, help_text="Wygrane frame'y P1")
-    final_score_player2 = models.IntegerField(default=0, help_text="Wygrane frame'y P2")
+    final_score_player1 = models.IntegerField(default=0, help_text="Frames won P1")
+    final_score_player2 = models.IntegerField(default=0, help_text="Frames won P2")
 
-    # --- 5. STATYSTYKI CZASOWE ---
-    total_duration = models.DurationField(blank=True, null=True, help_text="Suma czasu gry netto")
+    # --- 5. TIME STATISTICS ---
+    total_duration = models.DurationField(blank=True, null=True, help_text="Total net game time")
     avg_frame_time = models.DurationField(blank=True, null=True)
     min_frame_time = models.DurationField(blank=True, null=True)
     max_frame_time = models.DurationField(blank=True, null=True)
 
-    # --- 7. BREAKI I SERIE ---
+    # --- 7. BREAKS AND STREAKS ---
 
     highest_break_frame_p1 = models.ForeignKey('Frame', on_delete=models.SET_NULL, null=True, blank=True,
                                                related_name='hb_match_p1')
@@ -339,7 +338,7 @@ class Match(models.Model):
     longest_pot_streak_p1 = models.IntegerField(default=0)
     longest_pot_streak_p2 = models.IntegerField(default=0)
 
-    # --- 8. DANE TYMCZASOWE ---
+    # --- 8. TEMPORARY DATA ---
     temp_player1 = models.ForeignKey('Player', null=True, blank=True, related_name='temp_player1_matches',
                                      on_delete=models.CASCADE)
     temp_player2 = models.ForeignKey('Player', null=True, blank=True, related_name='temp_player2_matches',
@@ -350,20 +349,20 @@ class Match(models.Model):
 
     def get_ordered_players(self):
         """
-        Zwraca listę graczy zawsze w kolejności: [Gospodarz, Gość].
-        Teraz to jest sztywne, wynikające z modelu.
+        Returns list of players always in order: [Host, Guest].
+        Now this is fixed, derived from the model.
         """
-        # Zwracamy listę [p1, p2], filtrując None (gdyby kogoś brakowało)
+        # Return list [p1, p2], filtering None (in case someone is missing)
         return [p for p in [self.player1, self.player2] if p]
 
     @property
     def sort_key(self):
         """
-        Zwraca klucz do sortowania listy meczów.
-        Kolejność: Data -> Czas -> ID (kolejność tworzenia)
+        Returns key for sorting match list.
+        Order: Date -> Time -> ID (creation order)
         """
-        # Formatujemy tak, aby sortowanie tekstowe działało chronologicznie
-        # Np. "2023-10-20 14:00:00 125"
+        # Format so text sorting works chronologically
+        # E.g. "2023-10-20 14:00:00 125"
         return f"{self.date} {self.time} {self.id}"
 
     def formatted_duration(self):
@@ -386,14 +385,14 @@ class Match(models.Model):
         return f'{self.player_names} - {self.date}'
 
     def get_game_status(self):
-        # Sprawdzamy czy mamy obu graczy na fotelach
+        # Check if we have both players in seats
         if not self.player1 or not self.player2:
             return {'is_finished': False, 'winner': None}
 
         p1 = self.player1
         p2 = self.player2
 
-        # LICZYMY ZWYCIĘSTWA
+        # COUNT WINS
         p1_wins = Frame.objects.filter(match_player__match=self, winner=p1).count()
         p2_wins = Frame.objects.filter(match_player__match=self, winner=p2).count()
 
@@ -401,7 +400,7 @@ class Match(models.Model):
         is_finished = False
         winner = None
 
-        # --- SCENARIUSZ A: REMISY DOZWOLONE ---
+        # --- SCENARIO A: DRAWS ALLOWED ---
         if self.allow_draws:
             if total_played >= self.number_of_frames:
                 is_finished = True
@@ -410,9 +409,9 @@ class Match(models.Model):
                 elif p2_wins > p1_wins:
                     winner = p2
                 else:
-                    winner = None  # REMIS
+                    winner = None  # DRAW
 
-        # --- SCENARIUSZ B: STANDARDOWY ---
+        # --- SCENARIO B: STANDARD ---
         else:
             threshold = (self.number_of_frames // 2) + 1
             if p1_wins >= threshold:
@@ -429,21 +428,21 @@ class Match(models.Model):
         return {'is_finished': is_finished, 'winner': winner}
 
     def get_real_score(self):
-        """Zwraca krotkę (wynik_p1, wynik_p2) liczoną z frame'ów"""
+        """Returns tuple (score_p1, score_p2) calculated from frames"""
         if not self.player1 or not self.player2:
             return 0, 0
 
-        # Liczymy wygrane framy, sprawdzając pole 'winner' we Frame
+        # Count won frames by checking 'winner' field in Frame
         p1_score = Frame.objects.filter(match_player__match=self, winner=self.player1).count()
         p2_score = Frame.objects.filter(match_player__match=self, winner=self.player2).count()
 
         return p1_score, p2_score
 
     def update_status_from_frames(self):
-        """Aktualizuje status meczu i zwycięzcę na podstawie rozegranych frame'ów"""
-        status_data = self.get_game_status()  # Ta metoda już liczy kto wygrał
+        """Updates match status and winner based on played frames"""
+        status_data = self.get_game_status()  # This method already calculates who won
 
-        # Aktualizujemy pola w bazie
+        # Update fields in database
         self.winner = status_data['winner']
 
         if status_data['is_finished']:
@@ -451,7 +450,7 @@ class Match(models.Model):
         else:
             self.status = 'IN_PROGRESS'
 
-        # Opcjonalnie: Zapisz też wynik punktowy do pól final_score
+        # Optional: Save score to final_score fields
         scores = self.get_real_score()
         self.final_score_player1 = scores[0]
         self.final_score_player2 = scores[1]
@@ -469,7 +468,7 @@ class Match(models.Model):
         if self.number_of_frames is not None and self.number_of_frames <= 0:
             raise ValidationError('The number of frames must be greater than zero.')
 
-        # Walidacja: Gracz nie może grać sam ze sobą
+        # Validation: Player cannot play against themselves
         if self.player1 and self.player2 and self.player1 == self.player2:
             raise ValidationError('Player 1 and Player 2 cannot be the same person.')
 
@@ -487,7 +486,7 @@ class Match(models.Model):
     def save(self, *args, **kwargs):
         is_new = self.pk is None
 
-        # 1. Aktualizacja cache nazw
+        # 1. Update name cache
         names = []
         ids = []
         if self.player1:
@@ -499,40 +498,40 @@ class Match(models.Model):
         self.player_names = ', '.join(names)
         self.player_ids = ', '.join(ids)
 
-        # 2. Zapisz Mecz (żeby mieć ID)
+        # 2. Save Match (to get ID)
         super().save(*args, **kwargs)
 
-        # 3. Cache Sędziów (To już mieliśmy)
+        # 3. Referee Cache (We already had this)
         if not is_new:
             self.referee_names = ', '.join([str(referee) for referee in self.referees.all()])
             self.referee_ids = ', '.join([str(referee.id) for referee in self.referees.all()])
             super().save(update_fields=['referee_names', 'referee_ids', 'player_names', 'player_ids'])
 
-        # --- MOST DO STAREGO SYSTEMU (MatchPlayer Sync) - POPRAWKA 2 ---
+        # --- BRIDGE TO OLD SYSTEM (MatchPlayer Sync) - FIX 2 ---
         from .models import MatchPlayer
         from django.db import transaction
 
         with transaction.atomic():
-            # 1. Lista aktualnych ID
+            # 1. List of current IDs
             current_player_ids = []
             if self.player1: current_player_ids.append(self.player1.id)
             if self.player2: current_player_ids.append(self.player2.id)
 
-            # 2. USUWANIE: Usuń wpisy graczy, których już nie ma
+            # 2. DELETE: Remove entries of players who are no longer present
             MatchPlayer.objects.filter(match=self).exclude(player_id__in=current_player_ids).delete()
 
-            # 3. ZROBIENIE MIEJSCA (Fix dla SWAP):
-            # Zamiast liczb ujemnych (których baza nie lubi), używamy dużych liczb dodatnich.
-            # Przesuwamy 1 -> 101, 2 -> 102.
+            # 3. MAKE SPACE (Fix for SWAP):
+            # Instead of negative numbers (which DB dislikes), we use large positive numbers.
+            # Shift 1 -> 101, 2 -> 102.
             for mp in MatchPlayer.objects.filter(match=self):
-                # Zmieniamy tylko jeśli to są "normalne" pozycje (poniżej 100)
+                # Change only if they are "normal" positions (below 100)
                 if mp.position < 50:
                     mp.position = 100 + mp.position
                     mp.save()
 
-            # 4. USTAWIANIE: Przypisz właściwe pozycje
-            # System znajdzie gracza na pozycji 101 i zmieni mu na 1.
-            # System znajdzie gracza na pozycji 102 i zmieni mu na 2.
+            # 4. SETTING: Assign correct positions
+            # System will find player at position 101 and change to 1.
+            # System will find player at position 102 and change to 2.
 
             if self.player1:
                 MatchPlayer.objects.update_or_create(
@@ -556,8 +555,8 @@ class Match(models.Model):
             self.delete()
 
     def delete(self, *args, **kwargs):
-        # 1. Znajdujemy graczy tymczasowych powiązanych z TYM meczem
-        # Zbieramy ich z foteli player1 i player2
+        # 1. Find temporary players associated with THIS match
+        # Collect them from player1 and player2 seats
         temp_players_to_check = []
 
         if self.player1 and self.player1.is_temporary:
@@ -566,14 +565,14 @@ class Match(models.Model):
         if self.player2 and self.player2.is_temporary:
             temp_players_to_check.append(self.player2)
 
-        # 2. Wykonujemy standardowe usuwanie meczu
+        # 2. Perform standard match deletion
         super().delete(*args, **kwargs)
 
-        # 3. Sprzątanie sierot (Orphan Cleanup)
+        # 3. Orphan Cleanup
         for player in temp_players_to_check:
-            # Sprawdzamy, czy ten gracz jest przypisany do innych meczów.
-            # Musimy sprawdzić obie role: jako Gospodarz (matches_as_p1) i jako Gość (matches_as_p2)
-            # Te related_name dodaliśmy w definicji ForeignKeys.
+            # Check if this player is assigned to other matches.
+            # Must check both roles: as Host (matches_as_p1) and as Guest (matches_as_p2)
+            # These related_names were added in ForeignKeys definition.
 
             p1_count = player.matches_as_p1.count()
             p2_count = player.matches_as_p2.count()
@@ -581,12 +580,12 @@ class Match(models.Model):
             if (p1_count + p2_count) == 0:
                 player.delete()
 
-    # --- WIRTUALNE STATYSTYKI MECZU (Poprawione: pobieranie przez MatchPlayer) ---
+    # --- VIRTUAL MATCH STATISTICS (Fixed: fetching via MatchPlayer) ---
 
-    # 1. SUMA PUNKTÓW
+    # 1. TOTAL POINTS
     @property
     def total_points_player1(self):
-        # Używamy globalnego obiektu Frame (tak jak w Twoim get_game_status)
+        # We use global Frame object (as in your get_game_status)
         return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('points_scored_player1'))[
             'total'] or 0
 
@@ -595,7 +594,7 @@ class Match(models.Model):
         return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('points_scored_player2'))[
             'total'] or 0
 
-    # 2. NAJWYŻSZY BREAK W MECZU
+    # 2. HIGHEST BREAK IN MATCH
     @property
     def highest_break_p1(self):
         return Frame.objects.filter(match_player__match=self).aggregate(top=models.Max('max_break_player1'))[
@@ -606,7 +605,7 @@ class Match(models.Model):
         return Frame.objects.filter(match_player__match=self).aggregate(top=models.Max('max_break_player2'))[
             'top'] or 0
 
-    # 3. SUMA FAULI
+    # 3. TOTAL FOULS
     @property
     def total_fouls_p1(self):
         return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('player1_fouls'))[
@@ -617,7 +616,7 @@ class Match(models.Model):
         return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('player2_fouls'))[
             'total'] or 0
 
-    # 4. PUNKTY ODDAJĄCE (Z FAULI)
+    # 4. CONCEDED POINTS (FROM FOULS)
     @property
     def foul_points_conceded_p1(self):
         return Frame.objects.filter(match_player__match=self).aggregate(total=models.Sum('foul_points_player1'))[
@@ -657,10 +656,10 @@ class Match(models.Model):
             return 0
         return (pots / total_shots) * 100
 
-    # 6. AST (Average Shot Time) - Średnia meczowa per gracz
+    # 6. AST (Average Shot Time) - Match average per player
     @property
     def match_ast_p1(self):
-        # Pobieramy sumę czasu i sumę uderzeń ze wszystkich framów
+        # Get total time and total shots from all frames
         data = Frame.objects.filter(match_player__match=self).aggregate(
             total_time=models.Sum('time_shots_player1'),
             total_shots=models.Sum('total_shots_player1')
@@ -669,14 +668,14 @@ class Match(models.Model):
         time_sum = data['total_time']
         shots_sum = data['total_shots'] or 0
 
-        # Zabezpieczenie przed dzieleniem przez zero
+        # Safeguard against division by zero
         if not time_sum or shots_sum == 0:
             return "-"
 
-        # Obliczenie średniej w sekundach
+        # Calculate average in seconds
         avg_seconds = time_sum.total_seconds() / shots_sum
 
-        # Zwracamy format np. "24s"
+        # Return format e.g. "24s"
         return f"{int(avg_seconds)}s"
 
     @property
@@ -695,19 +694,19 @@ class Match(models.Model):
         avg_seconds = time_sum.total_seconds() / shots_sum
         return f"{int(avg_seconds)}s"
 
-    # --- CZAS MECZU ---
+    # --- MATCH DURATION ---
 
     @property
     def match_total_duration(self):
-        # Sumujemy czasy wszystkich framów podpiętych do tego meczu
+        # Sum times of all frames attached to this match
         total = Frame.objects.filter(match_player__match=self).aggregate(
             t=models.Sum('time_duration')
         )['t']
-        return total  # Zwraca obiekt czasu (timedelta) lub None
+        return total  # Returns time object (timedelta) or None
 
     @property
     def formatted_match_duration(self):
-        # Ta metoda robi ładny napis np. "2h 15m"
+        # This method makes a nice string e.g. "2h 15m"
         d = self.match_total_duration
         if d:
             total_seconds = int(d.total_seconds())
@@ -742,11 +741,11 @@ class Frame(models.Model):
     match_player = models.ForeignKey('MatchPlayer', on_delete=models.CASCADE)
     frame_number = models.PositiveIntegerField()
 
-    # Punkty
+    # Points
     points_scored_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
     points_scored_player2 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
 
-    # Breaki
+    # Breaks
     max_break_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
     max_break_player2 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
 
@@ -759,20 +758,20 @@ class Frame(models.Model):
         default=list, blank=True
     )
 
-    # Faule
+    # Fouls
     player1_fouls = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
     player2_fouls = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
     foul_points_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
     foul_points_player2 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
 
-    # Zwycięzca
+    # Winner
     winner = models.ForeignKey('Player', on_delete=models.SET_NULL, null=True, blank=True, related_name='won_frames')
 
-    # Czas
+    # Time
     time_duration = models.DurationField(blank=True, null=True)
 
-    # Wbicia (Pot Success)
-    # NOWOŚĆ: Ilość wbitych bil (żeby móc łatwo liczyć średnią w meczu)
+    # Pot Success
+    # NEW: Number of potted balls (to easily calculate match average)
     potted_balls_player1 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     potted_balls_player2 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
 
@@ -781,13 +780,13 @@ class Frame(models.Model):
     total_pot_success_percentage_player1 = models.FloatField(default=0.0)
     total_pot_success_percentage_player2 = models.FloatField(default=0.0)
 
-    # Odstawne (Safety)
+    # Safety Shots
     safety_shot_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
     safety_shot_player2 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
     successful_safety_shots_player1 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     successful_safety_shots_player2 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
 
-    # Strzały
+    # Shots
     misses_player1 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     misses_player2 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     total_shots_player1 = models.IntegerField(default=0, validators=[MinValueValidator(0)])
@@ -826,17 +825,17 @@ class Frame(models.Model):
 
 
 class Competition(models.Model):
-    # --- 1. WŁASNOŚĆ I WIDOCZNOŚĆ ---
+    # --- 1. OWNERSHIP AND VISIBILITY ---
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='competitions')
     is_public = models.BooleanField(default=False)
 
-    # --- 2. DANE PODSTAWOWE ---
+    # --- 2. BASIC DATA ---
     name = models.CharField(max_length=100)
     start_date = models.DateField()
     end_date = models.DateField()
     venue = models.ForeignKey('Venue', on_delete=models.SET_NULL, blank=True, null=True)
 
-    # --- NOWE: STATUS TURNIEJU ---
+    # --- NEW: TOURNAMENT STATUS ---
     STATUS_CHOICES = [
         ('SCHEDULED', 'Scheduled'),
         ('ACTIVE', 'Active'),
@@ -844,7 +843,7 @@ class Competition(models.Model):
     ]
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='SCHEDULED')
 
-    # --- 3. KONFIGURACJA GRY ---
+    # --- 3. GAME CONFIGURATION ---
     game_variant = models.CharField(
         max_length=20,
         choices=Match.VARIANT_CHOICES,
@@ -852,15 +851,15 @@ class Competition(models.Model):
         help_text="Default game variant for all matches in the tournament"
     )
 
-    # --- REKORDY TURNIEJU ---
-    highest_break_points = models.IntegerField(default=0, help_text="Najwyższy break w całym turnieju")
+    # --- TOURNAMENT RECORDS ---
+    highest_break_points = models.IntegerField(default=0, help_text="Highest break in the entire tournament")
     highest_break_player = models.ForeignKey(
         'Player', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='competition_high_breaks',
-        help_text="Autor najwyższego breaka"
+        help_text="Author of the highest break"
     )
 
-    # --- UCZESTNICY ---
+    # --- PARTICIPANTS ---
     players = models.ManyToManyField('Player', related_name='competitions', blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -870,8 +869,8 @@ class Competition(models.Model):
         return self.name
 
     def is_active(self):
-        # Turniej jest aktywny TYLKO gdy ma status ACTIVE
-        # Daty są pomocnicze, ale decyduje status nadany przez organizatora
+        # Tournament is active ONLY if status is ACTIVE
+        # Dates are auxiliary, status set by organizer decides
         return self.status == 'ACTIVE'
 
     @property
@@ -894,23 +893,23 @@ class Competition(models.Model):
 
     @property
     def winner(self):
-        # Pobieramy wynik z CompetitionResult gdzie result to WINNER
+        # Get result from CompetitionResult where result is WINNER
         res = self.results.filter(result='WINNER').first()
         return res.player if res else None
 
 
 class Stage(models.Model):
-    """Abstrakcyjny model etapu (wspólny dla Grup i Pucharu)"""
+    """Abstract stage model (shared by Groups and Cup/Knockout)"""
     name = models.CharField(max_length=100, help_text="E.g. 'Group Stage' or 'Finals'")
     competition = models.ForeignKey('Competition', related_name='%(class)s_stages', on_delete=models.CASCADE)
     order = models.PositiveIntegerField(default=1, help_text="Tournament stage order (1, 2, 3...)")
     is_finished = models.BooleanField(default=False)
 
-    # --- NOWE POLA: REKORD ETAPU ---
+    # --- NEW FIELDS: STAGE RECORD ---
     highest_break_points = models.IntegerField(default=0, help_text="The highest break in this stage")
     highest_break_player = models.ForeignKey(
         'Player', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='%(class)s_high_breaks',  # Django stworzy unikalne nazwy dla Group i Knockout
+        related_name='%(class)s_high_breaks',  # Django will create unique names for Group and Knockout
         help_text="Author of the highest break in this stage"
     )
 
@@ -923,26 +922,26 @@ class Stage(models.Model):
 
 
 class GroupStage(Stage):
-    # --- KONFIGURACJA GRUP ---
+    # --- GROUP CONFIGURATION ---
     num_groups = models.IntegerField(validators=[MinValueValidator(1)])
     players_per_group = models.IntegerField(validators=[MinValueValidator(2)])
     matches_per_pair = models.IntegerField(default=1, validators=[MinValueValidator(1)])
 
-    # --- NOWE POLE: Automatyczny awans ---
+    # --- NEW FIELD: Automatic qualification ---
     num_qualifiers = models.IntegerField(
         default=2,
         validators=[MinValueValidator(1)],
-        help_text="Ilu graczy automatycznie awansuje z grupy?"
+        help_text="How many players automatically qualify from the group?"
     )
 
-    # --- ZASADY PUNKTACJI ---
+    # --- SCORING RULES ---
     points_for_win = models.IntegerField(default=3)
     points_for_draw = models.IntegerField(default=1)
     points_for_loss = models.IntegerField(default=0)
     allow_draws = models.BooleanField(default=True)
 
     def create_groups_and_matches(self, default_frames, selected_players=None):
-        """Generuje grupy i mecze w systemie Round Robin (każdy z każdym z podziałem na kolejki)."""
+        """Generates groups and matches in Round Robin system (everyone vs everyone divided into rounds)."""
         from .models import Group, GroupStanding, Match
 
         if selected_players:
@@ -954,19 +953,19 @@ class GroupStage(Stage):
         comp_owner = self.competition.owner
         total_players = len(players)
 
-        # Czyścimy stare grupy
+        # Clear old groups
         self.groups.all().delete()
 
         for i in range(self.num_groups):
             group_name_str = str(i + 1)
 
-            # 1. Tworzymy obiekt GRUPY
+            # 1. Create GROUP object
             group = Group.objects.create(
                 stage=self,
                 name=group_name_str
             )
 
-            # Dobieramy graczy do grupy
+            # Select players for the group
             start_idx = i * self.players_per_group
             end_idx = start_idx + self.players_per_group
             group_players = players[start_idx:end_idx] if start_idx < total_players else []
@@ -974,7 +973,7 @@ class GroupStage(Stage):
             if len(group_players) < 2:
                 continue
 
-            # 2. Tworzymy TABELĘ
+            # 2. Create TABLE (Standings)
             for player in group_players:
                 GroupStanding.objects.create(
                     group=group, player=player, points=0,
@@ -984,13 +983,13 @@ class GroupStage(Stage):
                     is_qualified=False
                 )
 
-            # 3. GENEROWANIE MECZY (Algorytm Round Robin / Kołowy)
-            # Dzięki temu mamy ładne kolejki (Round 1, Round 2...)
+            # 3. GENERATING MATCHES (Round Robin Algorithm)
+            # Thanks to this we have nice rounds (Round 1, Round 2...)
 
-            # Kopia listy graczy do rotacji
+            # Copy of player list for rotation
             rotation_players = list(group_players)
 
-            # Jeśli nieparzysta liczba graczy, dodajemy "Ducha" (Bye)
+            # If odd number of players, add "Ghost" (Bye)
             if len(rotation_players) % 2 != 0:
                 rotation_players.append(None)
 
@@ -998,24 +997,24 @@ class GroupStage(Stage):
             num_rounds = num_participants - 1
             half = num_participants // 2
 
-            # Pętla rewanżowa (jeśli matches_per_pair > 1)
+            # Rematch loop (if matches_per_pair > 1)
             for leg in range(self.matches_per_pair):
 
-                # Resetujemy ustawienie graczy dla nowej rundy rewanżowej
+                # Reset player arrangement for new rematch round
                 current_rotation = list(rotation_players)
 
                 for round_idx in range(num_rounds):
-                    # Obliczamy faktyczny numer kolejki (uwzględniając rewanże)
-                    # Np. przy 4 graczach: Rundy 1-3, potem rewanże 4-6
+                    # Calculate actual round number (considering rematches)
+                    # E.g. with 4 players: Rounds 1-3, then rematches 4-6
                     actual_round_number = (leg * num_rounds) + round_idx + 1
 
                     for j in range(half):
                         p1 = current_rotation[j]
                         p2 = current_rotation[num_participants - 1 - j]
 
-                        # Jeśli obaj istnieją (żaden nie jest "Duchem"), tworzymy mecz
+                        # If both exist (neither is a "Ghost"), create match
                         if p1 and p2:
-                            # Zamieniamy gospodarza z gościem w rundach rewanżowych (dla porządku)
+                            # Swap host and guest in rematch rounds (for order)
                             if leg % 2 == 1:
                                 host, guest = p2, p1
                             else:
@@ -1024,7 +1023,7 @@ class GroupStage(Stage):
                             Match.objects.create(
                                 owner=comp_owner,
                                 is_public=self.competition.is_public,
-                                date=self.competition.start_date,  # Data do edycji później
+                                date=self.competition.start_date,  # Date to be edited later
                                 time=timezone.now().time(),
                                 venue=self.competition.venue,
                                 number_of_frames=default_frames,
@@ -1036,47 +1035,47 @@ class GroupStage(Stage):
                                 status='SCHEDULED',
                                 player1=host,
                                 player2=guest,
-                                round_number=actual_round_number  # <--- TU ZAPISUJEMY KOLEJKĘ
+                                round_number=actual_round_number  # <--- SAVING ROUND HERE
                             )
 
-                    # Rotacja zawodników (Algorytm Berger)
-                    # Zostawiamy pierwszego (indeks 0) w miejscu, resztę przesuwamy
+                    # Player rotation (Berger Algorithm)
+                    # Keep the first one (index 0) in place, shift the rest
                     # [0, 1, 2, 3] -> [0, 3, 1, 2]
                     current_rotation.insert(1, current_rotation.pop())
 
     def regenerate_schedule(self):
         """
-        Regeneruje mecze dla aktualnego składu grup (bez usuwania grup).
-        Używane po ręcznej edycji (Manage Groups).
+        Regenerates matches for the current group composition (without deleting groups).
+        Used after manual editing (Manage Groups).
         """
         from .models import Match
 
-        # 1. Zabezpieczenie: Jeśli są zakończone mecze, nie dotykamy!
+        # 1. Safeguard: If there are finished matches, do not touch!
         if self.matches.filter(status='FINISHED').exists():
             return False, "Cannot regenerate schedule because some matches are already finished."
 
-        # 2. Pobieramy ustawienia z istniejących meczów (zanim je usuniemy)
-        # Żeby wiedzieć ile frame'ów grać.
+        # 2. Get settings from existing matches (before deleting them)
+        # To know how many frames to play.
         sample_match = self.matches.first()
-        frames_count = sample_match.number_of_frames if sample_match else 2  # Domyślnie 2 jakby co
+        frames_count = sample_match.number_of_frames if sample_match else 2  # Default to 2 just in case
 
-        # 3. Usuwamy tylko mecze (SCHEDULED)
+        # 3. Delete only matches (SCHEDULED)
         self.matches.all().delete()
 
-        # 4. Generujemy nowe pary dla każdej grupy (Logika Round Robin)
+        # 4. Generate new pairs for each group (Round Robin Logic)
         comp_owner = self.competition.owner
 
         for group in self.groups.all():
-            # Pobieramy graczy z tabeli tej grupy
+            # Get players from this group's table
             group_players = [standing.player for standing in group.standings.all()]
 
             if len(group_players) < 2:
                 continue
 
-            # --- Algorytm Round Robin (ten sam co przy tworzeniu) ---
+            # --- Round Robin Algorithm (same as creation) ---
             rotation_players = list(group_players)
             if len(rotation_players) % 2 != 0:
-                rotation_players.append(None)  # "Duch"
+                rotation_players.append(None)  # "Ghost"
 
             num_participants = len(rotation_players)
             num_rounds = num_participants - 1
@@ -1122,16 +1121,16 @@ class GroupStage(Stage):
 
 
 class KnockoutStage(Stage):
-    # --- KONFIGURACJA DRABINKI ---
+    # --- BRACKET CONFIGURATION ---
     num_rounds = models.IntegerField(validators=[MinValueValidator(1)],
-                                     help_text="Liczba rund (np. 3 dla ćwierćfinałów: 1/4 -> 1/2 -> Finał)")
+                                     help_text="Number of rounds (e.g. 3 for quarter-finals: 1/4 -> 1/2 -> Final)")
     frames_per_match = models.IntegerField(validators=[MinValueValidator(1)])
 
-    # Opcjonalnie: Mecz o 3 miejsce?
+    # Optional: 3rd Place Match?
     has_third_place_match = models.BooleanField(default=False)
 
     def create_knockout_matches(self, selected_players=None):
-        """Tworzy drabinkę."""
+        """Creates the bracket."""
         if selected_players:
             players = list(selected_players)
         else:
@@ -1150,7 +1149,7 @@ class KnockoutStage(Stage):
 
             round_name = self._get_round_name(current_round_matches)
 
-            # round_num idzie od 0. Zapiszmy w bazie jako 1, 2, 3...
+            # round_num starts at 0. Save in DB as 1, 2, 3...
             db_round_number = round_num + 1
 
             for i in range(current_round_matches):
@@ -1177,12 +1176,12 @@ class KnockoutStage(Stage):
                     status='SCHEDULED',
                     player1=p1,
                     player2=p2,
-                    round_number=db_round_number  # <--- ZAPISUJEMY RUNDĘ
+                    round_number=db_round_number  # <--- SAVING ROUND
                 )
 
             current_round_matches = current_round_matches // 2
 
-        # Mecz o 3. miejsce
+        # 3rd Place Match
         if self.has_third_place_match and self.num_rounds > 1:
             Match.objects.create(
                 owner=comp_owner,
@@ -1196,15 +1195,15 @@ class KnockoutStage(Stage):
                 knockout_stage=self,
                 knockout_name="3rd Place Match",
                 status='SCHEDULED',
-                round_number=99  # Specjalny numer dla meczu o 3 miejsce
+                round_number=99  # Special number for 3rd place match
             )
 
     def _get_round_name(self, matches_count):
         """
-        Zwraca nazwę rundy na podstawie liczby meczów w tej rundzie.
-        4 mecze -> Ćwierćfinał
-        2 mecze -> Półfinał
-        1 mecz  -> Finał
+        Returns round name based on the number of matches in that round.
+        4 matches -> Quarter-Final
+        2 matches -> Semi-Final
+        1 match  -> Final
         """
         if matches_count == 1:
             return "Final"
@@ -1227,9 +1226,9 @@ class KnockoutStage(Stage):
         verbose_name_plural = 'Knockout Stages'
 
 
-# --- 4. EQUIPMENT (Historia Sprzętu - Wersja PRO) ---
+# --- 4. EQUIPMENT (Equipment History - PRO Version) ---
 class Equipment(models.Model):
-    # Typy sprzętu
+    # Equipment Types
     TYPE_CHOICES = [
         ('CUE', 'Snooker Cue'),
         ('TIP', 'Cue Tip'),
@@ -1238,7 +1237,7 @@ class Equipment(models.Model):
         ('OTHER', 'Other'),
     ]
 
-    # Jednostki i Opcje
+    # Units and Options
     WEIGHT_UNITS = [('OZ', 'oz'), ('G', 'g')]
     LENGTH_UNITS = [('INCH', 'inch'), ('CM', 'cm')]
     JOINT_CHOICES = [('1PC', '1-piece'), ('3/4', '3/4'), ('2PC', '1/2 (Center)'), ('4/4', '4/4')]
@@ -1246,31 +1245,31 @@ class Equipment(models.Model):
         ('SS', 'Super Soft'), ('S', 'Soft'), ('M', 'Medium'),
         ('H', 'Hard'), ('XH', 'Extra Hard')
     ]
-    SHAFT_MATERIALS = [('ASH', 'Ash (Jesion)'), ('MAPLE', 'Maple (Klon)'), ('CARBON', 'Carbon'), ('OTHER', 'Other')]
+    SHAFT_MATERIALS = [('ASH', 'Ash'), ('MAPLE', 'Maple'), ('CARBON', 'Carbon'), ('OTHER', 'Other')]
 
-    # Relacje
+    # Relationships
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='equipment')
 
-    # Podstawowe
+    # Basic
     item_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='CUE')
     brand = models.CharField(max_length=50, blank=True, null=True, verbose_name="Manufacturer/Brand")
     name = models.CharField(max_length=100, help_text="Model name or custom name")
 
-    # --- SPECYFIKACJA (Detale) ---
-    # Kij
+    # --- SPECIFICATION (Details) ---
+    # Cue
     shaft_material = models.CharField(max_length=10, choices=SHAFT_MATERIALS, blank=True, null=True)
     joint_type = models.CharField(max_length=5, choices=JOINT_CHOICES, blank=True, null=True)
 
-    # Waga
+    # Weight
     weight_value = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, verbose_name="Weight")
     weight_unit = models.CharField(max_length=4, choices=WEIGHT_UNITS, default='OZ', blank=True, null=True)
 
-    # Długość
+    # Length
     length_value = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, verbose_name="Length")
     length_unit = models.CharField(max_length=4, choices=LENGTH_UNITS, default='INCH', blank=True, null=True)
 
-    # Ferula
+    # Ferrule
     ferrule_material = models.CharField(max_length=30, blank=True, null=True, help_text="e.g. Brass, Titanium")
     ferrule_size = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True,
                                        help_text="Diameter in mm")
@@ -1280,7 +1279,7 @@ class Equipment(models.Model):
     tip_diameter = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True,
                                        verbose_name="Tip Size (mm)")
 
-    # Logika i Historia
+    # Logic and History
     start_date = models.DateField(help_text="Start date of usage")
     end_date = models.DateField(null=True, blank=True, help_text="Leave empty if currently in use")
     notes = models.TextField(blank=True, null=True)
@@ -1300,35 +1299,35 @@ class EquipmentPhoto(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        # Jeśli to zdjęcie jest główne, odznacz inne główne dla tego sprzętu
+        # If this photo is main, uncheck other main photos for this equipment
         if self.is_main:
             EquipmentPhoto.objects.filter(equipment=self.equipment).update(is_main=False)
         super().save(*args, **kwargs)
 
 
-# --- 5. TRAINING SESSION (Dziennik Treningowy) ---
+# --- 5. TRAINING SESSION (Training Diary) ---
 class TrainingSession(models.Model):
-    # --- LISTA A: FORMAT TRENINGU ---
+    # --- LIST A: TRAINING FORMAT ---
     TYPE_CHOICES = [
-        ('SOLO', 'Solo Practice'),  # Luźne granie
-        ('LINEUP', 'Line-up / Drills'),  # Ustawki / Zadaniowy
-        ('SPARING', 'Sparing (No Match)'),  # Gra z kumplem bez wpisywania wyniku
-        ('MATCH', 'Match Play'),  # Mecz o stawkę / turniejowy
-        ('COACHING', 'Coaching Session'),  # Z trenerem
+        ('SOLO', 'Solo Practice'),  # Casual play
+        ('LINEUP', 'Line-up / Drills'),  # Drills / Setups
+        ('SPARING', 'Sparing (No Match)'),  # Playing with a buddy without scoring
+        ('MATCH', 'Match Play'),  # Competitive match / Tournament
+        ('COACHING', 'Coaching Session'),  # With a coach
     ]
 
-    # --- LISTA B: GŁÓWNY CEL (MAIN FOCUS) ---
+    # --- LIST B: MAIN FOCUS ---
     FOCUS_CHOICES = [
-        ('GENERAL', 'General / Mixed'),  # Ogólny / Rozgrzewka
-        ('TECHNIQUE', 'Technique / Cue Action'),  # Technika / Postawa
-        ('POTTING', 'Potting Success'),  # Skuteczność wbić
-        ('LONG', 'Long Potting'),  # Długie wbicia
-        ('BREAK', 'Break Building'),  # Budowanie breaków
-        ('SAFETY', 'Safety / Tactical'),  # Odstawne / Taktyka
-        ('ESCAPES', 'Escapes / Snookers'),  # Wyjścia ze snookerów / Psychologia
-        ('REST', 'Rest Play'),  # Gra przyrządami (krzyżak)
-        ('CLEARANCE', 'Clearance Drills'),  # Czyszczenie stołu
-        ('MATCH_SIM', 'Match Simulation'),  # Symulacja meczu (Solo)
+        ('GENERAL', 'General / Mixed'),  # General / Warm-up
+        ('TECHNIQUE', 'Technique / Cue Action'),  # Technique / Stance
+        ('POTTING', 'Potting Success'),  # Potting Success
+        ('LONG', 'Long Potting'),  # Long Potting
+        ('BREAK', 'Break Building'),  # Break Building
+        ('SAFETY', 'Safety / Tactical'),  # Safety / Tactical
+        ('ESCAPES', 'Escapes / Snookers'),  # Escapes / Psychology
+        ('REST', 'Rest Play'),  # Rest Play
+        ('CLEARANCE', 'Clearance Drills'),  # Clearing the table
+        ('MATCH_SIM', 'Match Simulation'),  # Match Simulation (Solo)
     ]
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     player = models.ForeignKey('Player', on_delete=models.CASCADE, related_name='sessions')
@@ -1337,18 +1336,18 @@ class TrainingSession(models.Model):
     date = models.DateField(default=timezone.now)
     duration_minutes = models.PositiveIntegerField(help_text="Duration in minutes", default=60)
 
-    # Wybór formatu i celu
+    # Format and focus selection
     session_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='SOLO')
     main_focus = models.CharField(max_length=15, choices=FOCUS_CHOICES, default='GENERAL')
 
-    # --- STATYSTYKI OPCJONALNE (DOSTĘPNE NA PRZYSZŁOŚĆ) ---
+    # --- OPTIONAL STATISTICS (FUTURE PROOF) ---
     best_break = models.PositiveIntegerField(
         default=0,
         blank=True,
         help_text="Highest break achieved (Optional)"
     )
 
-    # Procenty (0-100) - wszystkie opcjonalne (blank=True, null=True)
+    # Percentages (0-100) - all optional (blank=True, null=True)
     pot_success = models.PositiveIntegerField(
         blank=True, null=True,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
@@ -1365,7 +1364,7 @@ class TrainingSession(models.Model):
         help_text="Long Potting %"
     )
 
-    # --- POZOSTAŁE ---
+    # --- OTHER ---
     notes = models.TextField(blank=True, null=True, help_text="Notes, feelings, specific drills used")
     rating = models.PositiveIntegerField(
         default=5,
@@ -1379,7 +1378,7 @@ class TrainingSession(models.Model):
         return f"{self.date} - {self.get_session_type_display()} ({self.get_main_focus_display()})"
 
 
-# --- 6. COMPETITION RESULT (Osiągnięcia Turniejowe) ---
+# --- 6. COMPETITION RESULT (Tournament Achievements) ---
 class CompetitionResult(models.Model):
     RESULT_CHOICES = [
         # --- PODIUM ---
@@ -1388,10 +1387,10 @@ class CompetitionResult(models.Model):
         ('THIRD_PLACE', '3rd Place 🥉'),
         ('FOURTH_PLACE', '4th Place'),
 
-        # --- ETAPY DYNAMICZNE ---
-        ('KNOCKOUT_ROUND', 'Knockout Round (Last X)'),  # Np. Last 16, Last 128
-        ('GROUP_STAGE', 'Group Stage'),  # Np. Grupy I, Grupy II
-        ('QUALIFIER', 'Qualifier'),  # Kwalifikacje
+        # --- DYNAMIC STAGES ---
+        ('KNOCKOUT_ROUND', 'Knockout Round (Last X)'),  # E.g. Last 16, Last 128
+        ('GROUP_STAGE', 'Group Stage'),  # E.g. Group I, Group II
+        ('QUALIFIER', 'Qualifier'),  # Qualifier
     ]
 
     competition = models.ForeignKey('Competition', on_delete=models.CASCADE, related_name='results')
@@ -1399,31 +1398,31 @@ class CompetitionResult(models.Model):
 
     result = models.CharField(max_length=20, choices=RESULT_CHOICES)
 
-    # --- NOWE MAGICZNE POLE ---
+    # --- NEW MAGIC FIELD ---
     detail_number = models.PositiveIntegerField(
         null=True, blank=True,
-        help_text="Dla Knockout: wpisz liczbę (np. 32 dla Last 32). Dla Group: numer etapu (np. 2 dla Group Stage II)."
+        help_text="For Knockout: enter number (e.g. 32 for Last 32). For Group: stage number (e.g. 2 for Group Stage II)."
     )
 
     rank = models.PositiveIntegerField(
         default=0,
-        help_text="Miejsce liczbowo do sortowania (1=Winner, 2=Runner-up, 3=3rd Place, 4=4th Place, 5-8=Quarter...)"
+        help_text="Numeric rank for sorting (1=Winner, 2=Runner-up, 3=3rd Place, 4=4th Place, 5-8=Quarter...)"
     )
 
     prize_money = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     class Meta:
-        # Jeden gracz może mieć tylko jeden wynik końcowy w danym turnieju
+        # A player can have only one final result in a given tournament
         unique_together = ('competition', 'player')
-        ordering = ['rank', 'detail_number']  # Sortujemy po randze, a przy remisach po szczegółach
+        ordering = ['rank', 'detail_number']  # Sort by rank, then details for ties
 
     def __str__(self):
-        # Logika inteligentnego wyświetlania nazwy
+        # Smart name display logic
         if self.result == 'KNOCKOUT_ROUND' and self.detail_number:
             status = f"Last {self.detail_number}"
         elif self.result == 'GROUP_STAGE':
             if self.detail_number and self.detail_number > 1:
-                # Zamiana cyfry na rzymską (opcjonalnie) lub po prostu "Stage 2"
+                # Convert digit to Roman (optional) or just "Stage 2"
                 status = f"Group Stage {self.detail_number}"
             else:
                 status = "Group Stage"
@@ -1433,41 +1432,41 @@ class CompetitionResult(models.Model):
         return f"{self.player} - {status} in {self.competition}"
 
 
-# --- MODEL PROFILU UŻYTKOWNIKA (Avatar, Dane Klubu/Organizatora) ---
+# --- USER PROFILE MODEL (Avatar, Club/Organizer Data) ---
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
 
-    # 1. WIZUALNE
+    # 1. VISUAL
     image = models.ImageField(default='default_profile.jpg', upload_to='profile_pics', blank=True, null=True)
 
-    # 2. DANE ORGANIZATORA / KLUBU
+    # 2. ORGANIZER / CLUB DATA
     club_name = models.CharField(max_length=150, blank=True, null=True, help_text="Name of club or organization")
     founded_date = models.DateField(blank=True, null=True, help_text="Date of club foundation")
 
-    # 3. LOKALIZACJA
+    # 3. LOCATION
     address = models.CharField(max_length=255, blank=True, null=True, help_text="Street and number")
     city = models.CharField(max_length=100, blank=True, null=True, help_text="City")
 
-    # 4. KONTAKT (Nowość)
+    # 4. CONTACT (New)
     public_email = models.EmailField(blank=True, null=True, help_text="Public contact email (visible to players)")
     phone_main = models.CharField(max_length=20, blank=True, null=True, help_text="Main contact number")
     phone_secondary = models.CharField(max_length=20, blank=True, null=True, help_text="Alternative number")
 
-    # 5. SOCIAL MEDIA & WEB (Nowość)
+    # 5. SOCIAL MEDIA & WEB (New)
     website = models.URLField(blank=True, null=True, help_text="Official website URL")
     facebook = models.URLField(blank=True, null=True, help_text="Facebook profile URL")
     instagram = models.URLField(blank=True, null=True, help_text="Instagram profile URL")
     twitter = models.URLField(blank=True, null=True, help_text="X (Twitter) profile URL")
 
-    # 6. INNE
+    # 6. OTHER
     bio = models.TextField(max_length=500, blank=True, null=True, help_text="A short description about you or the club")
 
     def __str__(self):
         return f'{self.user.username} Profile'
 
 
-# --- SYGNAŁY (Bez zmian - niezbędne do automatyzacji) ---
+# --- SIGNALS (Unchanged - essential for automation) ---
 
 @receiver(post_save, sender=User)
 def create_profile(sender, instance, created, raw=False, **kwargs):
@@ -1483,21 +1482,21 @@ def save_profile(sender, instance, **kwargs):
     instance.profile.save()
 
 
-# --- SYSTEM RANKINGOWY (Foundation) ---
+# --- RANKING SYSTEM (Foundation) ---
 
 class Ranking(models.Model):
     """
-    Definicja rankingu (np. 'Sezon 2026', 'Liga Wtorkowa', 'Ranking Wszechczasów').
-    To jest kontener na punkty graczy.
+    Ranking definition (e.g. 'Season 2026', 'Tuesday League', 'All-time Ranking').
+    This is a container for player points.
     """
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rankings')
-    name = models.CharField(max_length=100, help_text="Nazwa rankingu, np. 'Sezon 2025/2026'")
+    name = models.CharField(max_length=100, help_text="Ranking name, e.g. 'Season 2025/2026'")
     description = models.TextField(blank=True, null=True)
 
-    # Czy ranking jest aktywny (czy pokazywać go na głównej liście)
+    # Is ranking active (show on main list)
     is_active = models.BooleanField(default=True)
 
-    # Daty obowiązywania (opcjonalne, do archiwizacji)
+    # Validity dates (optional, for archiving)
     start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
 
@@ -1510,48 +1509,48 @@ class Ranking(models.Model):
 
 class RankingPosition(models.Model):
     """
-    Pojedynczy wiersz w rankingu. Przypisuje gracza do rankingu i przechowuje jego statystyki.
+    Single row in the ranking. Assigns a player to a ranking and stores their stats.
     """
     ranking = models.ForeignKey(Ranking, on_delete=models.CASCADE, related_name='positions')
     player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='ranking_positions')
 
-    # --- GŁÓWNE KRYTERIA ---
-    points = models.IntegerField(default=0, help_text="Główne punkty rankingowe")
+    # --- MAIN CRITERIA ---
+    points = models.IntegerField(default=0, help_text="Main ranking points")
     total_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0.00,
-                                         help_text="Suma wygranych nagród pieniężnych")
+                                         help_text="Total prize money won")
 
-    # --- HISTORIA POZYCJI (Do strzałek w górę/w dół) ---
-    current_rank = models.IntegerField(default=0, help_text="Aktualna pozycja (obliczana przy aktualizacji)")
-    previous_rank = models.IntegerField(default=0, help_text="Poprzednia pozycja (do pokazywania awansów/spadków)")
+    # --- POSITION HISTORY (For up/down arrows) ---
+    current_rank = models.IntegerField(default=0, help_text="Current rank (calculated during update)")
+    previous_rank = models.IntegerField(default=0, help_text="Previous rank (for showing rise/fall)")
 
-    # --- STATYSTYKI TURNIEJOWE ---
-    tournaments_played = models.IntegerField(default=0, help_text="Liczba rozegranych turniejów w tym cyklu")
-    titles_won = models.IntegerField(default=0, help_text="Liczba wygranych turniejów")
-    finals_reached = models.IntegerField(default=0, help_text="Liczba finałów")
+    # --- TOURNAMENT STATISTICS ---
+    tournaments_played = models.IntegerField(default=0, help_text="Number of tournaments played in this cycle")
+    titles_won = models.IntegerField(default=0, help_text="Number of tournaments won")
+    finals_reached = models.IntegerField(default=0, help_text="Number of finals reached")
 
-    # --- STATYSTYKI MECZOWE ---
+    # --- MATCH STATISTICS ---
     matches_played = models.IntegerField(default=0)
     matches_won = models.IntegerField(default=0)
     matches_lost = models.IntegerField(default=0)
-    matches_drawn = models.IntegerField(default=0)  # Dla lig z remisami
+    matches_drawn = models.IntegerField(default=0)  # For leagues with draws
 
-    # --- STATYSTYKI FREJMOWE (SNOOKER SPECIFIC) ---
+    # --- FRAME STATISTICS (SNOOKER SPECIFIC) ---
     frames_won = models.IntegerField(default=0)
     frames_lost = models.IntegerField(default=0)
 
-    # --- MAŁE PUNKTY (Small Points) ---
+    # --- SMALL POINTS ---
     small_points_scored = models.IntegerField(default=0)
     small_points_conceded = models.IntegerField(default=0)
 
-    # --- BREAKI (SNOOKER SPECIFIC) ---
+    # --- BREAKS (SNOOKER SPECIFIC) ---
     highest_break = models.IntegerField(default=0)
-    centuries_count = models.IntegerField(default=0, help_text="Liczba breaków 100+")
-    fifties_count = models.IntegerField(default=0, help_text="Liczba breaków 50+")
+    centuries_count = models.IntegerField(default=0, help_text="Number of century breaks (100+)")
+    fifties_count = models.IntegerField(default=0, help_text="Number of 50+ breaks")
 
     class Meta:
-        # Jeden gracz może być tylko raz w danym rankingu
+        # A player can only be once in a given ranking
         unique_together = ('ranking', 'player')
-        # Domyślne sortowanie: najpierw punkty, potem wygrane turnieje, potem mniej porażek
+        # Default sort: points first, then titles won, then fewer losses
         ordering = ['-points', '-titles_won', '-matches_won']
 
     def __str__(self):
@@ -1573,28 +1572,28 @@ class SharingToken(models.Model):
     code = models.CharField(max_length=6, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # Opcjonalnie: Jeśli kod ma dotyczyć tylko jednego konkretnego gracza
-    # Jeśli puste -> oznacza udostępnienie CAŁEJ stajni
+    # Optional: If code applies to only one specific player
+    # If empty -> means sharing the ENTIRE stable
     specific_player = models.ForeignKey(Player, on_delete=models.CASCADE, null=True, blank=True)
 
     def is_valid(self):
-        # Kod ważny tylko 90 sekund
+        # Code valid for only 90 seconds
         return timezone.now() < self.created_at + timedelta(seconds=90)
 
     def __str__(self):
         return f"Token {self.code} ({self.owner.username})"
 
 
-# Ten dekorator mówi: "Uruchom mnie, gdy usunięto obiekt Match"
+# This decorator says: "Run me when a Match object is deleted"
 @receiver(post_delete, sender='snooker_app.Match')
 def update_stats_on_delete(sender, instance, **kwargs):
     """
-    Automatycznie aktualizuje statystyki graczy po usunięciu meczu.
+    Automatically updates player stats after match deletion.
     """
-    # Importujemy tutaj, żeby uniknąć błędu "circular import" (pętli importów)
+    # Import here to avoid "circular import" error
     from .services import update_career_stats
 
-    print(f"--- USUNIĘTO MECZ! Aktualizuję graczy: {instance.player1} i {instance.player2} ---")
+    print(f"--- MATCH DELETED! Updating players: {instance.player1} and {instance.player2} ---")
 
     if instance.player1:
         update_career_stats(instance.player1)

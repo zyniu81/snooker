@@ -64,7 +64,7 @@
                             </div>
                         </div>
 
-                        {# --- UKRYWANIE OPCJI DLA ZWYKŁYCH USERÓW --- #}
+                        {# --- HIDE OPTIONS FOR REGULAR USERS --- #}
                         {% if user.is_superuser %}
                         <div class="mb-4 p-3 bg-light border rounded">
                             <h6 class="small fw-bold text-muted mb-2">Admin Options</h6>
@@ -78,7 +78,7 @@
                             </div>
                         </div>
                         {% else %}
-                            {# Dla pewności renderujemy jako hidden, żeby formularz otrzymał dane #}
+                            {# Render as hidden to ensure form receives data #}
                             {{ form.allow_draws.as_hidden }}
                             {{ form.is_public.as_hidden }}
                         {% endif %}
@@ -87,7 +87,7 @@
                             <i class="bi bi-people-fill me-2"></i>Players
                         </h6>
 
-                        {# --- SEKCJA: GRACZ 1 vs GRACZ 2 (POPRAWIONA) --- #}
+                        {# --- SECTION: PLAYER 1 vs PLAYER 2 (FIXED) --- #}
                         {% if form.player1 and form.player2 %}
                         <div class="row">
                             <div class="col-md-6 mb-3">
@@ -128,7 +128,7 @@
                             </div>
                         </div>
 
-                        {# --- ZMIANA: OFFICIALS -> REFEREES --- #}
+                        {# --- CHANGE: OFFICIALS -> REFEREES --- #}
                         <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 mt-4">
                             <i class="bi bi-whistle me-2"></i>Referees
                         </h6>
@@ -160,10 +160,10 @@
 </div>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        // Lista pól, które chcemy zapamiętać
+        // List of fields to save
         const fieldsToSave = ['id_date', 'id_time', 'id_venue', 'id_game_variant', 'id_number_of_frames', 'id_table_number', 'id_player1'];
 
-        // 1. PRZYWRACANIE DANYCH (Jeśli są w pamięci)
+        // 1. RESTORE DATA (If in memory)
         if (localStorage.getItem("match_draft_saved") === "true") {
             fieldsToSave.forEach(id => {
                 const savedValue = localStorage.getItem(id);
@@ -172,12 +172,12 @@
                     field.value = savedValue;
                 }
             });
-            // Czyścimy flagę, żeby nie przywracało w nieskończoność przy nowych wejściach
-            // Ale uwaga: czyścimy tylko po skutecznym wysłaniu formularza,
-            // tutaj zostawiamy, żeby po imporcie zadziałało.
+            // We clear the flag so it doesn't restore indefinitely on new entries
+            // But note: we only clear after successful form submission,
+            // leaving it here so it works after import.
         }
 
-        // 2. ZAPISYWANIE NA BIEŻĄCO (Auto-Save)
+        // 2. SAVE ON THE FLY (Auto-Save)
         fieldsToSave.forEach(id => {
             const field = document.getElementById(id);
             if (field) {
@@ -188,7 +188,7 @@
             }
         });
 
-        // 3. CZYSZCZENIE PO ZAPISIE MECZU (Żeby kolejny mecz był czysty)
+        // 3. CLEAR AFTER MATCH SAVE (So next match is clean)
         const form = document.querySelector("form");
         form.addEventListener("submit", function() {
             localStorage.removeItem("match_draft_saved");

@@ -169,7 +169,7 @@
     new Chart(ctx, {
         type: 'doughnut',
         data: {
-            // Django przekazuje tu listy napisów i liczb:
+            // Django passes lists of strings and numbers here:
             labels: {{ chart_focus_labels|safe }},
             datasets: [{
                 data: {{ chart_focus_values|safe }},

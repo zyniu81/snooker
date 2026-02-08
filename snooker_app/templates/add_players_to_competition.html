@@ -107,7 +107,7 @@
     .player-card-select {
         cursor: pointer;
         transition: all 0.2s ease-in-out;
-        border: 2px solid transparent; /* Rezerwujemy miejsce na ramkę */
+        border: 2px solid transparent; /* Reserve space for border */
     }
 
     .player-card-select:hover {
@@ -115,10 +115,10 @@
         transform: translateY(-2px);
     }
 
-    /* Styl dla zaznaczonej karty (aktywnej) */
+    /* Style for checked card (active) */
     .player-card-select.active {
-        border-color: #198754; /* Zielona ramka (Bootstrap success) */
-        background-color: #f0fdf4; /* Jasnozielone tło */
+        border-color: #198754; /* Green border (Bootstrap success) */
+        background-color: #f0fdf4; /* Light green background */
     }
 
     .rounded-circle img {
@@ -128,14 +128,14 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Pobieramy wszystkie karty graczy
+    // Get all player cards
     const cards = document.querySelectorAll('.player-card-select');
-    // Pobieramy wszystkie checkboxy graczy (potrzebne do "Select All")
+    // Get all player checkboxes (needed for "Select All")
     const allCheckboxes = document.querySelectorAll('input[name="players"]');
-    // Pobieramy główny checkbox "Select All"
+    // Get main "Select All" checkbox
     const selectAllBtn = document.getElementById('selectAll');
 
-    // --- 1. Obsługa kart (Twoja stara logika) ---
+    // --- 1. Card Handling (Your old logic) ---
     cards.forEach(card => {
         card.addEventListener('click', function(e) {
             if (e.target.type !== 'checkbox') {
@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 card.classList.remove('active');
             }
-            // Dodatek: Jeśli odznaczymy ręcznie jednego gracza, odznacz też "Select All"
+            // Addition: If we manually uncheck one player, also uncheck "Select All"
             if (!checkbox.checked && selectAllBtn) {
                 selectAllBtn.checked = false;
             }
@@ -163,15 +163,15 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCardStyle();
     });
 
-    // --- 2. NOWA CZĘŚĆ: Obsługa "Select All" ---
+    // --- 2. NEW PART: "Select All" Handling ---
     if (selectAllBtn) {
         selectAllBtn.addEventListener('change', function() {
-            const isChecked = this.checked; // Czy zaznaczamy, czy odznaczamy?
+            const isChecked = this.checked; // Checking or unchecking?
 
             allCheckboxes.forEach(cb => {
                 cb.checked = isChecked;
-                // WAŻNE: Wywołujemy zdarzenie 'change' na każdym checkboxie,
-                // żeby uruchomiła się funkcja updateCardStyle (zielone ramki)
+                // IMPORTANT: Trigger 'change' event on each checkbox,
+                // so that updateCardStyle (green borders) function runs
                 cb.dispatchEvent(new Event('change'));
             });
         });

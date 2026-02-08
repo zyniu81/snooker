@@ -3,9 +3,9 @@
 {% block title %}Profile Settings{% endblock %}
 
 {% block content %}
-{# --- STYLE CSS DLA TEGO WIDOKU --- #}
+{# --- CSS STYLES FOR THIS VIEW --- #}
 <style>
-    /* Nowoczesne Pola (Soft UI) - kopia stylu ze sprzętu */
+    /* Modern Fields (Soft UI) - copied style from equipment */
     .form-control, .form-select {
         background-color: #f8f9fa !important;
         border: 2px solid transparent !important;
@@ -23,7 +23,7 @@
         box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
     }
 
-    /* Etykiety */
+    /* Labels */
     .form-label {
         font-size: 0.7rem;
         font-weight: 800;
@@ -33,7 +33,7 @@
         margin-bottom: 4px;
     }
 
-    /* Awatar */
+    /* Avatar */
     .profile-img-preview {
         width: 150px;
         height: 150px;
@@ -44,7 +44,7 @@
         margin-bottom: 1rem;
     }
 
-    /* Input Group dla Social Media (Ikona + Pole) */
+    /* Input Group for Social Media (Icon + Field) */
     .social-group .input-group-text {
         background-color: #fff;
         border: none;
@@ -59,32 +59,32 @@
 
 <div class="container mt-5 mb-5">
     <div class="row">
-            {# --- PRZYCISK POWROTU (NOWOŚĆ) --- #}
+            {# --- BACK BUTTON (NEW) --- #}
         <div class="mb-3">
             <a href="{% url 'home' %}" class="text-decoration-none text-secondary fw-bold small">
                 <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
             </a>
         </div>
 
-        {# --- TYTUŁ --- #}
+        {# --- TITLE --- #}
         <div class="col-12 mb-4">
             <h3 class="fw-bold text-dark"><i class="bi bi-gear-fill me-2 text-primary"></i>Profile Settings</h3>
             <p class="text-muted small">Manage your personal account and club information.</p>
         </div>
 
-        {# --- FORMULARZ (Jeden duży, obejmujący obie kolumny) --- #}
+        {# --- FORM (One big form covering both columns) --- #}
         <form method="POST" enctype="multipart/form-data" class="row g-4">
             {% csrf_token %}
 
-            {# === KOLUMNA LEWA: TOŻSAMOŚĆ (User Form) === #}
+            {# === LEFT COLUMN: IDENTITY (User Form) === #}
             <div class="col-lg-4">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-body text-center p-4">
 
-                        {# ZDJĘCIE PROFILOWE #}
+                        {# PROFILE PICTURE #}
                         <div class="position-relative d-inline-block text-center">
 
-                            {# 1. Wyświetlanie aktualnego zdjęcia #}
+                            {# 1. Display current photo #}
                             {% if user.profile.image %}
                                 <img src="{{ user.profile.image.url }}" alt="Profile Pic" class="profile-img-preview mb-3">
                             {% else %}
@@ -93,24 +93,24 @@
                                 </div>
                             {% endif %}
 
-                            {# 2. Nasz własny, ładny przycisk po angielsku #}
+                            {# 2. Custom button in English #}
                             <div>
-                                {# Ten Label "strzela" do ukrytego inputa dzięki for="real-file-input" #}
+                                {# This Label "targets" the hidden input thanks to for="real-file-input" #}
                                 <label for="real-file-input" class="btn btn-outline-dark btn-sm fw-bold shadow-sm">
                                     <i class="bi bi-upload me-2"></i>Change Photo
                                 </label>
 
-                                {# Tutaj Django wyrenderuje ukryty input (dzięki klasie d-none w forms.py) #}
+                                {# Django renders the hidden input here (thanks to d-none class in forms.py) #}
                                 {{ p_form.image }}
 
-                                {# Miejsce na wyświetlenie nazwy wybranego pliku #}
+                                {# Place to display selected file name #}
                                 <div id="file-name-display" class="small text-muted mt-2 fst-italic">
                                     No file selected
                                 </div>
                             </div>
                         </div>
 
-                        {# Mały skrypt, żeby pokazać nazwę pliku po wybraniu #}
+                        {# Small script to show file name after selection #}
                         <script>
                             document.getElementById('real-file-input').addEventListener('change', function() {
                                 var fileName = this.files[0] ? this.files[0].name : "No file selected";
@@ -120,7 +120,7 @@
 
                         <hr class="my-4 opacity-10">
 
-                        {# DANE LOGOWANIA (User Update Form) #}
+                        {# LOGIN DATA (User Update Form) #}
                         <div class="text-start">
                             <div class="mb-3">
                                 <label class="form-label">Username</label>
@@ -149,20 +149,20 @@
                 </div>
             </div>
 
-            {# === KOLUMNA PRAWA: DANE KLUBU (Profile Form) === #}
+            {# === RIGHT COLUMN: CLUB DATA (Profile Form) === #}
             <div class="col-lg-8">
                 <div class="card border-0 shadow-sm">
                     <div class="card-body p-4">
 
-                        {# --- SEKCJA NARZĘDZI --- #}
+                        {# --- TOOLS SECTION --- #}
                         <div class="d-flex justify-content-end mb-4 border-bottom pb-3 gap-2">
 
-                            {# 1. Przycisk Excela (DLA WSZYSTKICH) #}
+                            {# 1. Excel Button (FOR EVERYONE) #}
                             <a href="{% url 'export_excel' %}" class="btn btn-success fw-bold shadow-sm text-uppercase small ls-1">
                                 <i class="bi bi-file-earmark-excel-fill me-2"></i> Report (.xlsx)
                             </a>
 
-                            {# 2. Przycisk Backupu (TYLKO DLA ADMINA) #}
+                            {# 2. Backup Button (ADMIN ONLY) #}
                             {% if user.is_superuser %}
                                 <a href="{% url 'admin_backup' %}" class="btn btn-danger fw-bold shadow-sm text-uppercase small ls-1">
                                     <i class="bi bi-database-fill-lock me-2"></i> FULL BACKUP (.json)
@@ -171,10 +171,7 @@
 
                         </div>
 
-                        {# SEKCJA 1: KLUB / ORGANIZACJA (reszta kodu bez zmian) #}
-                        <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3">
-
-                        {# SEKCJA 1: KLUB / ORGANIZACJA #}
+                        {# SECTION 1: CLUB / ORGANIZATION #}
                         <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3">
                             <i class="bi bi-building me-2"></i>Organization Details
                         </h6>
@@ -193,7 +190,7 @@
                             </div>
                         </div>
 
-                        {# SEKCJA 2: LOKALIZACJA I KONTAKT #}
+                        {# SECTION 2: LOCATION AND CONTACT #}
                         <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3 mt-4">
                             <i class="bi bi-geo-alt-fill me-2"></i>Location & Contact
                         </h6>
@@ -217,7 +214,7 @@
                             </div>
                         </div>
 
-                        {# SEKCJA 3: SOCIAL MEDIA (Z ładnymi ikonami) #}
+                        {# SECTION 3: SOCIAL MEDIA (With nice icons) #}
                         <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3 mt-4">
                             <i class="bi bi-globe me-2"></i>Online Presence
                         </h6>
@@ -252,7 +249,7 @@
                             </div>
                         </div>
 
-                        {# PRZYCISK ZAPISU #}
+                        {# SAVE BUTTON #}
                         <div class="mt-5 text-end border-top pt-4">
                             <button type="submit" class="btn btn-dark fw-bold px-5 py-2 shadow">
                                 <i class="bi bi-check2-circle me-2"></i> Save Changes

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}Print Preview{% endblock %}</title>
-    {# Prosty CSS bez Bootstrapa, żeby mieć pełną kontrolę nad papierem #}
+    {# Simple CSS without Bootstrap to have full control over paper #}
     <style>
         body {
             font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -20,7 +20,7 @@
         .fw-bold { font-weight: bold; }
         .mb-4 { margin-bottom: 1.5rem; }
 
-        /* TABELE */
+        /* TABLES */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -33,27 +33,27 @@
             vertical-align: middle;
         }
         th {
-            background-color: #f0f0f0 !important; /* Szary nagłówek, drukarki to lubią */
+            background-color: #f0f0f0 !important; /* Gray header, printers like this */
             font-weight: bold;
-            -webkit-print-color-adjust: exact; /* Wymusza druk tła */
+            -webkit-print-color-adjust: exact; /* Forces background printing */
             print-color-adjust: exact;
         }
 
-        /* MAGIA DRUKU */
+        /* PRINT MAGIC */
         @media print {
             @page {
                 margin: 1cm;
-                size: A4 portrait; /* Pionowo */
+                size: A4 portrait; /* Portrait */
             }
             body { margin: 0; }
 
-            /* Powtarzaj nagłówki tabeli na nowej stronie */
+            /* Repeat table headers on new page */
             thead { display: table-header-group; }
 
-            /* Nie tnij wiersza w połowie */
+            /* Do not cut row in half */
             tr { break-inside: avoid; }
 
-            /* Ukryj przyciski na wydruku */
+            /* Hide buttons on print */
             .no-print { display: none; }
         }
     </style>
@@ -68,10 +68,10 @@
         {% block content %}{% endblock %}
     </div>
 
-    {# Automatyczne wywołanie druku po załadowaniu #}
+    {# Automatically trigger print after loading #}
     <script>
         window.onload = function() {
-            // Odkomentuj linię niżej, jeśli chcesz żeby drukarka wyskakiwała automatycznie
+            // Uncomment the line below if you want the printer dialog to pop up automatically
             window.print();
         };
     </script>

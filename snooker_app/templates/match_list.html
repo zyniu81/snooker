@@ -34,7 +34,7 @@
         font-size: 1rem;
         margin-top: 0.25rem;
     }
-    /* Mały avatar w liście meczów */
+    /* Small avatar in match list */
     .match-avatar {
         width: 40px;
         height: 40px;
@@ -81,7 +81,7 @@
         </a>
     </div>
 
-    {# --- PASEK FILTRÓW START --- #}
+    {# --- FILTER BAR START --- #}
     <div class="card bg-light border-0 mb-4 shadow-sm">
         <div class="card-body py-3">
             <form method="get" class="row g-2 align-items-center">
@@ -90,12 +90,12 @@
                     <i class="bi bi-funnel-fill me-1"></i> Filter:
                 </div>
 
-                {# 1. ROK (YEAR) #}
+                {# 1. YEAR #}
                 <div class="col-auto">
                     <select name="year" class="form-select form-select-sm border-0 shadow-sm" onchange="this.form.submit()">
                         <option value="">All Years</option>
                         {% for y in available_years %}
-                            {# Porównujemy rok (int) ze stringiem z URL, dlatego używamy stringformat #}
+                            {# Compare year (int) with string from URL, so use stringformat #}
                             <option value="{{ y.year }}" {% if selected_year == y.year|stringformat:"i" %}selected{% endif %}>
                                 {{ y.year }}
                             </option>
@@ -113,7 +113,7 @@
                     </select>
                 </div>
 
-                {# PRZYCISK RESET (Pokaż tylko jeśli filtry są aktywne) #}
+                {# RESET BUTTON (Show only if filters are active) #}
                 {% if selected_year or selected_status %}
                     <div class="col-auto ms-auto">
                         <a href="{% url 'match_list' %}" class="btn btn-sm btn-link text-decoration-none text-muted">
@@ -125,7 +125,7 @@
             </form>
         </div>
     </div>
-    {# --- PASEK FILTRÓW KONIEC --- #}
+    {# --- FILTER BAR END --- #}
 
     <div class="row">
         <div class="col-md-12">
@@ -136,7 +136,7 @@
                     {% else %}status-scheduled{% endif %}">
 
                     <div class="card-body p-3">
-                        {# Pobieramy graczy w poprawnej kolejności #}
+                        {# Get players in correct order #}
                         {% with ordered=match.get_ordered_players %}
                         {% with p1=ordered.0 p2=ordered.1 %}
 

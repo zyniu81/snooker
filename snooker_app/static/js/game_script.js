@@ -16,30 +16,30 @@ let gameState = {
 let currentBreak = 0;
 let isFreeBall = false;
 let lastShotWasFreeBall = false;
-let pendingWinnerId = null; // Tymczasowa zmienna do przechowywania wybranego zwycięzcy
-// --- ZMIENNE DO STATYSTYK ---
-let p1Fouls = 0;        // Liczba fauli gracza 1
-let p2Fouls = 0;        // Liczba fauli gracza 2
-let p1FoulPoints = 0;   // Punkty oddane przez gracza 1
-let p2FoulPoints = 0;   // Punkty oddane przez gracza 2
+let pendingWinnerId = null; // Temporary variable to store the selected winner
+// --- STATISTICS VARIABLES ---
+let p1Fouls = 0;        // Number of fouls for Player 1
+let p2Fouls = 0;        // Number of fouls for Player 2
+let p1FoulPoints = 0;   // Points given by Player 1 (via fouls)
+let p2FoulPoints = 0;   // Points given by Player 2 (via fouls)
 
-let p1Shots = 0;   // Ile razy podszedł do uderzenia (Total Shots)
-let p1Misses = 0;  // Ile razy spudłował
-let p1Pots = 0;    // Ile bil wbił
+let p1Shots = 0;   // Total shots attempted
+let p1Misses = 0;  // Number of misses
+let p1Pots = 0;    // Number of balls potted
 
 let p2Shots = 0;
 let p2Misses = 0;
 let p2Pots = 0;
 
-let p1Safeties = 0;         // Wszystkie próby odstawnych
-let p1SuccessfulSafeties = 0; // Tylko te skuteczne (gdy przeciwnik nie wbił)
+let p1Safeties = 0;           // Total safety attempts
+let p1SuccessfulSafeties = 0; // Successful safeties only (when opponent didn't pot)
 
 let p2Safeties = 0;
 let p2SuccessfulSafeties = 0;
 
-// PAMIĘĆ (State)
-let pendingSafetyCheck = false; // Czy czekamy na ocenę odstawnej?
-let safetyPlayerId = null;      // Kto zagrał tę odstawną (1 lub 2)?
+// MEMORY (State)
+let pendingSafetyCheck = false; // Are we waiting for a safety check?
+let safetyPlayerId = null;      // Who played the safety (1 or 2)?
 
 // HISTORIA BREAKÓW (Tablice)
 let p1BreaksHistory = [];
@@ -67,7 +67,7 @@ function recordAction(action) {
         lastPottedRed: gameState.lastPottedRed,
         redBallsPottedThisTurn: gameState.redBallsPottedThisTurn,
 
-        //--- ZAPISUJEMY STATYSTYKI ---
+        //--- WE SAVE STATISTICS ---
         statsSnapshot: getStatsSnapshot()
     };
 
@@ -83,13 +83,13 @@ function undo() {
 
     const lastAction = undoStack.pop();
 
-    // --- Przygotowanie danych dla REDO ---
+    // --- Preparing data for REDO ---
     lastAction.redoStatsSnapshot = getStatsSnapshot();
 
     console.log("Undoing action:", lastAction);
     redoStack.push(lastAction);
 
-    // --- Przywracanie statystyk ---
+    // --- Restoring Statistics ---
     if (lastAction.statsSnapshot) {
         restoreStatsSnapshot(lastAction.statsSnapshot);
     }
@@ -222,7 +222,7 @@ function redo() {
     console.log("Redoing action:", lastUndone);
     undoStack.push(lastUndone);
 
-    // --- Przywracanie statystyk dla REDO ---
+    // --- Restoring statistics for REDO ---
     if (lastUndone.redoStatsSnapshot) {
         restoreStatsSnapshot(lastUndone.redoStatsSnapshot);
     }
@@ -353,21 +353,21 @@ function getActionDescription(action) {
             const points = action.newScore - action.previousScore;
             let ballName = "Ball";
 
-            // Ustawiamy styl kółka (wielkość 0.9em dopasuje się do czcionki)
-            // margin-right: 5px robi mały odstęp od nazwy
+            // Set the circle style (0.9em size will adjust to the font)
+            // margin-right: 5px creates a small space around the name
             const ballStyle = 'width: 0.9em; height: 0.9em; display: inline-block; vertical-align: middle; border: 1px solid rgba(0,0,0,0.2); margin-right: 5px;';
 
-            // Funkcja pomocnicza do tworzenia HTML-a kółka (tylko tutaj lokalnie)
+            // Helper function to create the HTML circle (only locally here)
             const dot = (color) => `<span class="rounded-circle" style="background-color: ${color}; ${ballStyle}"></span>`;
 
-            // Przypisywanie bil
-            if (points === 1) ballName = dot('#dc3545') + " Red";      // Czerwona
-            else if (points === 2) ballName = dot('#ffc107') + " Yellow"; // Żółta
-            else if (points === 3) ballName = dot('#198754') + " Green";  // Zielona
-            else if (points === 4) ballName = dot('#795548') + " Brown";  // Brązowa
-            else if (points === 5) ballName = dot('#0d6efd') + " Blue";   // Niebieska
-            else if (points === 6) ballName = dot('#ff69b4') + " Pink";   // Różowa (HotPink)
-            else if (points === 7) ballName = dot('#212529') + " Black";  // Czarna
+            // Assigning balls
+            if (points === 1) ballName = dot('#dc3545') + " Red";      // Red
+            else if (points === 2) ballName = dot('#ffc107') + " Yellow"; // Yellow
+            else if (points === 3) ballName = dot('#198754') + " Green";  // Green
+            else if (points === 4) ballName = dot('#795548') + " Brown";  // Brown
+            else if (points === 5) ballName = dot('#0d6efd') + " Blue";   // Blue
+            else if (points === 6) ballName = dot('#ff69b4') + " Pink";   // Pink
+            else if (points === 7) ballName = dot('#212529') + " Black";  // Black
 
             // Special case for Free Ball
             if (action.wasFreeBall) ballName += " (Free Ball)";
@@ -404,10 +404,10 @@ function updateActionLogUI() {
     const listElement = document.getElementById('actionLogList');
     if (!listElement) return;
 
-    listElement.innerHTML = ''; // Czyścimy listę
+    listElement.innerHTML = ''; // We are clearing the list
 
-    // Bierzemy kopię undoStack
-    // slice(-10) bierze 10 ostatnich, reverse() odwraca kolejność (najnowsze na górze)
+    // Take a copy of undoStack
+    // slice(-10) takes the last 10, reverse() reverses the order (newest on top)
     const recentActions = undoStack.slice(-10).reverse();
 
     if (recentActions.length === 0) {
@@ -487,7 +487,7 @@ function endFrame() {
         }
     }
 
-    // BS5: Otwieranie modala bez jQuery
+    // BS5: Opening a modal without jQuery
     const modalEl = document.getElementById('endFrameModal');
     const modal = new bootstrap.Modal(modalEl);
     modal.show();
@@ -586,22 +586,22 @@ function updateScore(points, ballType) {
         return;
     }
 
-    // --- SPRAWDZAMY POPRZEDNIĄ ODSTAWNĄ ---
-    // Przekazujemy true, bo nastąpiło wbicie (czyli safety nieudane)
+    // --- CHECKING THE PREVIOUS SAFETY ---
+    // We return true because a bet was placed (i.e., the safety failed)
     resolvePendingSafety(true);
     // --------------------------------------
 
-    // --- START NEW CODE (Liczenie Wbić) ---
-    // Każde wywołanie updateScore to udane wbicie
+    // --- START NEW CODE (Counting Hits) ---
+    // Each updateScore call is a successful hit
     if (activePlayer === 1) {
-        p1Shots++; // Oddał strzał
+        p1Shots++; // He fired a shot
         p1Pots++;  // I trafił
     } else {
         p2Shots++;
         p2Pots++;
     }
 
-    // --- 1. LOGIKA FREE BALL ---
+    // --- 1. FREE BALL LOGIC ---
     let actualPoints = points;
     let effectiveBallType = ballType;
     let wasFreeBallShot = false;
@@ -612,8 +612,8 @@ function updateScore(points, ballType) {
         wasFreeBallShot = true;
     }
 
-    // --- 2. BEZPIECZNE POBIERANIE INPUTA WYNIKU (POPRAWKA) ---
-    // Zamiast closest(), używamy konkretnego selektora, który na 100% zadziała
+    // --- 2. SAFELY GETTING INPUT RESULT (FIX) ---
+    // Instead of closest(), we use a specific selector that will work 100%
     const playerScoreInput = document.querySelector(`.player-score[data-player="${activePlayer}"]`);
 
     if (!playerScoreInput) {
@@ -630,13 +630,13 @@ function updateScore(points, ballType) {
     const previousRedBalls = parseInt(document.getElementById("red-ball-count").textContent, 10);
     const previousPointsOnTable = parseInt(document.getElementById("points-on-table").textContent, 10);
 
-    // --- 3. LOGIKA HISTORII (UNDO) ---
+    // --- 3. THE LOGIC OF HISTORY (UNDO) ---
     let pointsToRemoveFromTable = 0;
     if (effectiveBallType === 'red' && !wasFreeBallShot) {
         pointsToRemoveFromTable = 8;
     }
 
-    // Zabezpieczenie na wypadek, gdyby zmienna nie była zdefiniowana
+    // Safeguard in case a variable is not defined
     const safeLastShotWasFreeBall = (typeof lastShotWasFreeBall !== 'undefined') ? lastShotWasFreeBall : false;
 
     recordAction({
@@ -655,15 +655,15 @@ function updateScore(points, ballType) {
         previousLastShotWasFreeBall: safeLastShotWasFreeBall
     });
 
-    // --- 4. AKTUALIZACJA UI ---
+    // --- 4. UI UPDATE ---
     playerScoreInput.value = newScore;
 
-    // --- 5. LOGIKA STOŁU I CZERWONYCH ---
+    // --- 5. TABLE AND RED LOGIC ---
     if (effectiveBallType === 'red') {
         for (let i = 0; i < actualPoints; i++) {
             redBallsPottedThisTurn++;
 
-            // Jeśli to zwykła czerwona (nie free ball) -> Zdejmujemy ze stołu
+            // If it's a regular red (not a free ball) -> We take it off the table
             if (!wasFreeBallShot) {
                 updateRedBalls(1);
                 updatePointsOnTable(1);
@@ -675,25 +675,25 @@ function updateScore(points, ballType) {
         }
         lastPottedRed = true;
 
-        // Ustawiamy flagę globalną
+        // We set the global flag
         lastShotWasFreeBall = wasFreeBallShot;
 
     } else if (ballType === 'color') {
         if (lastPottedRed) {
-            // Jeśli to kolor po czerwonej (i poprzedni to nie był Free Ball), zdejmujemy 7 pkt
+            // If it is a color after red (and the previous one was not a Free Ball), we take 7 points off
             if (!safeLastShotWasFreeBall) {
                 updatePointsOnTable(7);
             }
             lastShotWasFreeBall = false;
         } else {
-            // Koniec gry na kolorach
+            // The end of the color game
             updatePointsOnTable(points);
         }
         lastPottedRed = false;
         redBallsPottedThisTurn = 0;
     }
 
-    // --- 6. UKRYWANIE BIL ---
+    // --- 6. HIDING THE BALLS ---
     const currentPointsOnTable = parseInt(document.getElementById("points-on-table").textContent, 10);
     hideColorBallBasedOnPoints(currentPointsOnTable);
 
@@ -702,7 +702,7 @@ function updateScore(points, ballType) {
         hideColorBallBasedOnPoints(currentPointsOnTable);
     }
 
-    // --- 7. RESET TRYBU FREE BALL ---
+    // --- 7. FREE BALL MODE RESET ---
     if (isFreeBall) {
         isFreeBall = false;
     }
@@ -711,9 +711,8 @@ function updateScore(points, ballType) {
 function resolvePendingSafety(opponentPottedBall) {
     if (pendingSafetyCheck && safetyPlayerId !== null) {
 
-        // Logika: Jeśli przeciwnik NIE wbił bili (opponentPottedBall == false),
-        // to znaczy, że odstawna była SUKCESEM.
-
+        // Logic: If the opponent did NOT pot the ball (opponentPottedBall == false),
+        // then the layup was a SUCCESS.
         if (!opponentPottedBall) {
             if (safetyPlayerId === 1) {
                 p1SuccessfulSafeties++;
@@ -726,7 +725,7 @@ function resolvePendingSafety(opponentPottedBall) {
             console.log("Safety Resolution: Player " + safetyPlayerId + " -> FAILED (Opponent potted)");
         }
 
-        // Resetujemy pamięć
+        // We reset the memory
         pendingSafetyCheck = false;
         safetyPlayerId = null;
     }
@@ -894,15 +893,15 @@ function miss() {
         return;
     }
 
-    // --- SPRAWDZAMY POPRZEDNIĄ ODSTAWNĄ ---
-    // Przekazujemy false, bo nie wbito bili (czyli safety udane)
+    // --- CHECKING THE PREVIOUS SAFETY ---
+    // We return false because no ball was potted (meaning the safety was successful)
     resolvePendingSafety(false);
     // --------------------------------------
 
-    // Liczenie Pudeł
+    // Counting miss
     if (activePlayer === 1) {
-        p1Shots++;  // Oddał strzał
-        p1Misses++; // Ale spudłował
+        p1Shots++;  // He fired a shot
+        p1Misses++; // But he missed.
     } else {
         p2Shots++;
         p2Misses++;
@@ -923,11 +922,11 @@ function safetyShot() {
         return;
     }
 
-    // 1. Jeśli poprzednik robił safety, a ja też robię safety,
-    // to jego safety było DOBRE (bo nie dał mi wbić).
+    // 1. If previous player played a safety, and I play a safety too,
+    // their safety was SUCCESSFUL (because they didn't let me pot).
     resolvePendingSafety(false);
 
-    // 2. Aktualizacja statystyk ogólnych
+    // 2. Update general statistics
     if (activePlayer === 1) {
         p1Shots++;
         p1Safeties++;
@@ -936,8 +935,8 @@ function safetyShot() {
         p2Safeties++;
     }
 
-    // 3. USTAWIAMY FLAGĘ NA PRZYSZŁOŚĆ
-    // Teraz to moja odstawna będzie oceniana w następnym ruchu
+    // 3. SET FLAG FOR THE FUTURE
+    // Now my safety will be evaluated in the next turn
     pendingSafetyCheck = true;
     safetyPlayerId = activePlayer;
     console.log("Safety set by Player " + activePlayer + ". Waiting for opponent...");
@@ -961,13 +960,13 @@ function switchActivePlayer() {
     const now = Date.now();
     const timeSpentSeconds = (now - turnStartTime) / 1000;
 
-    // Zapamiętujemy, KTO schodzi ze stołu (to jego statystyki zapisujemy)
+    // Remember WHO is leaving the table (we save their stats)
     const playerLeaving = activePlayer;
 
-    // Wysyłamy do bazy tylko, jeśli faktycznie coś grał (czas > 1s lub oddał strzał)
+    // Send to DB only if they actually played (time > 1s or shot taken)
     if (timeSpentSeconds > 1 || currentTurnShots > 0) {
 
-        // Pobieramy ID frame'a z HTML (upewnij się, że masz to w HTML-u, jak ustalaliśmy wcześniej)
+        // Get frame ID from HTML (ensure it exists in HTML, as discussed earlier)
         const frameContainer = document.querySelector('.container[data-frame-id]');
 
         if (frameContainer) {
@@ -995,12 +994,12 @@ function switchActivePlayer() {
     }
 
     // --- 2. AST LOGIC: RESET FOR NEXT PLAYER ---
-    turnStartTime = Date.now(); // Resetujemy stoper dla nowego gracza
-    currentTurnShots = 0;       // Resetujemy licznik uderzeń dla nowego gracza
+    turnStartTime = Date.now(); // Reset timer for the new player
+    currentTurnShots = 0;       // Reset shot counter for the new player
 
 
     // --- 3. EXISTING LOGIC (BREAKS HISTORY) ---
-    // Jeśli break był znaczący (>= 10), zapisujemy go do historii gracza
+    // If break was significant (>= 10), save it to player history
     if (currentBreak >= 10) {
         if (activePlayer === 1) {
             p1BreaksHistory.push(currentBreak);
@@ -1022,7 +1021,7 @@ function switchActivePlayer() {
 }
 
 function showFoulModal() {
-    // BS5: Otwieranie modala faulu
+    // BS5: Opening the foul modal
     const foulModal = new bootstrap.Modal(document.getElementById('foulModal'));
     foulModal.show();
 
@@ -1088,8 +1087,8 @@ document.getElementById('increaseRedBalls').addEventListener('click', () => {
 document.getElementById('confirmFoul').addEventListener('click', () => {
     if (foulPoints > 0 && nextPlayerId !== null) {
 
-        // --- SPRAWDZAMY POPRZEDNIĄ ODSTAWNĄ ---
-        // Faul przeciwnika to sukces odstawnej (wymuszenie błędu)
+        // --- CHECKING THE PREVIOUS WAY ---
+        // An opponent's foul is a success on the way (forcing an error)
         resolvePendingSafety(false);
         // --------------------------------------
 
@@ -1114,13 +1113,13 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
         const previousRedBalls = parseInt(document.getElementById("red-ball-count").textContent, 10);
         const previousPointsOnTable = parseInt(document.getElementById("points-on-table").textContent, 10);
 
-        // Pobieramy stan checkboxa
+        // We get the checkbox status
         const isFreeBallSelected = document.getElementById('freeBallCheckbox').checked;
 
-        // Zapisujemy obecny break ZANIM go wyzerujemy
+        // We save the current break BEFORE we reset it
         const breakBeforeFoul = currentBreak;
 
-        // Jeśli gracz zbudował breaka >= 10, a potem sfaulował, to break nadal się liczy do statystyk!
+        // If a player builds a break >= 10 and then fouls, the break still counts towards the stats!
         if (currentBreak >= 10) {
             if (activePlayer === 1) {
                 p1BreaksHistory.push(currentBreak);
@@ -1139,8 +1138,8 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
             newRedBalls: previousRedBalls - redBallAdjustment,
             previousPointsOnTable: previousPointsOnTable,
             newPointsOnTable: previousPointsOnTable - (redBallAdjustment * 8),
-            setFreeBall: isFreeBallSelected,   // <--- Ważne: tu musi być przecinek
-            previousBreak: breakBeforeFoul     // <--- To jest ta nowa linijka
+            setFreeBall: isFreeBallSelected,   // <--- Important: there must be a comma here
+            previousBreak: breakBeforeFoul     // <--- This is the new line
         });
 
         opponentScoreElement.value = previousOpponentScore + foulPoints;
@@ -1158,10 +1157,10 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
         redBallsPottedThisTurn = 0;
         lastPottedRed = false;
 
-        // Ustawiamy flagę
+        // We set the flag
         isFreeBall = isFreeBallSelected;
 
-        // Zerujemy breaka (bo zmiana gracza)
+        // We reset the break (because of the player change)
         currentBreak = 0;
         updateBreakDisplay();
 
@@ -1240,8 +1239,8 @@ function resetPointsOnTable() {
 function confirmFrameWinner(winnerId) {
     pendingWinnerId = winnerId;
 
-    // BS5: Zamykamy pierwszy modal
-    // Musimy znaleźć istniejącą instancję (lub stworzyć nową, żeby móc wywołać hide)
+    // BS5: Closing the first modal
+    // We need to find an existing instance (or create a new one to be able to invoke hide)
     const endModalEl = document.getElementById('endFrameModal');
     const endModal = bootstrap.Modal.getInstance(endModalEl) || new bootstrap.Modal(endModalEl);
     endModal.hide();
@@ -1251,13 +1250,13 @@ function confirmFrameWinner(winnerId) {
         playerNameSpan.textContent = `Player ${winnerId}`;
     }
 
-    // BS5: Otwieramy drugi modal
+    // BS5: Opening the second modal
     const confirmModal = new bootstrap.Modal(document.getElementById('confirmWinnerModal'));
     confirmModal.show();
 }
 
 function finalizeFrameEnd() {
-    // BS5: Zamykamy modal potwierdzenia
+    // BS5: Closing the confirmation modal
     const confirmModalEl = document.getElementById('confirmWinnerModal');
     const confirmModal = bootstrap.Modal.getInstance(confirmModalEl) || new bootstrap.Modal(confirmModalEl);
     confirmModal.hide();
@@ -1322,7 +1321,7 @@ function finalizeFrameEnd() {
     pendingWinnerId = null;
 }
 
-// Funkcja pomocnicza do czyszczenia stołu (stary kod przeniesiony tutaj)
+// Helper function to clear the table (old code moved here)
 function updateVisualsAndReset(winnerPosition) {
     undoStack = [];
     redoStack = [];
@@ -1341,11 +1340,11 @@ function updateVisualsAndReset(winnerPosition) {
     }
 }
 
-// --- FUNKCJE POMOCNICZE DO UNDO/REDO STATYSTYK ---
+// --- HELPER FUNCTIONS FOR UNDO/REDO STATISTICS ---
 
 function getStatsSnapshot() {
     return {
-        // Podstawowe liczniki
+        // Basic counters
         p1Fouls: p1Fouls, p2Fouls: p2Fouls,
         p1FoulPoints: p1FoulPoints, p2FoulPoints: p2FoulPoints,
         p1Shots: p1Shots, p2Shots: p2Shots,
@@ -1358,7 +1357,7 @@ function getStatsSnapshot() {
         pendingSafetyCheck: pendingSafetyCheck,
         safetyPlayerId: safetyPlayerId,
 
-        // Tablice breaków (ważne: robimy kopię przez [...])
+        // Break arrays (important: we make a copy through [...])
         p1BreaksHistory: [...p1BreaksHistory],
         p2BreaksHistory: [...p2BreaksHistory]
     };
@@ -1378,7 +1377,7 @@ function restoreStatsSnapshot(snapshot) {
     pendingSafetyCheck = snapshot.pendingSafetyCheck;
     safetyPlayerId = snapshot.safetyPlayerId;
 
-    // Przywracamy tablice
+    // Restoring the tables
     p1BreaksHistory = snapshot.p1BreaksHistory;
     p2BreaksHistory = snapshot.p2BreaksHistory;
 }
@@ -1407,7 +1406,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebar = document.getElementById('historySidebar');
     const backdrop = document.getElementById('sidebarBackdrop');
 
-    // Funkcja przełączająca widoczność
+    // Visibility toggle function
     function toggleSidebar() {
         if (sidebar && backdrop) {
             sidebar.classList.toggle('active');
@@ -1415,7 +1414,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Otwieranie (kliknięcie w przycisk History w panelu)
+    // Opening (clicking on the History button in the panel)
     if (historyBtn) {
         historyBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1423,7 +1422,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Zamykanie (kliknięcie w przycisk Zamknij w panelu)
+    // Closing (clicking the Close button in the panel)
     if (closeSidebarBtn) {
         closeSidebarBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1431,7 +1430,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Zamykanie (kliknięcie w ciemne tło poza panelem)
+    // Closing (clicking on the dark background outside the panel)
     if (backdrop) {
         backdrop.addEventListener('click', (e) => {
             e.preventDefault();

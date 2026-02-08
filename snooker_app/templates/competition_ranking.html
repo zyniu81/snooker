@@ -11,7 +11,7 @@
             <p class="text-muted mb-0 ms-1">Final Standings</p>
         </div>
 
-        {# --- INTELIGENTNY PRZYCISK POWROTU --- #}
+        {# --- SMART BACK BUTTON --- #}
         {% if request.GET.next %}
             <a href="{{ request.GET.next }}" class="btn btn-outline-secondary">
                 <i class="bi bi-arrow-left me-1"></i> Back
@@ -36,16 +36,14 @@
                 </thead>
                 <tbody>
                     {% for res in results %}
-                    {# Usunąłem klasy kolorujące cały wiersz (tr) #}
                     <tr>
-                        {# KOLUMNA RANKINGU - TYLKO TU DAJEMY WYRÓŻNIENIA #}
+                        {# RANKING COLUMN - ONLY HERE WE GIVE HONORS #}
                         <td class="ps-4 fw-bold" style="width: 80px;">
                             {% if res.rank == 1 %}
                                 <i class="bi bi-trophy-fill text-warning fs-3" title="Winner"></i>
                             {% elif res.rank == 2 %}
                                 <i class="bi bi-award-fill text-secondary fs-3" title="Runner-up"></i>
                             {% elif res.rank == 3 %}
-                                {# Kolor brązowy musimy wymusić stylem, bo Bootstrap go nie ma #}
                                 <i class="bi bi-award-fill fs-3" style="color: #cd7f32;" title="3rd Place"></i>
                             {% else %}
                                 <span class="text-muted ms-1 fs-5">{{ res.rank }}</span>
@@ -53,7 +51,7 @@
                         </td>
 
                         <td>
-                            {# Dodaliśmy ?next={{ request.path }} żeby powrót z gracza prowadził tu #}
+                            {# I added ?next={{ request.path }} so that the return from the player leads here #}
                             <a href="{% url 'player_detail' res.player.id %}?next={{ request.path }}" class="text-decoration-none fw-bold text-dark">
                                 {{ res.player }}
                             </a>

@@ -4,17 +4,17 @@
 
 {% block content %}
     <style>
-        /* To jest klucz do ładnego druku grup */
+        /* This is the key to nice group printing */
         .group-container {
-            break-inside: avoid; /* Nie łam strony w środku tej sekcji */
-            page-break-inside: avoid; /* Dla starszych przeglądarek */
+            break-inside: avoid; /* Do not break page inside this section */
+            page-break-inside: avoid; /* For older browsers */
             margin-bottom: 30px;
             border: 1px solid #ccc;
             padding: 15px;
         }
 
         .matches-table th, .matches-table td {
-            font-size: 0.9em; /* Troszkę mniejsze mecze, żeby nie zajmowały miejsca */
+            font-size: 0.9em; /* Slightly smaller matches to save space */
             padding: 4px;
         }
     </style>
@@ -44,7 +44,7 @@
             </thead>
             <tbody>
                 {% for standing in group.standings.all|dictsortreversed:"points" %}
-                {# Sortowanie po punktach - zazwyczaj robi to model, ale tu wymuszamy dla pewności #}
+                {# Sort by points - model usually handles this, but forcing it here just in case #}
                 <tr>
                     <td>{{ forloop.counter }}</td>
                     <td style="font-weight: bold;">{{ standing.player }}</td>

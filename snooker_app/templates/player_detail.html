@@ -4,7 +4,7 @@
 
 {% block content %}
 <style>
-    /* Profilowy Header */
+    /* Profile Header */
     .profile-header-card {
         border: none;
         border-radius: 15px;
@@ -12,7 +12,7 @@
         overflow: hidden;
     }
 
-    /* Wielki Awatar */
+    /* Large Avatar */
     .profile-avatar-lg {
         width: 120px;
         height: 120px;
@@ -36,7 +36,7 @@
         object-fit: cover;
     }
 
-    /* Kafelki Statystyk */
+    /* Stat Tiles */
     .stat-card {
         border: none;
         border-radius: 12px;
@@ -79,12 +79,12 @@
 
     <div class="mb-3">
         {% if request.GET.next %}
-            {# JEŚLI SYSTEM WIE SKĄD PRZYSZEDŁEŚ (np. z rankingu) #}
+            {# IF SYSTEM KNOWS WHERE YOU CAME FROM (e.g. ranking) #}
             <a href="{{ request.GET.next }}" class="text-decoration-none text-muted">
                 <i class="bi bi-arrow-left"></i> Back
             </a>
         {% else %}
-            {# STANDARDOWE ZACHOWANIE (np. wejście z menu) #}
+            {# STANDARD BEHAVIOR (e.g. from menu) #}
             <a href="{% url 'player_list' %}" class="text-decoration-none text-muted">
                 <i class="bi bi-arrow-left"></i> Back to Players
             </a>
@@ -93,7 +93,7 @@
 
     <div class="row">
 
-        {# --- LEWA KOLUMNA: DANE OSOBOWE --- #}
+        {# --- LEFT COLUMN: PERSONAL INFO --- #}
         <div class="col-lg-4 mb-4">
             <div class="card profile-header-card shadow-sm h-100 text-center p-4">
 
@@ -136,12 +136,12 @@
                         <i class="bi bi-pencil-fill"></i> Edit Profile
                     </a>
 
-                    {# --- NOWY PRZYCISK: TRENING --- #}
+                    {# --- NEW BUTTON: TRAINING --- #}
                     <a href="{% url 'player_training_list' player.pk %}" class="btn btn-outline-success fw-bold shadow-sm">
                         <i class="bi bi-journal-check me-2"></i> Training Diary
                     </a>
 
-                    {# --- SPRZĘT --- #}
+                    {# --- EQUIPMENT --- #}
                     <a href="{% url 'equipment_list' player.pk %}" class="btn btn-outline-dark fw-bold shadow-sm">
                         <i class="bi bi-backpack2-fill me-2"></i> Equipment / Gear
                     </a>
@@ -154,12 +154,12 @@
             </div>
         </div>
 
-        {# --- PRAWA KOLUMNA: STATYSTYKI I HISTORIA --- #}
+        {# --- RIGHT COLUMN: STATS AND HISTORY --- #}
         <div class="col-lg-8">
 
             <h4 class="fw-bold mb-3"><i class="bi bi-bar-chart-line-fill text-primary me-2"></i>Performance Stats</h4>
 
-            {# WIERSZ 1: Mecze, Break, AST #}
+            {# ROW 1: Matches, Break, AST #}
             <div class="row g-3 mb-3">
 
                 <div class="col-md-4">
@@ -195,7 +195,7 @@
                 </div>
             </div>
 
-            {# WIERSZ 2: Pot Success & Safety Success #}
+            {# ROW 2: Pot Success & Safety Success #}
             <div class="row g-3 mb-4">
 
                 <div class="col-md-6">
@@ -229,12 +229,12 @@
                 </div>
             </div>
 
-            {# --- GABLOTA PUCHARÓW (TROPHY ROOM) --- #}
+            {# --- TROPHY ROOM --- #}
             <h5 class="fw-bold mb-3 mt-4">
                 <i class="bi bi-trophy-fill text-warning me-2"></i>Tournament History
             </h5>
 
-            {# 1. PODSUMOWANIE (Liczniki) #}
+            {# 1. SUMMARY (Counters) #}
             <div class="row g-3 mb-4">
                 <div class="col-4">
                     <div class="p-3 bg-white rounded shadow-sm text-center border-bottom border-warning border-4 h-100">
@@ -259,7 +259,7 @@
                 </div>
             </div>
 
-            {# 2. LISTA TURNIEJÓW (Rozwijana, żeby nie zajmowała za dużo miejsca) #}
+            {# 2. TOURNAMENT LIST (Scrollable to save space) #}
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                     <span class="small text-muted fw-bold text-uppercase">Participation Log</span>
@@ -276,7 +276,7 @@
                                 </div>
                             </div>
 
-                            {# BADGE Z WYNIKIEM #}
+                            {# BADGE WITH RESULT #}
                             <div>
                                 {% if res.result == 'WINNER' %}
                                     <span class="badge bg-warning text-dark border border-warning shadow-sm">
@@ -303,7 +303,7 @@
                 </div>
             </div>
 
-            {# HISTORIA MECZÓW #}
+            {# MATCH HISTORY #}
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="fw-bold mb-0">Recent Matches</h5>
             </div>
@@ -316,11 +316,11 @@
                                 <a href="{% url 'match_detail' match.pk %}?next={{ request.path }}" class="list-group-item list-group-item-action py-3">
                                     <div class="row align-items-center">
 
-                                        {# 1. DATA #}
+                                        {# 1. DATE #}
                                         <div class="col-3 col-sm-2 text-muted small border-end text-center">
                                             <div class="fw-bold">{{ match.date|date:"d.m" }}</div>
                                             <div>{{ match.time|time:"H:i" }}</div>
-                                            {# Dodatek: Ikonka Remote, jeśli to mecz z innego konta #}
+                                            {# Addition: Remote icon if match from another account #}
                                             {% if match.owner != request.user %}
                                                  <div class="text-info" style="font-size: 0.65rem;">
                                                     <i class="bi bi-link-45deg"></i> Remote
@@ -328,15 +328,15 @@
                                             {% endif %}
                                         </div>
 
-                                        {# 2. PRZECIWNIK I WYNIK #}
+                                        {# 2. OPPONENT AND SCORE #}
                                         <div class="col-9 col-sm-10">
                                             <div class="d-flex justify-content-between align-items-center">
 
-                                                {# --- LOGIKA: CZY JESTEM PLAYER 1? --- #}
-                                                {# Jestem P1 jeśli: to ja (ID) LUB to mój klon #}
+                                                {# --- LOGIC: AM I PLAYER 1? --- #}
+                                                {# I am P1 if: it's me (ID) OR it's my clone #}
                                                 {% if match.player1 == player or match.player1.cloned_from == player %}
 
-                                                    {# SCENARIUSZ A: JESTEM P1 (LUB MÓJ KLON TO P1) #}
+                                                    {# SCENARIO A: I AM P1 (OR MY CLONE IS P1) #}
                                                     <div class="d-flex align-items-center">
                                                         <span class="text-muted me-2 small">vs</span>
                                                         <span class="fw-bold text-dark fs-5">
@@ -347,7 +347,7 @@
                                                     <div class="text-end">
                                                         {% if match.status == 'FINISHED' %}
                                                             <div class="fs-5 fw-bold font-monospace">
-                                                                {# Kolorujemy wynik. Sprawdzamy czy wygrałem JA lub mój KLON #}
+                                                                {# Color the score. Check if I or my clone won #}
                                                                 {% if match.winner == match.player1 or match.winner.cloned_from == player %}
                                                                     <span class="text-success">{{ match.final_score_player1 }}</span>
                                                                 {% else %}
@@ -365,7 +365,7 @@
 
                                                 {% else %}
 
-                                                    {# SCENARIUSZ B: JESTEM P2 (LUB MÓJ KLON TO P2) #}
+                                                    {# SCENARIO B: I AM P2 (OR MY CLONE IS P2) #}
                                                     <div class="d-flex align-items-center">
                                                         <span class="text-muted me-2 small">vs</span>
                                                         <span class="fw-bold text-dark fs-5">
@@ -376,7 +376,7 @@
                                                     <div class="text-end">
                                                         {% if match.status == 'FINISHED' %}
                                                             <div class="fs-5 fw-bold font-monospace">
-                                                                {# Kolorujemy wynik (dla P2) #}
+                                                                {# Color the score (for P2) #}
                                                                 {% if match.winner == match.player2 or match.winner.cloned_from == player %}
                                                                     <span class="text-success">{{ match.final_score_player2 }}</span>
                                                                 {% else %}

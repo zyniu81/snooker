@@ -2,12 +2,12 @@
 
 {% block content %}
 <style>
-    /* Nowoczesne Zakładki */
+    /* Modern Tabs */
     .nav-tabs {
         border-bottom: 2px solid #e9ecef;
     }
     .nav-tabs .nav-link {
-        color: #adb5bd; /* Szary dla nieaktywnych */
+        color: #adb5bd; /* Gray for inactive */
         font-weight: 600;
         border: none;
         border-bottom: 3px solid transparent;
@@ -19,9 +19,9 @@
         background: transparent;
     }
     .nav-tabs .nav-link.active {
-        color: #0d6efd; /* Niebieski (Primary) dla aktywnej */
+        color: #0d6efd; /* Blue (Primary) for active */
         background: transparent;
-        border-bottom: 3px solid #0d6efd; /* Podkreślenie zamiast ramki */
+        border-bottom: 3px solid #0d6efd; /* Underline instead of border */
     }
 </style>
 
@@ -51,7 +51,7 @@
 
     <div class="tab-content">
 
-        {# --- ZAKŁADKA 1: AKTUALNE --- #}
+        {# --- TAB 1: CURRENT --- #}
         <div class="tab-pane fade show active" id="current">
             <div class="row g-4">
                 {% for item in current_gear %}
@@ -112,7 +112,7 @@
             </div>
         </div>
 
-        {# --- ZAKŁADKA 2: ARCHIWUM --- #}
+        {# --- TAB 2: ARCHIVE --- #}
         <div class="tab-pane fade" id="archive">
             <div class="card shadow-sm border-0">
                 <table class="table table-hover align-middle mb-0">
@@ -140,7 +140,7 @@
                             </td>
                            <td class="text-end pe-4">
                                 <div class="btn-group shadow-sm" role="group">
-                                    {# 1. USE AGAIN (Zielony) #}
+                                    {# 1. USE AGAIN (Green) #}
                                     <a href="{% url 'use_equipment_again' item.pk %}"
                                        class="btn btn-sm btn-outline-success fw-bold"
                                        title="Re-activate this item"
@@ -148,17 +148,17 @@
                                         <i class="bi bi-arrow-counterclockwise me-1"></i> Use
                                     </a>
 
-                                    {# 2. VIEW (Szary) #}
+                                    {# 2. VIEW (Gray) #}
                                     <a href="{% url 'equipment_detail' item.pk %}" class="btn btn-sm btn-outline-secondary" title="View details">
                                         <i class="bi bi-eye-fill"></i>
                                     </a>
 
-                                    {# 3. EDIT (Niebieski - poprawiony styl ołówka) #}
+                                    {# 3. EDIT (Blue - fixed pencil style) #}
                                     <a href="{% url 'edit_equipment' item.pk %}" class="btn btn-sm btn-outline-primary" title="Edit">
                                         <i class="bi bi-pencil-fill"></i>
                                     </a>
 
-                                    {# 4. DELETE (Teraz prowadzi do ładnej strony) #}
+                                    {# 4. DELETE (Now leads to a nice page) #}
                                     <a href="{% url 'delete_equipment' item.pk %}"
                                        class="btn btn-sm btn-outline-danger"
                                        title="Delete permanently">

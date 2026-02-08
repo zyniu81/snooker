@@ -4,7 +4,7 @@
 
 {% block content %}
 <style>
-    /* Styl karty Sędziego */
+    /* Judge Card Style */
     .referee-card {
         border: none;
         background-color: white;
@@ -20,23 +20,23 @@
         cursor: pointer;
     }
 
-    /* Awatar Sędziego - Ciemny, elegancki */
+    /* Judge Avatar - Dark, Elegant */
     .referee-avatar {
         width: 60px;
         height: 60px;
         min-width: 60px;
-        background: linear-gradient(135deg, #212529, #495057); /* Ciemny gradient */
+        background: linear-gradient(135deg, #212529, #495057);
         color: white;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 1.5rem;
-        /* WAŻNE: To przycina zdjęcie do kółka */
+        /* IMPORTANT: This crops the photo to a circle */
         overflow: hidden;
     }
 
-    /* Nowy styl dla obrazka wewnątrz awatara */
+    /* New style for the image inside the avatar */
     .referee-avatar img {
         width: 100%;
         height: 100%;

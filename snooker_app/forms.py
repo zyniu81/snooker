@@ -12,7 +12,7 @@ from .models import (Player, Referee, Venue, Match, Competition, GroupStage, Kno
 import math
 
 
-# --- OSOBY I MIEJSCA ---
+# --- PEOPLE AND PLACES ---
 
 class PlayerForm(forms.ModelForm):
     class Meta:
@@ -22,7 +22,7 @@ class PlayerForm(forms.ModelForm):
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'nickname': forms.TextInput(attrs={'class': 'form-control'}),
-            'photo': forms.ClearableFileInput(attrs={'class': 'form-control'}), # <--- NOWE
+            'photo': forms.ClearableFileInput(attrs={'class': 'form-control'}), # <--- NEW
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_temporary': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
@@ -31,19 +31,19 @@ class PlayerForm(forms.ModelForm):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
-        # Logika dla zwykłego usera (nie-Admina)
+        # Logic for regular user (non-Admin)
         if not self.request or not self.request.user.is_superuser:
-            # Usuwamy pole public całkowicie (czyściej niż ukrywanie)
+            # Remove public field entirely (cleaner than hiding)
             if 'is_public' in self.fields:
                 del self.fields['is_public']
 
-            # Ukrywamy Is Temporary (domyślnie False, user nie powinien tego klikać przy dodawaniu)
+            # Hide Is Temporary (default False, user shouldn't click this when adding)
             if 'is_temporary' in self.fields:
                 self.fields['is_temporary'].widget = forms.HiddenInput()
                 self.fields['is_temporary'].initial = False
 
 
-# --- FORMULARZ EDYCJI GRACZA ---
+# --- PLAYER EDIT FORM ---
 class PlayerEditForm(forms.ModelForm):
     class Meta:
         model = Player
@@ -52,7 +52,7 @@ class PlayerEditForm(forms.ModelForm):
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'nickname': forms.TextInput(attrs={'class': 'form-control'}),
-            'photo': forms.ClearableFileInput(attrs={'class': 'form-control'}), # <--- NOWE
+            'photo': forms.ClearableFileInput(attrs={'class': 'form-control'}), # <--- NEW
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_temporary': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
@@ -61,19 +61,19 @@ class PlayerEditForm(forms.ModelForm):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
-        # 1. Logika Is Public
+        # 1. Is Public Logic
         if not self.request or not self.request.user.is_superuser:
             if 'is_public' in self.fields:
                 del self.fields['is_public']
 
-        # 2. LOGIKA RATOWANIA GRACZA
-        # Jeśli gracz JUŻ jest stały, nie pozwalamy go zmienić na tymczasowego.
+        # 2. PLAYER RESCUE LOGIC
+        # If player is ALREADY permanent, do not allow changing to temporary.
         if self.instance.pk and not self.instance.is_temporary:
              if 'is_temporary' in self.fields:
                  self.fields['is_temporary'].widget = forms.HiddenInput()
                  self.fields['is_temporary'].disabled = True
         else:
-            # Jeśli gracz JEST tymczasowy, zachęcamy do zmiany
+            # If player IS temporary, encourage change
             self.fields['is_temporary'].label = "Is Temporary (Uncheck to save player permanently)"
 
 
@@ -93,8 +93,8 @@ class RefereeForm(forms.ModelForm):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
-        # Logika dla Admina:
-        # Jeśli nie admin -> usuwamy pole is_public całkowicie
+        # Admin Logic:
+        # If not admin -> remove is_public field entirely
         if not self.request or not self.request.user.is_superuser:
             if 'is_public' in self.fields:
                 del self.fields['is_public']
@@ -135,19 +135,19 @@ class VenueForm(forms.ModelForm):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
 
-        # LOGIKA DLA ADMINA:
-        # Jeśli nie ma requesta lub użytkownik nie jest superuserem (adminem)...
+        # ADMIN LOGIC:
+        # If no request or user is not superuser (admin)...
         if not self.request or not self.request.user.is_superuser:
-            # ... to całkowicie usuwamy pole 'is_public' z tego formularza.
-            # Zwykły user nawet nie dowie się, że ono istnieje.
+            # ... then completely remove 'is_public' field from this form.
+            # Regular user won't even know it exists.
             if 'is_public' in self.fields:
                 del self.fields['is_public']
 
 
-# --- MECZE ---
+# --- MATCHES ---
 
 class MatchForm(forms.ModelForm):
-    # --- NOWOŚĆ: Dwa osobne fotele zamiast jednego worka ---
+    # --- NEW: Two separate slots instead of one collection ---
     player1 = forms.ModelChoiceField(
         queryset=Player.objects.none(),
         required=False,
@@ -206,28 +206,28 @@ class MatchForm(forms.ModelForm):
 
         if is_auth:
             user = self.request.user
-            # 1. Baza: Wszyscy Twoi gracze + publiczni
+            # 1. Base: All your players + public ones
             base_players = Player.objects.filter(Q(owner=user) | Q(is_public=True))
 
-            # --- NOWOŚĆ: FILTROWANIE CONTEXTOWE (Turniejowe) ---
-            # Jeśli edytujemy istniejący mecz (self.instance.pk), sprawdzamy czy to turniej
+            # --- NEW: CONTEXT FILTERING (Tournament) ---
+            # If editing existing match (self.instance.pk), check if it is a tournament
             if self.instance.pk:
 
-                # SCENARIUSZ A: Mecz w Grupie
+                # SCENARIO A: Group Match
                 if self.instance.group:
-                    # Pobieramy ID graczy, którzy są w tabeli (standings) tej konkretnej grupy
+                    # Get IDs of players who are in the standings of this specific group
                     allowed_ids = self.instance.group.standings.values_list('player_id', flat=True)
-                    # Zawężamy listę tylko do tych graczy
+                    # Narrow down the list to only these players
                     base_players = base_players.filter(id__in=allowed_ids)
 
-                # SCENARIUSZ B: Mecz Pucharowy (Knockout)
+                # SCENARIO B: Knockout Match
                 elif self.instance.knockout_stage:
-                    # Pobieramy graczy z całego turnieju
+                    # Get players from the entire tournament
                     competition = self.instance.knockout_stage.competition
                     allowed_ids = competition.players.values_list('id', flat=True)
                     base_players = base_players.filter(id__in=allowed_ids)
 
-            # Przypisujemy przefiltrowaną listę do pól
+            # Assign filtered list to fields
             self.fields['player1'].queryset = base_players
             self.fields['player2'].queryset = base_players
             # ----------------------------------------------------
@@ -236,7 +236,7 @@ class MatchForm(forms.ModelForm):
             self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
 
             if not base_players.exists():
-                # Tutaj mała zmiana komunikatu, żeby pasował też do pustej grupy
+                # Small message change here to fit empty group too
                 msg = "No eligible players found."
                 self.fields['player1'].help_text = msg
                 self.fields['player1'].disabled = True
@@ -252,7 +252,7 @@ class MatchForm(forms.ModelForm):
             self.fields['allow_draws'].initial = False
 
         else:
-            # Dla niezalogowanych (bez zmian)
+            # For non-logged-in users (no changes)
             del self.fields['venue']
             del self.fields['referees']
             del self.fields['player1']
@@ -281,7 +281,7 @@ class MatchForm(forms.ModelForm):
         create_temp = cleaned_data.get('create_temporary_players')
         match_instance = self.instance
 
-        # 1. Walidacja podstawowa (Wymagani gracze i różni przeciwnicy)
+        # 1. Basic validation (Required players and different opponents)
         if 'player1' in self.fields:
             if not create_temp:
                 if not p1 or not p2:
@@ -290,10 +290,10 @@ class MatchForm(forms.ModelForm):
         if p1 and p2 and p1 == p2:
             raise ValidationError("Player 1 and Player 2 cannot be the same person.")
 
-        # --- WALIDACJA TURNIEJOWA ---
+        # --- TOURNAMENT VALIDATION ---
 
-        # A. WALIDACJA DLA PUCHARÓW (Knockout) - "Czy gracz jest zajęty w CAŁEJ drabince?"
-        # ZMIANA: Nie patrzymy na rundę, tylko na to, czy gracz ma jakikolwiek niezakończony mecz w tym etapie.
+        # A. KNOCKOUT VALIDATION - "Is player busy in the ENTIRE bracket?"
+        # CHANGE: We don't look at the round, only if the player has any unfinished match in this stage.
         if match_instance.knockout_stage and (p1 or p2):
             other_matches = Match.objects.filter(
                 knockout_stage=match_instance.knockout_stage
@@ -307,8 +307,8 @@ class MatchForm(forms.ModelForm):
                 raise ValidationError(
                     f"Player '{p2}' is already playing in another active match in this Knockout Stage.")
 
-        # B. WALIDACJA DLA GRUP (Group) - "Czy ta para już ze sobą grała?"
-        # Tutaj bez zmian - pilnujemy duplikatów par w grupie
+        # B. GROUP VALIDATION - "Has this pair played each other already?"
+        # No changes here - preventing duplicate pairs in group
         if match_instance.group_stage and p1 and p2:
             group_filter = Q(group_stage=match_instance.group_stage)
             if match_instance.group:
@@ -323,38 +323,38 @@ class MatchForm(forms.ModelForm):
 
         return cleaned_data
 
-    # --- UPROSZCZONA METODA ---
+    # --- SIMPLIFIED METHOD ---
     def create_temp_players_if_needed(self, match):
         """
-        Tworzy graczy tymczasowych i przypisuje do nowych pól player1/player2.
-        Resztę (tworzenie MatchPlayer) załatwia teraz model Match.save().
+        Creates temporary players and assigns them to the new player1/player2 fields.
+        The rest (MatchPlayer creation) is now handled by Match.save().
         """
         create_temp = self.cleaned_data.get('create_temporary_players', False)
 
         if create_temp:
-            owner = match.owner  # Może być None dla anonimowych
+            owner = match.owner  # Can be None for anonymous users
 
-            # 1. Tworzymy graczy
+            # 1. Create players
             p1 = Player.objects.create(first_name='Temp Player 1', is_temporary=True, owner=owner)
             p2 = Player.objects.create(first_name='Temp Player 2', is_temporary=True, owner=owner)
 
-            # 2. Przypisujemy do nowych foteli
+            # 2. Assign to new slots
             match.player1 = p1
             match.player2 = p2
             match.temp_player1 = p1
             match.temp_player2 = p2
             match.is_temporary = True
 
-            # 3. Zapisujemy - to uruchomi "most" w models.py i stworzy MatchPlayer!
+            # 3. Save - this triggers the "bridge" in models.py and creates MatchPlayer!
             match.save()
 
 
-# --- TURNIEJE ---
+# --- TOURNAMENTS ---
 
 class CompetitionForm(forms.ModelForm):
     class Meta:
         model = Competition
-        # Dodany 'status', aby ręcznie zmienić "Scheduled" na "Active"
+        # Added 'status' to manually change "Scheduled" to "Active"
         fields = ['name', 'start_date', 'end_date', 'venue', 'game_variant', 'is_public', 'status']
 
         widgets = {
@@ -364,7 +364,7 @@ class CompetitionForm(forms.ModelForm):
             'venue': forms.Select(attrs={'class': 'form-control'}),
             'game_variant': forms.Select(attrs={'class': 'form-select'}),
             'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'status': forms.Select(attrs={'class': 'form-select'}), # <-- Nowy widget
+            'status': forms.Select(attrs={'class': 'form-select'}), # <-- New widget
         }
 
     def __init__(self, *args, **kwargs):
@@ -373,10 +373,10 @@ class CompetitionForm(forms.ModelForm):
 
         if self.request and self.request.user.is_authenticated:
             user = self.request.user
-            # Filtrujemy venue (moje + publiczne)
+            # Filter venues (mine + public)
             self.fields['venue'].queryset = Venue.objects.filter(Q(owner=user) | Q(is_public=True))
 
-        # Ukrywanie opcji publicznej dla zwykłych userów
+        # Hide public option for regular users
         if not self.request or not self.request.user.is_superuser:
             if 'is_public' in self.fields:
                 self.fields['is_public'].widget = forms.HiddenInput()
@@ -404,11 +404,11 @@ class AddMatchesToCompetitionForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         if competition and self.user:
-            # Pokazujemy mecze użytkownika, które nie są jeszcze w tym turnieju (poprzez etapy)
-            # Uwaga: filtrowanie po 'competitions' może wymagać dostosowania,
-            # bo Match nie ma bezpośredniego pola 'competitions', tylko przez GroupStage/KnockoutStage.
-            # Ale jeśli zostawiłeś related_name='competitions' w modelu Competition M2M to zadziała.
-            # Jeśli nie, trzeba to zmienić w widoku. Na razie zostawiam jak masz.
+            # Show user matches that are not yet in this tournament (via stages)
+            # Note: filtering by 'competitions' might need adjustment because Match
+            # doesn't have a direct 'competitions' field, only via GroupStage/KnockoutStage.
+            # But if you left related_name='competitions' in the Competition M2M model, it will work.
+            # If not, it needs to be changed in the view. Leaving as is for now.
             self.fields['matches'].queryset = Match.objects.filter(owner=self.user)
 
 
@@ -420,7 +420,7 @@ class GroupStageForm(forms.ModelForm):
         label="Select Players for this Stage"
     )
 
-    # Pole dodatkowe (nie z modelu Stage, ale potrzebne do tworzenia meczów)
+    # Additional field (not from Stage model, but needed for creating matches)
     default_frames = forms.IntegerField(
         min_value=1,
         initial=3,
@@ -436,13 +436,13 @@ class GroupStageForm(forms.ModelForm):
             'matches_per_pair', 'points_for_win', 'points_for_draw', 'allow_draws'
         ]
 
-        # --- WIDGETY DLA PÓL MODELU (Żeby wyglądały ładnie) ---
+        # --- WIDGETS FOR MODEL FIELDS (To look nice) ---
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Group Stage'}),
             'num_groups': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'players_per_group': forms.NumberInput(attrs={'class': 'form-control', 'min': '2'}),
 
-            # <--- NOWY WIDGET DLA AWANSUJĄCYCH ---
+            # <--- NEW WIDGET FOR QUALIFIERS ---
             'num_qualifiers': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'placeholder': 'e.g. 2'}),
 
             'matches_per_pair': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'value': '1'}),
@@ -460,14 +460,14 @@ class GroupStageForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if self.competition:
-            # ZMIANA: Pobieramy tylko graczy z tego turnieju (zamiast wszystkich z bazy)
+            # CHANGE: Get only players from this tournament (instead of all from DB)
             self.fields['players'].queryset = self.competition.players.all()
 
-            # Domyślne zaznaczanie (logika bez zmian)
+            # Default selection (logic unchanged)
             if self.winner_list:
                 self.fields['players'].initial = [p.id for p in self.winner_list]
             else:
-                # Jeśli to pierwszy etap, zaznaczy wszystkich dostępnych
+                # If this is the first stage, select all available
                 self.fields['players'].initial = [p.id for p in self.other_list]
 
 
@@ -497,7 +497,7 @@ class KnockoutStageForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
-        # ZMIANA 1: Ustawiamy pole rund jako opcjonalne i dodajemy placeholder
+        # CHANGE 1: Set rounds field as optional and add placeholder
         self.fields['num_rounds'].required = False
         self.fields['num_rounds'].widget.attrs['placeholder'] = 'Auto (Full bracket)'
 
@@ -519,36 +519,36 @@ class KnockoutStageForm(forms.ModelForm):
 
         count = len(players)
 
-        # 1. PODSTAWOWY WARUNEK: Musi być parzysta liczba na start
+        # 1. BASIC CONDITION: Must be an even number to start
         if count % 2 != 0:
             raise forms.ValidationError(f"Selected {count} players. You need an even number of players to start.")
 
-        # ZMIANA 2: AUTOMATYCZNE WYLICZANIE (jeśli pole puste)
+        # CHANGE 2: AUTO CALCULATION (if field is empty)
         if not num_rounds:
-            # Sprawdzamy czy liczba to potęga dwójki (np. 4, 8, 16, 32...)
-            # Wzór bitowy: (n & (n-1) == 0) działa dla potęg dwójki
+            # Check if number is a power of 2 (e.g. 4, 8, 16, 32...)
+            # Bitwise formula: (n & (n-1) == 0) works for powers of 2
             if (count & (count - 1) != 0) or count == 0:
                 raise forms.ValidationError(
                     f"Auto-calculation works only for full brackets (Power of 2: 4, 8, 16...). "
                     f"You have {count} players. Please enter rounds manually."
                 )
 
-            # Wyliczamy logarytm (np. log2(16) = 4)
+            # Calculate logarithm (e.g. log2(16) = 4)
             num_rounds = int(math.log2(count))
-            # Zapisujemy wyliczoną wartość z powrotem, żeby widok ją dostał
+            # Save the calculated value back so the view receives it
             cleaned_data['num_rounds'] = num_rounds
 
-        # 3. SYMULACJA RUND (Twoja stara logika - sprawdzi też te wyliczone automatycznie)
+        # 3. ROUND SIMULATION (Your old logic - checks auto-calculated ones too)
         if num_rounds:
             current_players = count
             for r in range(1, num_rounds + 1):
-                # Na początku każdej rundy musimy mieć parzystą liczbę graczy
+                # At the start of every round, we must have an even number of players
                 if current_players % 2 != 0:
                     raise forms.ValidationError(
                         f"Cannot create {num_rounds} rounds with {count} players. "
                         f"After Round {r - 1}, there would be {current_players} players left, which cannot be paired."
                     )
-                # Po rundzie zostaje połowa
+                # Half remain after the round
                 current_players = current_players // 2
 
         return cleaned_data
@@ -592,15 +592,15 @@ class MassMatchEditForm(forms.ModelForm):
         p1 = cleaned_data.get('player1')
         p2 = cleaned_data.get('player2')
 
-        # 1. ZABEZPIECZENIE PRZED PUSTYM POLEM (Gamma vs None)
-        # Jeśli brakuje p1 lub p2 -> zgłoś błąd przy konkretnym polu
+        # 1. PROTECTION AGAINST EMPTY FIELDS (Gamma vs None)
+        # If p1 or p2 is missing -> raise error on specific field
         if not p1:
             self.add_error('player1', "Player 1 is required.")
 
         if not p2:
             self.add_error('player2', "Player 2 is required.")
 
-        # 2. ZABEZPIECZENIE: Ten sam gracz przeciwko sobie
+        # 2. PROTECTION: Same player against themselves
         if p1 and p2 and p1 == p2:
             self.add_error('player2', "Player cannot play against themselves.")
 
@@ -620,7 +620,7 @@ class ExtraMatchForm(forms.ModelForm):
             'game_variant': forms.Select(attrs={'class': 'form-select'}),
             'number_of_frames': forms.NumberInput(attrs={'class': 'form-control'}),
 
-            # Możemy dodać widgety dla graczy tutaj, żeby były ładne
+            # We can add widgets for players here to make them look nice
             'player1': forms.Select(attrs={'class': 'form-select'}),
             'player2': forms.Select(attrs={'class': 'form-select'}),
         }
@@ -630,11 +630,11 @@ class ExtraMatchForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if competition:
-            # Filtrujemy listę graczy tylko do uczestników tego turnieju
+            # Filter player list only to participants of this tournament
             self.fields['player1'].queryset = competition.players.all()
             self.fields['player2'].queryset = competition.players.all()
 
-            # Ładne etykiety
+            # Nice labels
             self.fields['player1'].label = "Player 1 (Left)"
             self.fields['player2'].label = "Player 2 (Right)"
 
@@ -663,34 +663,34 @@ class SubstitutePlayerForm(forms.Form):
 
         if self.stage and self.owner:
 
-            # === ZMIANA: ROZPOZNAWANIE TYPU ETAPU ===
+            # === CHANGE: STAGE TYPE RECOGNITION ===
 
-            # Sprawdzamy, czy to etap GRUPOWY (czy model ma pole 'groups')
+            # Check if it is a GROUP stage (if model has 'groups' field)
             if hasattr(self.stage, 'groups'):
-                # --- LOGIKA DLA GRUP (STARA) ---
+                # --- LOGIC FOR GROUPS (OLD) ---
                 finished_matches = Match.objects.filter(
                     group_stage=self.stage,
                     status='FINISHED'
                 )
-                # Gracze są wyciągani z tabeli grupowej (GroupStanding)
+                # Players are pulled from group table (GroupStanding)
                 players_in_stage_ids = list(Player.objects.filter(
                     groupstanding__group__stage=self.stage
                 ).values_list('id', flat=True))
 
             else:
-                # --- LOGIKA DLA PLAY-OFF (NOWA) ---
-                # Tutaj szukamy po knockout_stage
+                # --- LOGIC FOR PLAY-OFF (NEW) ---
+                # Here we look by knockout_stage
                 finished_matches = Match.objects.filter(
                     knockout_stage=self.stage,
                     status='FINISHED'
                 )
-                # Gracze są wyciągani bezpośrednio z Turnieju (bo w Play-off grają wszyscy, którzy zostali)
-                # Zakładamy: self.stage.competition.players
+                # Players are pulled directly from Tournament (because in Play-off, everyone remaining plays)
+                # Assumption: self.stage.competition.players
                 players_in_stage_ids = list(self.stage.competition.players.values_list('id', flat=True))
 
             # ========================================
 
-            # Reszta kodu bez zmian - działa tak samo dla obu wersji
+            # Rest of code unchanged - works the same for both versions
             busy_ids = set()
             for m in finished_matches:
                 if m.player1: busy_ids.add(m.player1.id)
@@ -706,9 +706,9 @@ class SubstitutePlayerForm(forms.Form):
             ).exclude(id__in=players_in_stage_ids)
 
 
-# Formularz do zmiany grupy dla istniejącego gracza (wiersz tabeli)
+# Form to change group for existing player (table row)
 class GroupAssignmentForm(forms.ModelForm):
-    # Pole Checkbox do usunięcia gracza z etapu
+    # Checkbox field to remove player from stage
     delete_player = forms.BooleanField(
         required=False,
         initial=False,
@@ -717,18 +717,18 @@ class GroupAssignmentForm(forms.ModelForm):
 
     class Meta:
         model = GroupStanding
-        fields = ['group']  # Tylko zmiana grupy
+        fields = ['group']  # Only group change
 
     def __init__(self, *args, **kwargs):
         stage = kwargs.pop('stage', None)
         super().__init__(*args, **kwargs)
         if stage:
-            # W dropdownie pokazujemy tylko grupy z tego etapu
+            # In dropdown show only groups from this stage
             self.fields['group'].queryset = Group.objects.filter(stage=stage)
             self.fields['group'].widget.attrs.update({'class': 'form-select form-select-sm'})
 
 
-# Formularz do dodania zupełnie nowego gracza z zewnątrz
+# Form to add a completely new player from outside
 class AddPlayerToGroupForm(forms.Form):
     player = forms.ModelChoiceField(
         queryset=Player.objects.none(),
@@ -747,7 +747,7 @@ class AddPlayerToGroupForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         if self.stage and self.owner:
-            # Gracze dostępni = Wszyscy moi gracze MINUS ci co już są w grupach
+            # Available players = All my players MINUS those already in groups
             players_in_stage = Player.objects.filter(groupstanding__group__stage=self.stage)
 
             self.fields['player'].queryset = Player.objects.filter(
@@ -773,8 +773,8 @@ class KnockoutSwapForm(forms.Form):
         stage = kwargs.pop('stage', None)
         super().__init__(*args, **kwargs)
         if stage:
-            # Pobieramy graczy TYLKO z 1. rundy tego etapu
-            # (Tylko w 1. rundzie są "żywi" gracze na starcie)
+            # Get players ONLY from 1st round of this stage
+            # (Only in 1st round are "alive" players at start)
             r1_matches = Match.objects.filter(knockout_stage=stage, round_number=1)
 
             p_ids = set()
@@ -796,7 +796,7 @@ class KnockoutSwapForm(forms.Form):
         return cleaned_data
 
 
-# Formularz wpisywania kodu
+# Code entry form
 class ImportCodeForm(forms.Form):
     code = forms.CharField(
         label="Enter 6-digit Code",
@@ -808,7 +808,8 @@ class ImportCodeForm(forms.Form):
         })
     )
 
-# Formularz wyboru graczy (z checkboxami)
+
+# Player selection form (with checkboxes)
 class SelectImportedPlayersForm(forms.Form):
     selected_players = forms.ModelMultipleChoiceField(
         queryset=Player.objects.none(),
@@ -830,44 +831,44 @@ class MatchFormSetValidating(BaseModelFormSet):
         if any(self.errors):
             return
 
-        # Słownik: Klucz to (ID etapu, Numer Rundy) -> Wartość to zbiór ID graczy w tej rundzie
+        # Dictionary: Key is (Stage ID, Round Number) -> Value is set of player IDs in this round
         usage_map = {}
 
         for form in self.forms:
             if not form.is_valid() or not form.cleaned_data or self._should_delete_form(form):
                 continue
 
-            # Pobieramy dane, które Ty wpisałeś w formularzu (NOWY STAN)
+            # Get data entered in the form (NEW STATE)
             match = form.instance
             p1 = form.cleaned_data.get('player1')
             p2 = form.cleaned_data.get('player2')
 
-            # Określamy klucz (Gdzie jesteśmy? Jaki etap, jaka runda?)
+            # Determine key (Where are we? Which stage, which round?)
             stage_key = None
             context_name = ""
 
             if match.group_stage:
-                # Grupy: Kluczem jest Etap + Numer Kolejki
+                # Groups: Key is Stage + Round Number
                 stage_key = ('group', match.group_stage.id, match.round_number)
                 context_name = f"Group Stage - Round {match.round_number}"
             elif match.knockout_stage:
-                # Puchar: Kluczem jest Etap + Numer Rundy
+                # Knockout: Key is Stage + Round Number
                 stage_key = ('knockout', match.knockout_stage.id, match.round_number)
                 context_name = f"Knockout - Round {match.round_number}"
 
-            # Jeśli mecz należy do jakiegoś etapu, sprawdzamy unikalność graczy
+            # If match belongs to a stage, check player uniqueness
             if stage_key:
                 if stage_key not in usage_map:
                     usage_map[stage_key] = set()
 
-                # Sprawdzamy gracza 1
+                # Check player 1
                 if p1:
                     if p1.id in usage_map[stage_key]:
                         raise forms.ValidationError(
                             f"Player '{p1}' appears twice in {context_name}. You cannot assign the same player to multiple matches in one round.")
                     usage_map[stage_key].add(p1.id)
 
-                # Sprawdzamy gracza 2
+                # Check player 2
                 if p2:
                     if p2.id in usage_map[stage_key]:
                         raise forms.ValidationError(
@@ -880,12 +881,12 @@ class EquipmentForm(forms.ModelForm):
         model = Equipment
         exclude = ['owner', 'player']
         widgets = {
-            # --- PODSTAWOWE ---
+            # --- BASIC ---
             'item_type': forms.Select(attrs={'class': 'form-select'}),
             'brand': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Manufacturer'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Model name'}),
 
-            # --- SPECYFIKACJA (Tu brakowało klas!) ---
+            # --- SPECIFICATION (Classes were missing here!) ---
             'shaft_material': forms.Select(attrs={'class': 'form-select'}),
             'joint_type': forms.Select(attrs={'class': 'form-select'}),
 
@@ -901,7 +902,7 @@ class EquipmentForm(forms.ModelForm):
             'ferrule_material': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Material'}),
             'ferrule_size': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'mm'}),
 
-            # --- DATY I NOTATKI ---
+            # --- DATES AND NOTES ---
             'start_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'notes': forms.Textarea(attrs={'rows': 3, 'class': 'form-control', 'placeholder': 'Additional info...'}),
@@ -922,9 +923,9 @@ class EquipmentPhotoForm(forms.ModelForm):
         fields = ['image', 'is_main']
 
 
-# --- FORMULARZ UŻYTKOWNIKA (Login, Email, Imię) ---
+# --- USER FORM (Login, Email, Name) ---
 class UserUpdateForm(forms.ModelForm):
-    # POPRAWKA TU: Wymuszamy widget z klasą form-control bezpośrednio w definicji pola
+    # FIX HERE: Force widget with form-control class directly in field definition
     email = forms.EmailField(widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Email'}))
 
     class Meta:
@@ -937,7 +938,7 @@ class UserUpdateForm(forms.ModelForm):
         }
 
 
-# --- FORMULARZ PROFILU (Klub, Adres, Sociale) ---
+# --- PROFILE FORM (Club, Address, Socials) ---
 class ProfileUpdateForm(forms.ModelForm):
     class Meta:
         model = Profile
@@ -953,11 +954,11 @@ class ProfileUpdateForm(forms.ModelForm):
             'founded_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'bio': forms.Textarea(attrs={'rows': 3, 'class': 'form-control', 'placeholder': 'Short description...'}),
 
-            # Lokalizacja
+            # Location
             'address': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Street and Number'}),
             'city': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'City'}),
 
-            # Kontakt
+            # Contact
             'public_email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'contact@club.com'}),
             'phone_main': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+48...'}),
             'phone_secondary': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Alternative number'}),
@@ -1012,7 +1013,7 @@ class TrainingSessionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
-        # Pobieramy pre-wybranego gracza (jeśli jest)
+        # Get pre-selected player (if exists)
         preselected_player = kwargs.pop('preselected_player', None)
 
         super().__init__(*args, **kwargs)
@@ -1023,11 +1024,11 @@ class TrainingSessionForm(forms.ModelForm):
                 Q(is_public=True) | Q(owner=self.user)
             ).order_by('name')
 
-        # LOGIKA UKRYWANIA POLA GRACZA
+        # HIDE PLAYER FIELD LOGIC
         if preselected_player:
-            # Ustawiamy wartość pola na tego gracza
+            # Set field value to this player
             self.fields['player'].initial = preselected_player
-            # Zmieniamy widget na ukryty (użytkownik go nie widzi, ale on tam jest)
+            # Change widget to hidden (user doesn't see it, but it's there)
             self.fields['player'].widget = forms.HiddenInput()
-            # Opcjonalnie: usuwamy label, żeby nie wisiał pusty napis
+            # Optional: remove label so empty text doesn't hang there
             self.fields['player'].label = ""
