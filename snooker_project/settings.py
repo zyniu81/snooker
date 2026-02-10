@@ -94,15 +94,12 @@ WSGI_APPLICATION = 'snooker_project.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django_pg8000',
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME'),
         'USER': os.environ.get('DB_USER'),
         'PASSWORD': os.environ.get('DB_PASSWORD'),
         'HOST': os.environ.get('DB_HOST'),
         'PORT': os.environ.get('DB_PORT', '5432'), # Default to 5432 if not set
-        'OPTIONS': {
-            'options': '-c search_path=public'
-        },
     }
 }
 
