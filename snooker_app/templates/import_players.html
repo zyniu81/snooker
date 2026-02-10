@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="bi bi-cloud-download me-2"></i>Import Players via Code</h4>
+                </div>
+                <div class="card-body text-center">
+
+                    {% if not select_form %}
+                        <p class="text-muted">Ask the other user to generate a 6-digit code in their profile.</p>
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="mb-4">
+                                {{ code_form.code }}
+                                <div class="text-danger mt-2">{{ code_form.code.errors }}</div>
+                            </div>
+                            <button type="submit" name="check_code" class="btn btn-primary btn-lg w-100 fw-bold">
+                                Find Players
+                            </button>
+                        </form>
+                    {% endif %}
+
+                    {% if select_form %}
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>Code Verified!
+                            Found players from user: <strong>{{ token_owner.username }}</strong>
+                        </div>
+
+                        <form method="post">
+                            {% csrf_token %}
+
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="fw-bold">Select players:</span>
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        onclick="toggleAll(this)">Select All</button>
+                            </div>
+
+                            <div class="list-group text-start mb-4" style="max_height: 300px; overflow-y: auto;">
+                                {% for checkbox in select_form.selected_players %}
+                                    <label class="list-group-item">
+                                        {{ checkbox.tag }}
+                                        <span class="ms-2 fw-bold">{{ checkbox.choice_label }}</span>
+                                        <span class="text-muted small ms-1">({{ token_owner.username }})</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" name="confirm_import" class="btn btn-success fw-bold">
+                                    Import Selected
+                                </button>
+
+                                {% if is_match_import %}
+                                    <a href="{% url 'add_match' %}" class="btn btn-outline-secondary">Cancel</a>
+                                {% elif competition %}
+                                    <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">Cancel</a>
+                                {% else %}
+                                    <a href="{% url 'player_list' %}" class="btn btn-outline-secondary">Cancel</a>
+                                {% endif %}
+                            </div>
+
+                        </form>
+                    {% endif %}
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleAll(btn) {
+    var checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    var isChecked = btn.getAttribute('data-checked') === 'true';
+
+    checkboxes.forEach(cb => cb.checked = !isChecked);
+
+    btn.setAttribute('data-checked', !isChecked);
+    btn.textContent = isChecked ? 'Select All' : 'Deselect All';
+}
+</script>
+{% endblock %}

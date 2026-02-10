@@ -1,13 +1,199 @@
 {% extends 'base.html' %}
 
+{% block title %}Add Match - Snooker App{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h2>Add Match</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Add Match</button>
-        <a href="{% url 'match_list' %}" class="btn btn-secondary">Cancel</a>
-    </form>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-7">
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4 p-md-5">
+
+                    <div class="text-center mb-4">
+                        <h3 class="fw-bold">New Match</h3>
+                        <p class="text-muted small">Schedule a game or log a result</p>
+                    </div>
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger" role="alert">
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                            {% for error in form.non_field_errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3">Match Setup</h6>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Date</label>
+                                {{ form.date }}
+                                {{ form.date.errors }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Time</label>
+                                {{ form.time }}
+                                {{ form.time.errors }}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Venue (Club)</label>
+                            {{ form.venue }}
+                            {{ form.venue.errors }}
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Game Variant</label>
+                                {{ form.game_variant }}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label small fw-bold text-muted">Frames</label>
+                                {{ form.number_of_frames }}
+                                {{ form.number_of_frames.errors }}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label small fw-bold text-muted">Table No.</label>
+                                {{ form.table_number }}
+                            </div>
+                        </div>
+
+                        {# --- HIDE OPTIONS FOR REGULAR USERS --- #}
+                        {% if user.is_superuser %}
+                        <div class="mb-4 p-3 bg-light border rounded">
+                            <h6 class="small fw-bold text-muted mb-2">Admin Options</h6>
+                            <div class="form-check">
+                                {{ form.allow_draws }}
+                                <label class="form-check-label" for="{{ form.allow_draws.id_for_label }}">Allow Draws</label>
+                            </div>
+                            <div class="form-check">
+                                {{ form.is_public }}
+                                <label class="form-check-label" for="{{ form.is_public.id_for_label }}">Public Match</label>
+                            </div>
+                        </div>
+                        {% else %}
+                            {# Render as hidden to ensure form receives data #}
+                            {{ form.allow_draws.as_hidden }}
+                            {{ form.is_public.as_hidden }}
+                        {% endif %}
+
+                        <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 mt-4">
+                            <i class="bi bi-people-fill me-2"></i>Players
+                        </h6>
+
+                        {# --- SECTION: PLAYER 1 vs PLAYER 2 (FIXED) --- #}
+                        {% if form.player1 and form.player2 %}
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-primary">
+                                    <i class="bi bi-person-fill"></i> {{ form.player1.label }}
+                                </label>
+                                {{ form.player1 }}
+                                {{ form.player1.errors }}
+                                {% if form.player1.help_text %}
+                                    <div class="form-text text-muted small">{{ form.player1.help_text }}</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-danger">
+                                    <i class="bi bi-person-fill"></i> {{ form.player2.label }}
+                                </label>
+                                {{ form.player2 }}
+                                {{ form.player2.errors }}
+
+                                <div class="mt-2 text-end">
+                                    <small class="text-muted">Not on list?</small>
+                                    <a href="{% url 'import_guest_for_match' %}" class="btn btn-sm btn-outline-primary ms-2">
+                                        <i class="bi bi-person-down"></i> Import via Code
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-4">
+                            <div class="form-check">
+                                {{ form.create_temporary_players }}
+                                <label class="form-check-label fw-bold" for="{{ form.create_temporary_players.id_for_label }}">
+                                    {{ form.create_temporary_players.label }}
+                                </label>
+                                <div class="form-text text-muted small">Useful for quick sparring without registering players.</div>
+                            </div>
+                        </div>
+
+                        {# --- CHANGE: OFFICIALS -> REFEREES --- #}
+                        <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 mt-4">
+                            <i class="bi bi-whistle me-2"></i>Referees
+                        </h6>
+
+                        <div class="mb-3">
+                            <div class="bg-white p-3 rounded border">
+                                {{ form.referees }}
+                                <div class="form-text text-muted small mt-2">
+                                    Select referees for this match (Optional).
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-5">
+                            <button type="submit" class="btn btn-success fw-bold py-2">
+                                <i class="bi bi-check-lg"></i> Create Match
+                            </button>
+                            <a href="{% url 'match_list' %}" class="btn btn-light text-muted border">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
 </div>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // List of fields to save
+        const fieldsToSave = ['id_date', 'id_time', 'id_venue', 'id_game_variant', 'id_number_of_frames', 'id_table_number', 'id_player1'];
+
+        // 1. RESTORE DATA (If in memory)
+        if (localStorage.getItem("match_draft_saved") === "true") {
+            fieldsToSave.forEach(id => {
+                const savedValue = localStorage.getItem(id);
+                const field = document.getElementById(id);
+                if (savedValue && field) {
+                    field.value = savedValue;
+                }
+            });
+            // We clear the flag so it doesn't restore indefinitely on new entries
+            // But note: we only clear after successful form submission,
+            // leaving it here so it works after import.
+        }
+
+        // 2. SAVE ON THE FLY (Auto-Save)
+        fieldsToSave.forEach(id => {
+            const field = document.getElementById(id);
+            if (field) {
+                field.addEventListener("change", function() {
+                    localStorage.setItem(id, this.value);
+                    localStorage.setItem("match_draft_saved", "true");
+                });
+            }
+        });
+
+        // 3. CLEAR AFTER MATCH SAVE (So next match is clean)
+        const form = document.querySelector("form");
+        form.addEventListener("submit", function() {
+            localStorage.removeItem("match_draft_saved");
+            fieldsToSave.forEach(id => localStorage.removeItem(id));
+        });
+    });
+</script>
 {% endblock %}

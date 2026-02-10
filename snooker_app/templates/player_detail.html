@@ -1,10 +1,424 @@
 {% extends 'base.html' %}
+
+{% block title %}{{ player.first_name }} - Player Profile{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h2>Player Detail</h2>
-    <p>Name: {{ player }}</p>
-    <a href="{% url 'player_edit' player.pk %}" class="btn btn-sm btn-primary">Edit Player</a>
-    <a href="{% url 'player_delete' player.pk %}" class="btn btn-sm btn-danger">Delete Player</a>
-    <a href="{% url 'player_list' %}" class="btn btn-sm btn-secondary">Back to list</a>
+<style>
+    /* Profile Header */
+    .profile-header-card {
+        border: none;
+        border-radius: 15px;
+        background-color: white;
+        overflow: hidden;
+    }
+
+    /* Large Avatar */
+    .profile-avatar-lg {
+        width: 120px;
+        height: 120px;
+        background: linear-gradient(135deg, #6f42c1, #a06ee1);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3.5rem;
+        font-weight: 800;
+        margin: 0 auto;
+        border: 5px solid #fff;
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+        overflow: hidden;
+    }
+
+    .profile-avatar-lg img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    /* Stat Tiles */
+    .stat-card {
+        border: none;
+        border-radius: 12px;
+        background-color: #f8f9fa;
+        transition: transform 0.2s;
+        height: 100%;
+        padding: 1rem;
+        text-align: center;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-2px);
+        background-color: white;
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.1);
+    }
+
+    .stat-title {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6c757d;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-number {
+        font-size: 1.8rem;
+        font-weight: 800;
+        color: #212529;
+        line-height: 1.2;
+    }
+
+    .stat-subtext {
+        font-size: 0.75rem;
+        color: #adb5bd;
+    }
+</style>
+
+<div class="container mt-4 mb-5">
+
+    <div class="mb-3">
+        {% if request.GET.next %}
+            {# IF SYSTEM KNOWS WHERE YOU CAME FROM (e.g. ranking) #}
+            <a href="{{ request.GET.next }}" class="text-decoration-none text-muted">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        {% else %}
+            {# STANDARD BEHAVIOR (e.g. from menu) #}
+            <a href="{% url 'player_list' %}" class="text-decoration-none text-muted">
+                <i class="bi bi-arrow-left"></i> Back to Players
+            </a>
+        {% endif %}
+    </div>
+
+    <div class="row">
+
+        {# --- LEFT COLUMN: PERSONAL INFO --- #}
+        <div class="col-lg-4 mb-4">
+            <div class="card profile-header-card shadow-sm h-100 text-center p-4">
+
+                <div class="mb-3">
+                    <div class="profile-avatar-lg">
+                        {% if player.photo %}
+                            <img src="{{ player.photo.url }}" alt="{{ player.nickname }}">
+                        {% elif player.first_name %}
+                            {{ player.first_name|slice:":1"|upper }}
+                        {% elif player.nickname %}
+                            {{ player.nickname|slice:":1"|upper }}
+                        {% elif player.last_name %}
+                            {{ player.last_name|slice:":1"|upper }}
+                        {% else %}
+                            <i class="bi bi-person"></i>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h2 class="mb-0 fw-bold lh-sm">
+                        {% if player.first_name %}
+                            <span class="d-block fw-normal fs-4">{{ player.first_name }}</span>
+                        {% endif %}
+
+                        {% if player.nickname %}
+                            <span class="d-block text-primary fst-italic py-1 fs-5">
+                                "{{ player.nickname }}"
+                            </span>
+                        {% endif %}
+
+                        {% if player.last_name %}
+                            <span class="d-block fw-bold">{{ player.last_name }}</span>
+                        {% endif %}
+                    </h2>
+                </div>
+
+                <div class="d-grid gap-2 col-10 mx-auto">
+                    <a href="{% url 'player_edit' player.pk %}" class="btn btn-outline-primary fw-bold">
+                        <i class="bi bi-pencil-fill"></i> Edit Profile
+                    </a>
+
+                    {# --- NEW BUTTON: TRAINING --- #}
+                    <a href="{% url 'player_training_list' player.pk %}" class="btn btn-outline-success fw-bold shadow-sm">
+                        <i class="bi bi-journal-check me-2"></i> Training Diary
+                    </a>
+
+                    {# --- EQUIPMENT --- #}
+                    <a href="{% url 'equipment_list' player.pk %}" class="btn btn-outline-dark fw-bold shadow-sm">
+                        <i class="bi bi-backpack2-fill me-2"></i> Equipment / Gear
+                    </a>
+
+                    <a href="{% url 'player_delete' player.pk %}" class="btn btn-outline-danger btn-sm border-0 mt-2">
+                        Delete Player
+                    </a>
+                </div>
+
+            </div>
+        </div>
+
+        {# --- RIGHT COLUMN: STATS AND HISTORY --- #}
+        <div class="col-lg-8">
+
+            <h4 class="fw-bold mb-3"><i class="bi bi-bar-chart-line-fill text-primary me-2"></i>Performance Stats</h4>
+
+            {# ROW 1: Matches, Break, AST #}
+            <div class="row g-3 mb-3">
+
+                <div class="col-md-4">
+                    <div class="card stat-card d-flex flex-column justify-content-center">
+                        <div class="stat-title">Match Record</div>
+                        <div class="stat-number">
+                            <span class="text-success">{{ player.matches_won }}</span>
+                            <span class="text-muted fs-6 mx-1">/</span>
+                            <span class="text-danger">{{ player.matches_lost }}</span>
+                        </div>
+                        <div class="stat-subtext">Won / Lost ({{ player.matches_played }} Total)</div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card stat-card">
+                        <div class="stat-title">High Break</div>
+                        <div class="stat-number text-primary">
+                            {{ player.highest_break|default:"-" }}
+                        </div>
+                        <div class="stat-subtext">Points</div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card stat-card">
+                        <div class="stat-title">Avg Shot Time</div>
+                        <div class="stat-number">
+                            {{ player.formatted_avg_shot_time }}
+                        </div>
+                        <div class="stat-subtext">Seconds</div>
+                    </div>
+                </div>
+            </div>
+
+            {# ROW 2: Pot Success & Safety Success #}
+            <div class="row g-3 mb-4">
+
+                <div class="col-md-6">
+                    <div class="card stat-card">
+                        <div class="d-flex justify-content-between align-items-end mb-2">
+                            <div class="stat-title mb-0">Pot Success</div>
+                            <div class="fw-bold fs-4 text-success">
+                                {{ player.global_pot_success|floatformat:1 }}<small>%</small>
+                            </div>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-success" role="progressbar"
+                                 style="width: {{ player.global_pot_success|stringformat:'f' }}%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card stat-card">
+                        <div class="d-flex justify-content-between align-items-end mb-2">
+                            <div class="stat-title mb-0">Safety Success</div>
+                            <div class="fw-bold fs-4 text-warning">
+                                {{ player.global_safety_success|floatformat:1 }}<small>%</small>
+                            </div>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-warning" role="progressbar"
+                                 style="width: {{ player.global_safety_success|stringformat:'f' }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# --- TROPHY ROOM --- #}
+            <h5 class="fw-bold mb-3 mt-4">
+                <i class="bi bi-trophy-fill text-warning me-2"></i>Tournament History
+            </h5>
+
+            {# 1. SUMMARY (Counters) #}
+            <div class="row g-3 mb-4">
+                <div class="col-4">
+                    <div class="p-3 bg-white rounded shadow-sm text-center border-bottom border-warning border-4 h-100">
+                        <i class="bi bi-trophy-fill text-warning fs-3 mb-2 d-block"></i>
+                        <div class="fw-bold fs-4">{{ trophies.gold }}</div>
+                        <div class="text-muted small text-uppercase fw-bold" style="font-size: 0.7rem;">Winner</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="p-3 bg-white rounded shadow-sm text-center border-bottom border-secondary border-4 h-100">
+                        <i class="bi bi-award-fill text-secondary fs-3 mb-2 d-block"></i>
+                        <div class="fw-bold fs-4">{{ trophies.silver }}</div>
+                        <div class="text-muted small text-uppercase fw-bold" style="font-size: 0.7rem;">Finals</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="p-3 bg-white rounded shadow-sm text-center border-bottom border-4 h-100" style="border-color: #cd7f32 !important;">
+                        <i class="bi bi-award-fill fs-3 mb-2 d-block" style="color: #cd7f32;"></i>
+                        <div class="fw-bold fs-4">{{ trophies.bronze }}</div>
+                        <div class="text-muted small text-uppercase fw-bold" style="font-size: 0.7rem;">Semis</div>
+                    </div>
+                </div>
+            </div>
+
+            {# 2. TOURNAMENT LIST (Scrollable to save space) #}
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="small text-muted fw-bold text-uppercase">Participation Log</span>
+                    <span class="badge bg-light text-dark border">{{ competition_results.count }} Tournaments</span>
+                </div>
+
+                <div class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto;">
+                    {% for res in competition_results %}
+                        <a href="{% url 'competition_ranking' res.competition.id %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2">
+                            <div>
+                                <div class="fw-bold text-dark small">{{ res.competition.name }}</div>
+                                <div class="text-muted" style="font-size: 0.7rem;">
+                                    {{ res.competition.end_date|date:"Y" }}
+                                </div>
+                            </div>
+
+                            {# BADGE WITH RESULT #}
+                            <div>
+                                {% if res.result == 'WINNER' %}
+                                    <span class="badge bg-warning text-dark border border-warning shadow-sm">
+                                        <i class="bi bi-trophy-fill me-1"></i> Winner
+                                    </span>
+                                {% elif res.result == 'RUNNER_UP' %}
+                                    <span class="badge bg-secondary text-white shadow-sm">2nd Place</span>
+                                {% elif res.result == 'THIRD_PLACE' %}
+                                    <span class="badge text-white shadow-sm" style="background-color: #cd7f32;">3rd Place</span>
+                                {% elif res.result == 'KNOCKOUT_ROUND' %}
+                                    <span class="badge bg-light text-dark border">Last {{ res.detail_number }}</span>
+                                {% elif res.result == 'GROUP_STAGE' %}
+                                    <span class="badge bg-light text-muted border">Groups</span>
+                                {% else %}
+                                    <span class="badge bg-light text-dark border">{{ res.get_result_display }}</span>
+                                {% endif %}
+                            </div>
+                        </a>
+                    {% empty %}
+                        <div class="text-center py-4 text-muted small">
+                            No tournament history yet.
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {# MATCH HISTORY #}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0">Recent Matches</h5>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-0">
+                    {% if matches %}
+                        <div class="list-group list-group-flush">
+                            {% for match in matches %}
+                                <a href="{% url 'match_detail' match.pk %}?next={{ request.path }}" class="list-group-item list-group-item-action py-3">
+                                    <div class="row align-items-center">
+
+                                        {# 1. DATE #}
+                                        <div class="col-3 col-sm-2 text-muted small border-end text-center">
+                                            <div class="fw-bold">{{ match.date|date:"d.m" }}</div>
+                                            <div>{{ match.time|time:"H:i" }}</div>
+                                            {# Addition: Remote icon if match from another account #}
+                                            {% if match.owner != request.user %}
+                                                 <div class="text-info" style="font-size: 0.65rem;">
+                                                    <i class="bi bi-link-45deg"></i> Remote
+                                                 </div>
+                                            {% endif %}
+                                        </div>
+
+                                        {# 2. OPPONENT AND SCORE #}
+                                        <div class="col-9 col-sm-10">
+                                            <div class="d-flex justify-content-between align-items-center">
+
+                                                {# --- LOGIC: AM I PLAYER 1? --- #}
+                                                {# I am P1 if: it's me (ID) OR it's my clone #}
+                                                {% if match.player1 == player or match.player1.cloned_from == player %}
+
+                                                    {# SCENARIO A: I AM P1 (OR MY CLONE IS P1) #}
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="text-muted me-2 small">vs</span>
+                                                        <span class="fw-bold text-dark fs-5">
+                                                            {{ match.player2 }}
+                                                        </span>
+                                                    </div>
+
+                                                    <div class="text-end">
+                                                        {% if match.status == 'FINISHED' %}
+                                                            <div class="fs-5 fw-bold font-monospace">
+                                                                {# Color the score. Check if I or my clone won #}
+                                                                {% if match.winner == match.player1 or match.winner.cloned_from == player %}
+                                                                    <span class="text-success">{{ match.final_score_player1 }}</span>
+                                                                {% else %}
+                                                                    <span class="text-danger">{{ match.final_score_player1 }}</span>
+                                                                {% endif %}
+                                                                <span class="text-muted mx-1">:</span>
+                                                                <span>{{ match.final_score_player2 }}</span>
+                                                            </div>
+                                                        {% elif match.status == 'IN_PROGRESS' %}
+                                                            <span class="badge bg-warning text-dark animate-pulse">LIVE</span>
+                                                        {% else %}
+                                                            <span class="badge bg-light text-muted border">Plan</span>
+                                                        {% endif %}
+                                                    </div>
+
+                                                {% else %}
+
+                                                    {# SCENARIO B: I AM P2 (OR MY CLONE IS P2) #}
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="text-muted me-2 small">vs</span>
+                                                        <span class="fw-bold text-dark fs-5">
+                                                            {{ match.player1 }}
+                                                        </span>
+                                                    </div>
+
+                                                    <div class="text-end">
+                                                        {% if match.status == 'FINISHED' %}
+                                                            <div class="fs-5 fw-bold font-monospace">
+                                                                {# Color the score (for P2) #}
+                                                                {% if match.winner == match.player2 or match.winner.cloned_from == player %}
+                                                                    <span class="text-success">{{ match.final_score_player2 }}</span>
+                                                                {% else %}
+                                                                    <span class="text-danger">{{ match.final_score_player2 }}</span>
+                                                                {% endif %}
+                                                                <span class="text-muted mx-1">:</span>
+                                                                <span>{{ match.final_score_player1 }}</span>
+                                                            </div>
+                                                        {% elif match.status == 'IN_PROGRESS' %}
+                                                            <span class="badge bg-warning text-dark animate-pulse">LIVE</span>
+                                                        {% else %}
+                                                            <span class="badge bg-light text-muted border">Plan</span>
+                                                        {% endif %}
+                                                    </div>
+
+                                                {% endif %}
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-calendar-x mb-2 opacity-50" style="font-size: 2rem;"></i>
+                            <p class="mb-0">No matches played yet.</p>
+                        </div>
+                    {% endif %}
+
+                    <div class="card shadow-sm border-0">
+                        <div class="card-footer bg-white text-center p-3">
+                            <a href="{% url 'player_match_history' player.pk %}" class="btn btn-outline-secondary w-100 fw-bold">
+                                View Full Match History
+                            </a>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
 </div>
 {% endblock %}

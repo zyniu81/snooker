@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4 mb-5" style="max-width: 800px;">
+
+    <div class="card shadow border-0">
+        <div class="card-header bg-primary text-white py-3">
+            <h4 class="mb-0 fw-bold">
+                <i class="bi bi-pencil-square me-2"></i>
+                {% if object %}Edit Training Session{% else %}Log New Training{% endif %}
+            </h4>
+        </div>
+        <div class="card-body p-4">
+            <form method="post">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <h6 class="text-muted text-uppercase small fw-bold mb-3 border-bottom pb-2">Basics</h6>
+                <div class="row g-3 mb-4">
+
+                    <div class="col-12">
+                        {% if form.player.is_hidden %}
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="text-muted text-uppercase small fw-bold me-2">Training for:</span>
+                                <h4 class="mb-0 text-primary fw-bold">
+                                    <i class="bi bi-person-circle me-2"></i>{{ form.player.initial }}
+                                </h4>
+                            </div>
+                            {{ form.player }}
+
+                        {% else %}
+                            <label class="form-label fw-bold text-primary">Select Player</label>
+                            {{ form.player }}
+                            <div class="text-danger small">{{ form.player.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Date</label>
+                        {{ form.date }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Duration (min)</label>
+                        {{ form.duration_minutes }}
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label fw-bold">Venue</label>
+                        {{ form.venue }}
+                    </div>
+                </div>
+
+                <h6 class="text-muted text-uppercase small fw-bold mb-3 border-bottom pb-2">Training Content</h6>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-primary">Session Type</label>
+                        {{ form.session_type }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-success">Main Focus</label>
+                        {{ form.main_focus }}
+                        <div class="form-text small">What did you work on mostly?</div>
+                    </div>
+                </div>
+
+                <h6 class="text-muted text-uppercase small fw-bold mb-3 border-bottom pb-2">Stats & Achievements (Optional)</h6>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Best Break</label>
+                        {{ form.best_break }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Potting %</label>
+                        {{ form.pot_success }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Safety %</label>
+                        {{ form.safety_success }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Long Pot %</label>
+                        {{ form.long_pot_success }}
+                    </div>
+                </div>
+
+                <h6 class="text-muted text-uppercase small fw-bold mb-3 border-bottom pb-2">Summary</h6>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-bold">Self Rating (1-10)</label>
+                        {{ form.rating }}
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold">Notes</label>
+                        {{ form.notes }}
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <div class="d-flex justify-content-end gap-2">
+                    {% if form.instance.pk %}
+                        <a href="{% url 'player_training_list' form.instance.player.pk %}" class="btn btn-light border">Cancel</a>
+                    {% else %}
+                        <a href="javascript:history.back()" class="btn btn-light border">Cancel</a>
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary px-4 fw-bold">
+                        <i class="bi bi-check-lg me-1"></i> Save Session
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

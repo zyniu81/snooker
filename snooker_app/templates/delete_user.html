@@ -1,13 +1,50 @@
 {% extends 'base.html' %}
 
+{% block title %}Delete Account - Snooker App{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h2>Delete User: {{ user.username }}</h2>
-    <p>Are you sure you want to delete user "{{ user.username }}"?</p>
-    <form method="post">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-danger">Delete</button>
-        <a href="{% url 'user_settings' %}" class="btn btn-secondary">Cancel</a>
-    </form>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-7 col-lg-6">
+            <div class="card border-danger shadow">
+                <div class="card-body text-center p-5">
+
+                    <i class="bi bi-person-x-fill text-danger display-1 mb-3"></i>
+
+                    <h3 class="card-title fw-bold text-danger">Delete Account</h3>
+                    <p class="lead mb-4">Goodbye, <strong>{{ user.username }}</strong>...</p>
+
+                    <div class="alert alert-danger text-start small mb-4" role="alert">
+                        <i class="bi bi-exclamation-octagon-fill me-2"></i>
+                        <strong>WARNING: This action is permanent!</strong><br>
+                        Creating a new account later will not restore your data.
+                        Deleting your account will permanently remove:
+                        <ul class="mb-0 mt-1">
+                            <li>All your players and statistics</li>
+                            <li>All match history and results</li>
+                            <li>All competitions and venues</li>
+                        </ul>
+                    </div>
+
+                    <p class="card-text mb-4">
+                        Are you absolutely sure you want to proceed?
+                    </p>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-danger fw-bold py-2">
+                                Yes, Delete My Account Permanently
+                            </button>
+                            <a href="{% url 'user_settings' %}" class="btn btn-light border text-muted">
+                                Cancel, keep my account
+                            </a>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

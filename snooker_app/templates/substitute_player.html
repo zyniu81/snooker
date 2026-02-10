@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0 fw-bold"><i class="bi bi-arrow-left-right me-2"></i>Substitute Player</h4>
+                </div>
+                <div class="card-body">
+
+                    <div class="alert alert-info small">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        You can only replace players who <strong>have not played any finished matches</strong> in this stage yet.
+                        History cannot be rewritten.
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Player OUT (To be replaced)</label>
+                            {{ form.player_out }}
+                            <div class="text-danger small">{{ form.player_out.errors }}</div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Player IN (New player)</label>
+                            {{ form.player_in }}
+                            <div class="text-danger small">{{ form.player_in.errors }}</div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-warning fw-bold">
+                                <i class="bi bi-check-circle-fill me-2"></i>Confirm Substitution
+                            </button>
+                            <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

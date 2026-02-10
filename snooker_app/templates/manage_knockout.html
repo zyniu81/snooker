@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+
+    {# --- HEADER AND BACK BUTTON --- #}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+            <i class="bi bi-person-lines-fill me-2"></i>Substitute Player (Knockout)
+        </h2>
+        <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Tournament
+        </a>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="bi bi-arrow-left-right me-2"></i>Global Substitution
+                    </h5>
+                </div>
+                <div class="card-body">
+
+                    <div class="alert alert-info border-info">
+                        <h6 class="alert-heading fw-bold"><i class="bi bi-info-circle-fill me-2"></i>How this works:</h6>
+                        <p class="mb-0">
+                            This action will replace the player in <strong>the entire tournament roster</strong> and update all their matches in the <strong>Knockout Stage</strong>.
+                        </p>
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        {# --- GLOBAL ERRORS --- #}
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+
+                        <div class="row g-3 mt-2">
+                            {# --- FIELD: OUT PLAYER --- #}
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-danger">Player OUT (To remove)</label>
+                                {{ form.player_out }}
+                                {% if form.player_out.errors %}
+                                    <div class="text-danger small mt-1">{{ form.player_out.errors }}</div>
+                                {% endif %}
+                            </div>
+
+                            {# --- FIELD: PLAYER ENTERING --- #}
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-success">Player IN (New player)</label>
+                                {{ form.player_in }}
+                                {% if form.player_in.errors %}
+                                    <div class="text-danger small mt-1">{{ form.player_in.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-warning btn-lg fw-bold">
+                                <i class="bi bi-check-circle-fill me-2"></i>Confirm Substitution
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

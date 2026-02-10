@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+
+{% block title %}Mass Edit - {{ competition.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-1">
+                <i class="bi bi-list-check text-primary me-2"></i>Bulk Edit Matches
+            </h3>
+            <p class="text-muted mb-0 small">Tournament: <strong>{{ competition.name }}</strong></p>
+        </div>
+        <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Tournament
+        </a>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ formset.management_form }}
+
+        {# --- GLOBAL ERROR BLOCK (FORMSET) --- #}
+        {% if formset.non_form_errors %}
+            <div class="alert alert-danger shadow-sm mb-4">
+                <h5 class="alert-heading d-flex align-items-center mb-2">
+                    <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+                    Please correct the following errors:
+                </h5>
+                <ul class="mb-0 ps-3">
+                    {% for error in formset.non_form_errors %}
+                        <li class="fw-bold">{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+        {# ---------------------------------------- #}
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-white border-bottom">
+                            <tr class="text-muted small text-uppercase">
+                                <th style="width: 30%" class="ps-4">Matchup</th>
+                                <th style="width: 15%">Date</th>
+                                <th style="width: 15%">Time</th>
+                                <th style="width: 10%">Table</th>
+                                <th style="width: 30%">Referee(s)</th>
+                                <th style="display:none;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for form in formset %}
+                                {% with match=form.instance %}
+
+                                    {# --- SEPARATOR HEADERS --- #}
+
+                                    {# 1. Header for GROUPS (e.g. Group 1 - Round 1) #}
+                                    {% if match.group_stage %}
+                                        {% ifchanged match.group match.round_number %}
+                                            <tr class="table-light border-top border-bottom">
+                                                <td colspan="6" class="py-2 px-4">
+                                                    <div class="d-flex align-items-center text-primary">
+                                                        <i class="bi bi-grid-3x3 me-2"></i>
+                                                        <span class="fw-bold me-2">Group {{ match.group_name }}</span>
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill">
+                                                            Round {{ match.round_number }}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {% endifchanged %}
+
+                                    {# 2. Header for KNOCKOUTS (e.g. Quarter-Final) #}
+                                    {% elif match.knockout_stage %}
+                                        {% ifchanged match.knockout_name %}
+                                            <tr class="table-light border-top border-bottom">
+                                                <td colspan="6" class="py-2 px-4">
+                                                    <div class="d-flex align-items-center text-success">
+                                                        <i class="bi bi-trophy me-2"></i>
+                                                        <span class="fw-bold">{{ match.knockout_name }}</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {% endifchanged %}
+
+                                    {# 3. Header for OTHERS (Extra Matches) #}
+                                    {% else %}
+                                        {% ifchanged match.is_temporary %}
+                                            <tr class="table-light border-top border-bottom">
+                                                <td colspan="6" class="py-2 px-4">
+                                                    <span class="fw-bold text-secondary">
+                                                        <i class="bi bi-lightning-fill me-2"></i>Extra / Single Matches
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        {% endifchanged %}
+                                    {% endif %}
+
+
+                                    {# --- ACTUAL FORM ROW --- #}
+                                    <tr>
+                                        {# --- COLUMN 1: PLAYERS --- #}
+                                        <td class="ps-4 border-start-0">
+                                            <div class="d-flex flex-column gap-1">
+                                                <div>
+                                                    {{ form.player1 }}
+                                                    {% if form.player1.errors %}
+                                                        <div class="text-danger small fw-bold mt-1">
+                                                            <i class="bi bi-exclamation-circle me-1"></i>{{ form.player1.errors|striptags }}
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="text-center text-muted small fw-bold" style="font-size: 0.7rem;">VS</div>
+                                                <div>
+                                                    {{ form.player2 }}
+                                                    {% if form.player2.errors %}
+                                                        <div class="text-danger small fw-bold mt-1">
+                                                            <i class="bi bi-exclamation-circle me-1"></i>{{ form.player2.errors|striptags }}
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        {# --- COLUMN 2: DATE --- #}
+                                        <td>
+                                            {{ form.date }}
+                                            {% if form.date.errors %}
+                                                <div class="text-danger small mt-1">{{ form.date.errors|striptags }}</div>
+                                            {% endif %}
+                                        </td>
+
+                                        {# --- COLUMN 3: TIME --- #}
+                                        <td>
+                                            {{ form.time }}
+                                            {% if form.time.errors %}
+                                                <div class="text-danger small mt-1">{{ form.time.errors|striptags }}</div>
+                                            {% endif %}
+                                        </td>
+
+                                        {# --- COLUMN 4: TABLE --- #}
+                                        <td>
+                                            {{ form.table_number }}
+                                            {% if form.table_number.errors %}
+                                                <div class="text-danger small mt-1">{{ form.table_number.errors|striptags }}</div>
+                                            {% endif %}
+                                        </td>
+
+                                        {# --- COLUMN 5: REFEREES --- #}
+                                        <td>
+                                            {{ form.referees }}
+                                            <div class="form-text text-muted fst-italic mt-1" style="font-size: 0.7rem;">
+                                                Hold Ctrl/Cmd to select
+                                            </div>
+                                        </td>
+
+                                        {# --- HIDDEN ID (Required!) --- #}
+                                        <td style="display:none;">
+                                            {{ form.id }}
+                                        </td>
+                                    </tr>
+                                {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {# --- CARD FOOTER WITH BUTTONS --- #}
+            <div class="card-footer bg-white p-3 border-top">
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-success fw-bold px-4">
+                        <i class="bi bi-check-lg me-1"></i> Save All Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

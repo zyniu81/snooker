@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+
+    {# --- HEADER AND RETURN --- #}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h6 class="text-uppercase text-muted fw-bold ls-1 mb-1">{{ item.get_item_type_display }}</h6>
+            <h2 class="fw-bold mb-0">{{ item.brand|default:"" }} <span class="text-primary">{{ item.name }}</span></h2>
+        </div>
+        <div>
+            <a href="{% url 'equipment_list' item.player.id %}" class="btn btn-outline-secondary btn-sm fw-bold me-2">
+                <i class="bi bi-arrow-left me-1"></i> Back
+            </a>
+            <a href="{% url 'edit_equipment' item.pk %}" class="btn btn-primary btn-sm fw-bold">
+                <i class="bi bi-pencil me-1"></i> Edit
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        {# --- LEFT COLUMN: PHOTOS --- #}
+        <div class="col-lg-5 mb-4">
+            <div class="card border-0 shadow-sm">
+                {% if item.photos.exists %}
+                    {# Main photo #}
+                    {% with main=item.photos.first %}
+                        <div class="ratio ratio-4x3 rounded-top overflow-hidden bg-light">
+                            <img src="{{ main.image.url }}" class="object-fit-cover" alt="Main photo">
+                        </div>
+                    {% endwith %}
+
+                    {# Thumbnails (if more than 1) #}
+                    {% if item.photos.count > 1 %}
+                        <div class="card-footer bg-white">
+                            <div class="d-flex gap-2 overflow-auto">
+                                {% for photo in item.photos.all %}
+                                    <a href="{{ photo.image.url }}" target="_blank" class="border rounded" style="width: 60px; height: 60px;">
+                                        <img src="{{ photo.image.url }}" class="w-100 h-100 object-fit-cover" alt="Thumb">
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="ratio ratio-4x3 bg-light rounded d-flex align-items-center justify-content-center text-muted">
+                        <div class="text-center">
+                            <i class="bi bi-camera fs-1"></i>
+                            <p class="mb-0">No photos</p>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            {# Date History #}
+            <div class="mt-4 p-3 bg-light rounded border">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold small text-uppercase text-muted">Start Date</span>
+                    <span class="fw-bold">{{ item.start_date|date:"d M Y" }}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="fw-bold small text-uppercase text-muted">End Date</span>
+                    {% if item.end_date %}
+                        <span class="fw-bold text-danger">{{ item.end_date|date:"d M Y" }}</span>
+                    {% else %}
+                        <span class="badge bg-success">CURRENTLY IN USE</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# --- RIGHT COLUMN: SPECIFICATIONS --- #}
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold py-3">
+                    <i class="bi bi-sliders me-2 text-primary"></i> Technical Specifications
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-striped mb-0">
+                        <tbody>
+                            {# Display only if field is filled #}
+
+                            {% if item.shaft_material %}
+                            <tr>
+                                <td class="text-muted w-50 ps-4">Shaft Material</td>
+                                <td class="fw-bold">{{ item.get_shaft_material_display }}</td>
+                            </tr>
+                            {% endif %}
+
+                            {% if item.joint_type %}
+                            <tr>
+                                <td class="text-muted ps-4">Joint Type</td>
+                                <td class="fw-bold">{{ item.get_joint_type_display }}</td>
+                            </tr>
+                            {% endif %}
+
+                            {% if item.weight_value %}
+                            <tr>
+                                <td class="text-muted ps-4">Weight</td>
+                                <td class="fw-bold">{{ item.weight_value }} <small class="text-muted">{{ item.weight_unit }}</small></td>
+                            </tr>
+                            {% endif %}
+
+                            {% if item.length_value %}
+                            <tr>
+                                <td class="text-muted ps-4">Length</td>
+                                <td class="fw-bold">{{ item.length_value }} <small class="text-muted">{{ item.length_unit }}</small></td>
+                            </tr>
+                            {% endif %}
+
+                            {% if item.tip_diameter or item.tip_hardness %}
+                            <tr>
+                                <td class="text-muted ps-4">Tip</td>
+                                <td class="fw-bold">
+                                    {{ item.tip_diameter|default:"?" }} mm
+                                    {% if item.tip_hardness %}
+                                        <span class="badge bg-secondary ms-2">{{ item.get_tip_hardness_display }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+
+                            {% if item.ferrule_size or item.ferrule_material %}
+                            <tr>
+                                <td class="text-muted ps-4">Ferrule</td>
+                                <td class="fw-bold">
+                                    {{ item.ferrule_size|default:"?" }} mm
+                                    {% if item.ferrule_material %}
+                                        <span class="text-muted small">({{ item.ferrule_material }})</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if item.notes %}
+                <div class="mt-4">
+                    <h6 class="fw-bold text-muted text-uppercase small ls-1 mb-2">Notes</h6>
+                    <div class="p-3 bg-white border rounded text-secondary">
+                        {{ item.notes|linebreaks }}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

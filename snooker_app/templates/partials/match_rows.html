@@ -1,0 +1,50 @@
+{# templates/partials/match_rows.html #}
+{% for match in matches %}
+<a href="{% url 'match_detail' match.pk %}?next={{ request.path }}" class="list-group-item list-group-item-action py-3 match-item">
+    <div class="row align-items-center">
+        {# DATE #}
+        <div class="col-3 col-sm-2 text-muted small border-end text-center">
+            <div class="fw-bold">{{ match.date|date:"d.m.Y" }}</div>
+            {% if match.group_stage %}
+                <div class="text-xs text-primary">Groups</div>
+            {% elif match.knockout_stage %}
+                <div class="text-xs text-success">Knockout</div>
+            {% endif %}
+        </div>
+
+        {# RESULT #}
+        <div class="col-9 col-sm-10">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <span class="text-muted me-2 small">vs</span>
+                    <span class="fw-bold text-dark fs-5">
+                        {% if match.player1 == player %}
+                            {{ match.player2 }}
+                        {% else %}
+                            {{ match.player1 }}
+                        {% endif %}
+                    </span>
+                </div>
+
+                <div class="text-end">
+                    {% if match.status == 'FINISHED' %}
+                        <div class="fs-5 fw-bold font-monospace">
+                            {% if match.player1 == player %}
+                                <span class="{% if match.winner == player %}text-success{% else %}text-danger{% endif %}">{{ match.final_score_player1 }}</span>
+                                <span class="text-muted mx-1">:</span>
+                                <span>{{ match.final_score_player2 }}</span>
+                            {% else %}
+                                <span class="{% if match.winner == player %}text-success{% else %}text-danger{% endif %}">{{ match.final_score_player2 }}</span>
+                                <span class="text-muted mx-1">:</span>
+                                <span>{{ match.final_score_player1 }}</span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <span class="badge bg-light text-dark border">Pending</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</a>
+{% endfor %}

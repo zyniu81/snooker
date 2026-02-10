@@ -3,51 +3,181 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Snooker{% endblock %}</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <title>{% block title %}Snooker App{% endblock %}</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        /* Scoreboard Styles (Preserved) */
+        .set-active-player.active,
+        .foul-points.active,
+        .next-player.active {
+            font-weight: bold;
+            background-color: #0d6efd; /* Bootstrap 5 Primary Blue */
+            color: white;
+        }
+    </style>
 </head>
 <body>
+{% load static %}
+
     <div class="container">
         <header>
-            <nav class="navbar navbar-expand-lg navbar-light bg-light">
-                <a class="navbar-brand" href="{% url 'home' %}">Snooker</a>
-                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
-                    <div class="navbar-nav">
-                        <a class="nav-item nav-link" href="{% url 'home' %}">Home</a>
-                        {% if user.is_authenticated %}
-                            <a class="nav-item nav-link" href="{% url 'player_list' %}">Players</a>
-                            <a class="nav-item nav-link" href="{% url 'match_list' %}">Matches</a>
-                            <a class="nav-item nav-link" href="{% url 'competition_list' %}">Tournaments</a>
-                            <a class="nav-item nav-link" href="{% url 'referee_list' %}">Referees</a>
-                            <a class="nav-item nav-link" href="{% url 'venue_list' %}">Venue</a>
-                            <a class="nav-item nav-link" href="{% url 'achievement_list' %}">Achievement</a>
-                            <a class="nav-item nav-link" href="{% url 'user_settings' %}">User Settings</a>
-                            <a class="nav-item nav-link" href="{% url 'logout' %}">Logout</a>
-                        {% else %}
-                            <a class="nav-item nav-link" href="{% url 'login' %}">Login</a>
-                        {% endif %}
+            <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm rounded-bottom">
+                <div class="container-fluid">
+                    <a class="navbar-brand fw-bold" href="{% url 'home' %}">Snooker</a>
+
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+
+                    <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
+                        <div class="navbar-nav ms-auto">
+                            <a class="nav-item nav-link" href="{% url 'home' %}">Home</a>
+                            <a class="nav-item nav-link text-warning fw-bold" href="{% url 'create_temporary_match' %}">Quick Match</a>
+
+                            {% if user.is_authenticated %}
+                                <a class="nav-item nav-link" href="{% url 'match_list' %}">Matches</a>
+                                <a class="nav-item nav-link" href="{% url 'competition_list' %}">Tournaments</a>
+                                <a class="nav-item nav-link" href="{% url 'player_list' %}">Players</a>
+                                <a class="nav-item nav-link" href="{% url 'referee_list' %}">Referees</a>
+                                <a class="nav-item nav-link" href="{% url 'venue_list' %}">Venues</a>
+                                <a class="nav-item nav-link" href="{% url 'achievement_list' %}">Stats</a>
+
+                                <div class="nav-item dropdown ms-2">
+                                    <a class="nav-link dropdown-toggle fw-bold text-primary d-flex align-items-center py-0" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+
+                                        {# --- AVATAR LOGIC START --- #}
+                                        <div class="position-relative d-flex align-items-center justify-content-center">
+
+                                            {% if user.profile.image %}
+                                                {# CASE 1: USER HAS UPLOADED AN IMAGE #}
+                                                {# We try to show the image. If it fails (onerror), we hide it and show the div next to it. #}
+                                                <img src="{{ user.profile.image.url }}"
+                                                     alt="{{ user.username }}"
+                                                     class="rounded-circle border border-2 border-white shadow-sm"
+                                                     style="width: 35px; height: 35px; object-fit: cover;"
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+
+                                                {# Fallback Initial Avatar (Hidden by default via style='display: none') #}
+                                                {# This only appears if the img above fails to load #}
+                                                <div class="rounded-circle bg-secondary text-white fw-bold border border-2 border-white shadow-sm justify-content-center align-items-center"
+                                                     style="width: 35px; height: 35px; font-size: 16px; display: none;">
+                                                    {{ user.username|slice:":1"|upper }}
+                                                </div>
+
+                                            {% else %}
+                                                {# CASE 2: NO IMAGE UPLOADED #}
+                                                {# We show the Initial Avatar immediately #}
+                                                <div class="rounded-circle bg-secondary text-white fw-bold border border-2 border-white shadow-sm d-flex justify-content-center align-items-center"
+                                                     style="width: 35px; height: 35px; font-size: 16px;">
+                                                    {{ user.username|slice:":1"|upper }}
+                                                </div>
+                                            {% endif %}
+
+                                        </div>
+                                        {# --- AVATAR LOGIC END --- #}
+
+                                        {# USERNAME DISPLAY (Added margin start 'ms-2' for spacing) #}
+                                        <span class="ms-2">
+                                            {# If club_name exists, show it. If not, fallback to login username #}
+                                            {{ user.profile.club_name|default:user.username }}
+                                        </span>
+
+                                    </a>
+
+                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="userDropdown">
+                                        {# 1. TOKEN #}
+                                        <li>
+                                            <a class="dropdown-item fw-bold text-primary" href="{% url 'generate_token' %}">
+                                                <i class="bi bi-key-fill me-2"></i> Get Share Code
+                                            </a>
+                                        </li>
+
+                                        <li><hr class="dropdown-divider"></li>
+
+                                        {# 2. NEW PROFILE (Data, Club, Social) #}
+                                        <li>
+                                            <a class="dropdown-item" href="{% url 'profile_settings' %}">
+                                                <i class="bi bi-person-lines-fill me-2"></i> My Profile / Club
+                                            </a>
+                                        </li>
+
+                                        {# 3. OLD SETTINGS (Change password) #}
+                                        <li>
+                                            <a class="dropdown-item" href="{% url 'user_settings' %}">
+                                                <i class="bi bi-shield-lock me-2"></i> Change Password
+                                            </a>
+                                        </li>
+
+                                        {# 4. ADMIN #}
+                                        {% if user.is_superuser %}
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item small" href="/admin/" target="_blank">
+                                                    <i class="bi bi-database-fill-gear me-2"></i> Admin Panel
+                                                </a>
+                                            </li>
+                                        {% endif %}
+
+                                        <li><hr class="dropdown-divider"></li>
+
+                                        {# 5. LOGOUT #}
+                                        <li>
+                                            <a class="dropdown-item text-danger fw-bold" href="{% url 'logout' %}">
+                                                <i class="bi bi-box-arrow-right me-2"></i> Logout
+                                            </a>
+                                        </li>
+                                    </ul>
+
+                                </div>
+
+                            {% else %}
+                                <a class="nav-item nav-link ms-3" href="{% url 'login' %}">Login</a>
+
+                                {% if request.session.temp_match_id %}
+                                    <div class="d-flex align-items-center">
+                                        <a class="btn btn-success text-white btn-sm ms-2 shadow-sm fw-bold"
+                                           style="opacity: 1 !important;"
+                                           href="{% url 'login' %}?next={{ request.path }}">
+                                            <i class="bi bi-save-fill"></i> Save Match
+                                        </a>
+                                    </div>
+                                {% else %}
+                                    <a class="nav-item nav-link btn btn-outline-primary btn-sm ms-2" href="{% url 'register' %}">Register</a>
+                                {% endif %}
+
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </nav>
         </header>
 
         <main role="main">
-            {% block content %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
 
+            {% block content %}
             {% endblock %}
         </main>
 
-        <footer class="mt-5">
-            <p>&copy; 2024 Snooker App. All rights reserved.</p>
+        <footer class="mt-5 text-center text-muted py-3 border-top">
+            <small>&copy; 2025 Snooker App. All rights reserved.</small>
         </footer>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-</body>
+    </body>
 </html>

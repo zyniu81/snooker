@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5" style="max-width: 500px;">
+    <div class="card shadow border-0 border-top border-danger border-4">
+        <div class="card-body p-4 text-center">
+            <i class="bi bi-exclamation-circle text-danger display-1 mb-3"></i>
+            <h3 class="fw-bold text-danger mb-3">Delete Training?</h3>
+            <p class="text-muted mb-4">
+                Are you sure you want to delete the training session from
+                <strong>{{ object.date }}</strong>?<br>
+                This action cannot be undone.
+            </p>
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                    <a href="{% url 'training_list' %}" class="btn btn-light border px-4">Cancel</a>
+                    <button type="submit" class="btn btn-danger px-4 fw-bold">
+                        <i class="bi bi-trash-fill me-2"></i> Yes, Delete
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

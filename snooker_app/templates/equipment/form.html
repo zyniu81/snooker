@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+    /* INPUT STYLES - Force !important */
+    .form-control, .form-select {
+        background-color: #f1f3f5 !important; /* Clearer gray background */
+        border: 2px solid transparent !important; /* No border initially */
+        border-radius: 12px !important;       /* Strong rounding */
+        padding: 12px 15px !important;        /* Taller fields */
+        font-weight: 600 !important;
+        color: #495057 !important;
+        box-shadow: none !important;          /* Remove default shadows */
+    }
+
+    /* State on click (FOCUS) */
+    .form-control:focus, .form-select:focus {
+        background-color: #ffffff !important; /* Turns white */
+        border-color: #000000 !important;     /* Black, elegant border */
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05) !important; /* Light shadow underneath */
+    }
+
+    /* LABEL Styles */
+    .form-label {
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: #adb5bd;
+        margin-left: 10px; /* Offset above field */
+        margin-bottom: 5px;
+    }
+
+    /* --- FIX FOR GROUPS (WEIGHT/LENGTH) --- */
+
+    /* Input (Left side) */
+    .input-group > .form-control {
+        border-top-right-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+    }
+
+    /* Unit (Right side) */
+    .input-group > .form-select {
+        border-top-left-radius: 0 !important;
+        border-bottom-left-radius: 0 !important;
+        background-color: #e2e6ea !important; /* Darker shade for unit */
+        border-left: 1px solid rgba(0,0,0,0.1) !important; /* Separator line */
+        color: #000 !important;
+    }
+
+    /* Prevent inputs from misaligning */
+    .input-group {
+        align-items: stretch;
+    }
+</style>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-dark text-white">
+                    <h4 class="mb-0">{{ action }} Equipment for {{ player.first_name }}</h4>
+                </div>
+                <div class="card-body">
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold small text-muted text-uppercase ls-1">Type</label>
+                                {{ form.item_type }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold small text-muted text-uppercase ls-1">Brand</label>
+                                {{ form.brand }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold small text-muted text-uppercase ls-1">Model / Name</label>
+                                {{ form.name }}
+                            </div>
+                        </div>
+
+                        <div class="mt-5 mb-4">
+                            <div class="d-flex align-items-center mb-3">
+                                <span class="badge bg-primary rounded-pill me-2"><i class="bi bi-sliders"></i></span>
+                                <h6 class="text-dark fw-bold mb-0">Technical Specs</h6>
+                            </div>
+
+                            <div class="ps-4 border-start border-3 border-light">
+
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted fw-bold">Shaft Material</label>
+                                        {{ form.shaft_material }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted fw-bold">Joint Type</label>
+                                        {{ form.joint_type }}
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted fw-bold">Weight</label>
+                                        <div class="input-group"> {{ form.weight_value }}
+                                            {{ form.weight_unit }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted fw-bold">Length</label>
+                                        <div class="input-group"> {{ form.length_value }}
+                                            {{ form.length_unit }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted fw-bold">Tip Hardness</label>
+                                        {{ form.tip_hardness }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted fw-bold">Tip Size (mm)</label>
+                                        {{ form.tip_diameter }}
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted fw-bold">Ferrule Material</label>
+                                        {{ form.ferrule_material }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted fw-bold">Ferrule Size (mm)</label>
+                                        {{ form.ferrule_size }}
+                                    </div>
+                                </div>
+
+                            </div> </div>
+
+                        <hr class="my-5 border-secondary opacity-10">
+
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Start Date</label>
+                                {{ form.start_date }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">End Date</label>
+                                {{ form.end_date }}
+                                <div class="form-text small text-muted">Leave empty if currently using.</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Notes</label>
+                            {{ form.notes }}
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end pt-3">
+                            <a href="{% url 'equipment_list' player.id %}" class="btn btn-white border px-4 fw-bold">Cancel</a>
+                            <button type="submit" class="btn btn-dark fw-bold px-5">
+                                <i class="bi bi-check2 me-2"></i> Save Equipment
+                            </button>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

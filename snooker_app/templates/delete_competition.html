@@ -1,13 +1,34 @@
 {% extends 'base.html' %}
 
+{% block title %}Delete Competition - Snooker App{% endblock %}
+
 {% block content %}
-<div class="container">
-  <h2>Delete Competition</h2>
-  <p>Are you sure you want to delete competition "{{ competition.name }}"?</p>
-  <form method="post">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Delete</button>
-    <a href="{% url 'competition_list' %}" class="btn btn-secondary">Cancel</a>
-  </form>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-danger shadow">
+                <div class="card-body text-center p-5">
+
+                    <i class="bi bi-exclamation-triangle text-danger display-1 mb-3"></i>
+
+                    <h3 class="card-title fw-bold">Delete Competition?</h3>
+
+                    <p class="card-text text-muted mb-4">
+                        Are you sure you want to delete <strong>"{{ competition.name }}"</strong>?<br>
+                        This will remove the tournament structure and detach all played matches.
+                    </p>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+                            <button type="submit" class="btn btn-danger px-4 fw-bold">Yes, Delete</button>
+                            <a href="{% url 'competition_list' %}" class="btn btn-secondary px-4">Cancel</a>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

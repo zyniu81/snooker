@@ -1,15 +1,47 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="conainer">
-    <h1>Welcome to the Snooker App</h1>
-    <div class="row mt-5">
-        <div class="com-md-4">
-            <h3>Actions</h3>
-            <ul class="list-group">
-                <li class="list-group-item"><a href="{% url 'login' %}" class="btn btn-primary btn-block">Login</a></li>
-                <li class="list-group-item"><a href="{% url 'register' %}" class="btn btn-success btn-block">Register</a></li>
-                <li class="list-group-item"><a href="{% url 'match_list' %}" class="btn btn-info btn-block">Temporary Match</a></li>
+<div class="container mt-5"> <div class="p-5 mb-4 bg-light rounded-3 border shadow-sm">
+        <h1 class="display-5 fw-bold">Welcome to the Snooker App</h1>
+        <p class="col-md-8 fs-4">Manage your tournaments, players, and equipment in one place.</p>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-5"> <h3 class="mb-3 border-bottom pb-2">Actions</h3>
+
+            <ul class="list-group shadow-sm border-0">
+
+                {# --- FOR LOGGED IN USERS --- #}
+                {% if user.is_authenticated %}
+                    <li class="list-group-item p-4 text-center bg-white border-bottom-0">
+                        <p class="mb-3 text-muted">
+                            Hello, <strong>{{ user.username }}</strong>! You are already logged in.
+                        </p>
+                        <a href="{% url 'competition_list' %}" class="btn btn-primary w-100 fw-bold py-2">
+                            <i class="bi bi-speedometer2 me-2"></i> Go to Dashboard
+                        </a>
+                    </li>
+
+                {# --- FOR UNLOGGED USERS --- #}
+                {% else %}
+                    <li class="list-group-item p-3 border-bottom-0">
+                        <a href="{% url 'login' %}" class="btn btn-primary w-100 fw-bold">
+                            <i class="bi bi-box-arrow-in-right me-2"></i> Login
+                        </a>
+                    </li>
+                    <li class="list-group-item p-3 border-bottom-0">
+                        <a href="{% url 'register' %}" class="btn btn-outline-success w-100 fw-bold">
+                            <i class="bi bi-person-plus-fill me-2"></i> Register
+                        </a>
+                    </li>
+                {% endif %}
+
+                {# --- FOR ALL (Quick Match) --- #}
+                <li class="list-group-item p-3 bg-light">
+                    <a href="{% url 'create_temporary_match' %}" class="btn btn-info w-100 text-white fw-bold shadow-sm">
+                        <i class="bi bi-lightning-fill me-2"></i> Quick Match
+                    </a>
+                </li>
             </ul>
         </div>
     </div>

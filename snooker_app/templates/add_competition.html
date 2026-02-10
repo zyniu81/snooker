@@ -1,13 +1,103 @@
 {% extends 'base.html' %}
 
+{% block title %}Create Tournament - Snooker App{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h2>Add Competition</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Add Competition</button>
-        <a href="{% url 'competition_list' %}" class="btn btn-secondary">Cancel</a>
-    </form>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4 p-md-5">
+
+                    <div class="text-center mb-4">
+                        <h3 class="fw-bold">Create Tournament</h3>
+                        <p class="text-muted small">Start a new league or knockout cup</p>
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ form.non_field_errors }}
+                            </div>
+                        {% endif %}
+
+                        <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3">
+                            <i class="bi bi-info-circle-fill me-2"></i>Basic Info
+                        </h6>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Tournament Name</label>
+                            {{ form.name }}
+                            {{ form.name.errors }}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Venue (Host Club)</label>
+                            {{ form.venue }}
+                            {{ form.venue.errors }}
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Start Date</label>
+                                {{ form.start_date }}
+                                {{ form.start_date.errors }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">End Date</label>
+                                {{ form.end_date }}
+                                {{ form.end_date.errors }}
+                            </div>
+                        </div>
+
+                        <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 mt-4">
+                            <i class="bi bi-sliders me-2"></i>Settings
+                        </h6>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Status</label>
+                                {{ form.status }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Game Variant</label>
+                                {{ form.game_variant }}
+                            </div>
+                        </div>
+
+                        {% if user.is_superuser %}
+                            <div class="mb-4 bg-light p-3 rounded border">
+                                <div class="form-check">
+                                    {{ form.is_public }}
+                                    <label class="form-check-label fw-bold" for="{{ form.is_public.id_for_label }}">
+                                        Public Tournament
+                                    </label>
+                                    <div class="form-text text-muted small">
+                                        <i class="bi bi-shield-lock-fill"></i> Admin Only: Visible to everyone on dashboard.
+                                    </div>
+                                </div>
+                            </div>
+                        {% else %}
+                            {{ form.is_public }}
+                        {% endif %}
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-success fw-bold py-2">
+                                <i class="bi bi-trophy-fill me-2"></i> Create Tournament
+                            </button>
+                            <a href="{% url 'competition_list' %}" class="btn btn-light text-muted border">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
 </div>
 {% endblock %}

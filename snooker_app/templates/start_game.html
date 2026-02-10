@@ -1,65 +1,287 @@
 {% extends 'base.html' %}
 
 {% block content %}
+
+<style>
+    /* Sidebar (History Sidebar) */
+    .sidebar-panel {
+        position: fixed;
+        top: 0;
+        right: -320px;
+        width: 300px;
+        height: 100vh;
+        background-color: #fff;
+        box-shadow: -2px 0 5px rgba(0,0,0,0.5);
+        z-index: 9999;
+        transition: right 0.3s ease-in-out;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .sidebar-panel.active {
+        right: 0;
+    }
+
+    .sidebar-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.5);
+        z-index: 9998;
+        display: none;
+    }
+
+    .sidebar-backdrop.active {
+        display: block;
+    }
+
+    .history-content {
+        padding: 15px;
+    }
+
+    /* Style for the number ball icon */
+    .snooker-ball-icon {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 11px;
+        font-weight: bold;
+        margin: 0 2px;
+        box-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        border: 1px solid rgba(0,0,0,0.1);
+    }
+
+    /* Ball colors */
+    .ball-red    { background-color: #d63031; color: white; }
+    .ball-yellow { background-color: #f1c40f; color: black; }
+    .ball-green  { background-color: #009432; color: white; }
+    .ball-brown  { background-color: #795548; color: white; }
+    .ball-blue   { background-color: #0652dd; color: white; }
+    .ball-pink   { background-color: #ff79cd; color: black; }
+    .ball-black  { background-color: #2d3436; color: white; }
+
+    /* Container for statistics under the player */
+    .ball-stats-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 2px;
+        margin-top: 8px;
+        min-height: 28px;
+    }
+
+    .player-column-fixed {
+        min-height: 250px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+    }
+</style>
+
 {% load static %}
+
+{% if not user.is_authenticated and not match.owner %}
+<div class="alert alert-warning alert-dismissible fade show text-center shadow-sm" role="alert">
+    <strong>You are playing as a Guest.</strong>
+    <span class="d-none d-md-inline"> Don't lose your progress! </span>
+    <a href="{% url 'register' %}" class="btn btn-primary btn-sm ms-2">
+        <i class="bi bi-person-plus-fill"></i> Create Account to Save Match
+    </a>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
 <div class="container">
+    <div class="container" data-frame-id="{{ frame.id }}" data-match-id="{{ match.id }}">
+
     <div class="row">
-        {% for player in players %}
-        <div class="col-md-6">
-            <h4>{{ player }}</h4>
-            <div class="mt-2">
-                <input type="text" class="form-control player-score" value="0" readonly>
+
+        <div class="col-md-4">
+            <div class="d-flex flex-column align-items-start player-column-fixed">
+                <h4>{{ players.0.player }}</h4>
+                <div class="mt-2">
+                    <input type="text" class="form-control mx-1 text-center player-score" data-player="1" value="0" readonly style="width: 80px;">
+                    <span class="break-container" data-player="1">Break: <span class="player-break" data-player="1">0</span></span>
+                </div>
+
+                <button class="btn btn-outline-primary mt-2 set-active-player" data-player="1">Set as Active Player</button>
+
+                <div id="p1-ball-stats" class="ball-stats-container mt-3"></div>
+                <div id="status-p1" class="match-status-info mt-2 text-center fw-bold"
+                     style="display: none; min-height: 24px; font-size: 0.9rem;"></div>
             </div>
-            <button class="btn btn-outline-primary mt-2 set-active-player" data-player="{{ forloop.counter }}">Set as Active Player</button>
         </div>
-        {% endfor %}
+
+        <div class="col-md-4">
+            <div class="d-flex flex-column align-items-center">
+                <div class="mt-5 d-flex justify-content-center">
+                    <input type="text" id="player1-frames" class="form-control mx-1 text-center" value="{{ players.0.frames_won }}" readonly style="width: 80px;">
+                    <input type="text" id="total-frames" class="form-control mx-1 text-center" value="( {{ number_of_frames }} )" readonly style="width: 80px;">
+                    <input type="text" id="player2-frames" class="form-control mx-1 text-center" value="{{ players.1.frames_won }}" readonly style="width: 80px;">
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="d-flex flex-column align-items-end player-column-fixed">
+                <h4>{{ players.1.player }}</h4>
+                <div class="mt-2">
+                    <input type="text" class="form-control mx-1 text-center player-score" data-player="2" value="0" readonly style="width: 80px;">
+                    <span class="break-container" data-player="2">Break: <span class="player-break" data-player="2">0</span></span>
+                </div>
+
+                <button class="btn btn-outline-primary mt-2 set-active-player" data-player="2">Set as Active Player</button>
+
+                <div id="p2-ball-stats" class="ball-stats-container mt-3" style="justify-content: flex-end;"></div>
+                <div id="status-p2" class="match-status-info mt-2 text-center fw-bold"
+                     style="display: none; min-height: 24px; font-size: 0.9rem;"></div>
+            </div>
+        </div>
     </div>
 
     <div class="row mt-4">
-        <div class="col-md-12">
+        <div class="col-md-12 text-center">
             <div class="btn-group" role="group">
-                <button class="btn btn-danger rounded-circle m-1" onclick="updateScore(1)" style="width: 60px; height: 60px;" aria-label="Red"></button>
-                <button class="btn rounded-circle m-1" onclick="updateScore(2)" style="width: 60px; height: 60px; background-color: #FFFF00; color: black;" aria-label="Yellow"></button>
-                <button class="btn btn-success rounded-circle m-1" onclick="updateScore(3)" style="width: 60px; height: 60px;" aria-label="Green"></button>
-                <button class="btn rounded-circle m-1" onclick="updateScore(4)" style="width: 60px; height: 60px; background-color: #8B4513; color: white;" aria-label="Brown"></button>
-                <button class="btn btn-primary rounded-circle m-1" onclick="updateScore(5)" style="width: 60px; height: 60px;" aria-label="Blue"></button>
-                <button class="btn rounded-circle m-1" onclick="updateScore(6)" style="width: 60px; height: 60px; background-color: #FFC0CB;" aria-label="Pink"></button>
-                <button class="btn btn-dark rounded-circle m-1" onclick="updateScore(7)" style="width: 60px; height: 60px;" aria-label="Black"></button>
+                <button class="btn btn-danger rounded-circle m-1" onclick="updateScore(1, 'red')" style="width: 60px; height: 60px;" aria-label="Red" data-type="red"></button>
+                <button class="btn rounded-circle color-ball m-1" onclick="updateScore(2, 'color')" style="width: 60px; height: 60px; background-color: #FFFF00; color: black;" aria-label="Yellow" data-type="yellow"></button>
+                <button class="btn btn-success rounded-circle color-ball m-1" onclick="updateScore(3, 'color')" style="width: 60px; height: 60px;" aria-label="Green" data-type="green"></button>
+                <button class="btn rounded-circle color-ball m-1" onclick="updateScore(4, 'color')" style="width: 60px; height: 60px; background-color: #8B4513; color: white;" aria-label="Brown" data-type="brown"></button>
+                <button class="btn btn-primary rounded-circle color-ball m-1" onclick="updateScore(5, 'color')" style="width: 60px; height: 60px;" aria-label="Blue" data-type="blue"></button>
+                <button class="btn rounded-circle color-ball m-1" onclick="updateScore(6, 'color')" style="width: 60px; height: 60px; background-color: #FFC0CB;" aria-label="Pink" data-type="pink"></button>
+                <button class="btn btn-dark rounded-circle color-ball m-1" onclick="updateScore(7, 'color')" style="width: 60px; height: 60px;" aria-label="Black" data-type="black"></button>
             </div>
         </div>
     </div>
 
     <div class="row mt-2">
-        <div class="col-md-12">
+        <div class="col-md-12 text-center">
             <div class="btn-group" role="group">
-                <button class="btn btn-danger" onclick="miss()">Miss</button>
-                <button class="btn btn-success" onclick="safetyShot()">Safety</button>
-                <button class="btn btn-warning" onclick="showFoulModal()">Foul</button>
-                <button class="btn btn-secondary" id="reverseButton">Reverse</button>
+                <button class="btn btn-outline-danger me-2" onclick="miss()" title="Miss shot">
+                    <i class="bi bi-x-circle"></i> Miss</button>
+                <button class="btn btn-outline-success me-2" onclick="safetyShot()" title="Safety shot">
+                    <i class="bi bi-shield"></i> Safety</button>
+                <button class="btn btn-outline-warning me-2" onclick="showFoulModal()" title="Call a foul">
+                    <i class="bi bi-exclamation-triangle"></i> Foul</button>
+                <button class="btn btn-outline-secondary me-2" id="undoButton" title="Undo last action">
+                    <i class="bi bi-arrow-counterclockwise"></i> Undo</button>
+                <button class="btn btn-outline-primary me-2" id="redoButton" title="Redo last action">
+                    <i class="bi bi-arrow-clockwise"></i> Redo</button>
+                <button class="btn btn-outline-info me-2" id="btn-toggle-stats" title="Show/Hide Match Statistics">
+                    <i class="bi bi-calculator"></i> <span id="stats-btn-text">Show Stats</span>
+                </button>
+                <button id="history-btn" class="btn btn-outline-secondary" title="Show Match History">
+                    <i class="bi bi-list-ul"></i> History</button>
             </div>
         </div>
     </div>
+
     <div class="row mt-4">
-        <div class="col-md-6">
+        <div class="col-md-12 text-center">
             <h5>On Table: <span id="points-on-table">147</span></h5>
+            <div class="mt-4 d-flex justify-content-center align-items-center" style="gap: 10px;">
+                <div class="d-flex align-items-center" style="gap: 5px;">
+                    <div class="rounded-circle" style="width: 25px; height: 25px; background-color: red;">
+                        <span id="red-ball-count" class="red-ball-count">15</span>
+                    </div>
+                    <div class="d-flex align-items-center" style="gap: 5px;">
+                        <div class="rounded-circle color-ball-marker" style="width: 25px; height: 25px; background-color: yellow;" aria-label="Yellow" data-type="yellow"></div>
+                        <div class="rounded-circle color-ball-marker" style="width: 25px; height: 25px; background-color: green;" aria-label="Green" data-type="green"></div>
+                        <div class="rounded-circle color-ball-marker" style="width: 25px; height: 25px; background-color: brown;" aria-label="Brown" data-type="brown"></div>
+                        <div class="rounded-circle color-ball-marker" style="width: 25px; height: 25px; background-color: blue;" aria-label="Blue" data-type="blue"></div>
+                        <div class="rounded-circle color-ball-marker" style="width: 25px; height: 25px; background-color: pink;" aria-label="Pink" data-type="pink"></div>
+                        <div class="rounded-circle color-ball-marker" style="width: 25px; height: 25px; background-color: black;" aria-label="Black" data-type="black"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4"></div>
             <h5>Max Possible Break: <span id="max-possible-break">147</span></h5>
         </div>
     </div>
 
     <div class="row mt-4">
-        <div class="col-md-6">
+        <div class="col-md-12 text-center">
             <h4>Match Duration:</h4>
             <div id="match-timer">00:00:00</div>
             <div class="mt-2">
+
                 <div class="btn-group" role="group">
-                    <button class="btn btn-success" onclick="startTimer()">Start</button>
-                    <button class="btn btn-warning" onclick="pauseTimer()">Pause</button>
-                    <button class="btn btn-danger" onclick="stopTimer()">Stop</button>
-                    <button class="btn btn-secondary" onclick="resetGame()">Reset Game</button>
+                    <button class="btn btn-outline-success me-2" onclick="startTimer()">
+                        <i class="bi bi-play-circle"></i> Start</button>
+
+                    <button class="btn btn-outline-warning me-2" onclick="pauseTimer()">
+                        <i class="bi bi-pause-circle"></i> Pause</button>
+
+                    <button onclick="openScoreboard()" class="btn btn-outline-dark me-2" title="Open external Scoreboard window">
+                        <i class="bi bi-display"></i> Scoreboard
+                    </button>
+
+                    <button class="btn btn-outline-danger me-2" onclick="endFrame()">
+                        <i class="bi bi-stop-circle"></i> End Frame</button>
+
+                    <button class="btn btn-outline-secondary" onclick="resetGame()">
+                        <i class="bi bi-arrow-repeat"></i> Reset Game</button>
                 </div>
+
+                <script>
+                function openScoreboard() {
+                    window.open('/scoreboard/', 'Scoreboard', 'width=1200,height=800,menubar=no,toolbar=no');
+
+                    setTimeout(() => {
+                        if (typeof broadcastGameState === 'function') {
+                            broadcastGameState();
+                        }
+                    }, 1000);
+                }
+                </script>
+
+                <div class="modal fade" id="endFrameModal" tabindex="-1" role="dialog" aria-labelledby="endFrameLabel" aria-hidden="true">
+                    <div class="modal-dialog" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="endFrameLabel">End Frame Decision</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <p>Confirm ending this frame. Who won?</p>
+                                <div class="d-flex justify-content-around mt-4">
+                                    <button class="btn btn-outline-secondary btn-lg p-4" id="btn-win-p1" onclick="confirmFrameWinner(1)">Player 1 Wins</button>
+                                    <button class="btn btn-outline-secondary btn-lg p-4" id="btn-win-p2" onclick="confirmFrameWinner(2)">Player 2 Wins</button>
+                                </div>
+                                <small class="text-muted mt-3 d-block">The button for the player with the highest score is highlighted.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal fade" id="confirmWinnerModal" tabindex="-1" role="dialog" aria-labelledby="confirmWinnerLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-sm" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Confirm Decision</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <p>Are you sure that <strong id="confirmation-player-name">Player X</strong> won this frame?</p>
+                                <p class="text-danger small">This action cannot be undone!</p>
+                            </div>
+                            <div class="modal-footer justify-content-center">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-danger" onclick="finalizeFrameEnd()">Yes, Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
+</div>
 </div>
 
 <div class="modal fade" id="foulModal" tabindex="-1" role="dialog" aria-labelledby="foulModalLabel" aria-hidden="true">
@@ -67,19 +289,69 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="foulModalLabel">Select Foul Points</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <button class="btn btn-primary" onclick="foul(4)">4 points</button>
-                <button class="btn btn-primary" onclick="foul(5)">5 points</button>
-                <button class="btn btn-primary" onclick="foul(6)">6 points</button>
-                <button class="btn btn-primary" onclick="foul(7)">7 points</button>
+                <div class="mb-3">
+                    <h6>Select Foul Points:</h6>
+                    <button class="btn btn-primary foul-points" data-points="4">4 points</button>
+                    <button class="btn btn-primary foul-points" data-points="5">5 points</button>
+                    <button class="btn btn-primary foul-points" data-points="6">6 points</button>
+                    <button class="btn btn-primary foul-points" data-points="7">7 points</button>
+                </div>
+
+                <div class="mb-3">
+                    <h6>Choose Next Player:</h6>
+                    <button class="btn btn-outline-primary next-player" data-player="1">Player 1</button>
+                    <button class="btn btn-outline-primary next-player" data-player="2">Player 2</button>
+                </div>
+
+                <div class="mb-3 form-check ms-1">
+                    <input type="checkbox" class="form-check-input" id="freeBallCheckbox">
+                    <label class="form-check-label font-weight-bold" for="freeBallCheckbox">Free Ball?</label>
+                </div>
+
+                <p class="mt-3">Manually adjust red balls:</p>
+                <div class="input-group">
+                    <input type="number" id="redBallAdjustment" class="form-control" min="0" max="15" placeholder="0">
+                    <div class="input-group-append">
+                        <button class="btn btn-outline-secondary" id="decreaseRedBalls">-</button>
+                        <button class="btn btn-outline-secondary" id="increaseRedBalls">+</button>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-success" id="confirmFoul">OK</button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+<div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+<div id="historySidebar" class="sidebar-panel">
+    <div class="bg-dark text-white p-3 d-flex justify-content-between align-items-center">
+        <h5 class="m-0">Match History</h5>
+        <button id="closeSidebarBtn" class="btn btn-sm btn-outline-light">Close</button>
+    </div>
+
+    <div class="history-content">
+        <div class="alert alert-info small">
+            Last 10 actions (Newest on top).
+        </div>
+        <ul class="list-group list-group-flush" id="actionLogList">
+             <li class="list-group-item text-muted">No actions yet...</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    const matchId = "{{ match.id }}";
+    const player1Id = "{{ players.0.player.pk }}";
+    const player2Id = "{{ players.1.player.pk }}";
+</script>
+
 <script src="{% static 'js/game_script.js' %}"></script>
+
 {% endblock %}

@@ -1,11 +1,160 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>Create Knockout Stage for {{ competition.name }}</h2>
+<div class="container mt-4 mb-5">
+    <form method="post">
+        {% csrf_token %}
 
-<form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit" class="btn btn-primary">Create Knockout Stage</button>
-</form>
+        <div class="row g-4"> <div class="col-lg-5">
+                <div class="card shadow border-success h-100">
+                    <div class="card-header bg-success text-white">
+                        <h4 class="mb-0"><i class="bi bi-trophy"></i> Stage Settings</h4>
+                    </div>
+                    <div class="card-body">
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Stage Name</label>
+                            {{ form.name }}
+                            <div class="form-text text-muted">e.g. "Finals" or "Play-offs"</div>
+                            <div class="text-danger small">{{ form.name.errors }}</div>
+                        </div>
+
+                        <hr>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="bi bi-diagram-3"></i> Number of Rounds
+                            </label>
+                            {{ form.num_rounds }}
+                            <div class="form-text text-muted">
+                                4 rounds = Final, Semi, QF, Last 16.<br>
+                                3 rounds = Final, Semi, QF.
+                            </div>
+                            <div class="text-danger small">{{ form.num_rounds.errors }}</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="bi bi-collection-play"></i> Frames per Match
+                            </label>
+                            {{ form.frames_per_match }}
+                            <div class="form-text text-muted">Best of (e.g. 5 frames)</div>
+                            <div class="text-danger small">{{ form.frames_per_match.errors }}</div>
+                        </div>
+
+                        <div class="mb-3 bg-light p-3 rounded border d-flex align-items-center">
+                            <div class="form-check">
+                                {{ form.has_third_place_match }}
+                                <label class="form-check-label fw-bold" for="{{ form.has_third_place_match.id_for_label }}">
+                                    Play match for 3rd place?
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="bi bi-check-circle"></i> Generate Bracket
+                            </button>
+                            <a href="{% url 'competition_detail' competition.id %}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card shadow h-100">
+                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-people-fill"></i> Select Players</h5>
+                        <small>Check players to include</small>
+                    </div>
+                    <div class="card-body bg-light">
+
+                        <div class="text-danger mb-2">{{ form.players.errors }}</div>
+
+                        {# --- SECTION 1: WINNERS (CHAMPIONS) --- #}
+                        {% if form.winner_list %}
+                        <div class="card mb-3 border-success shadow-sm">
+                            <div class="card-header bg-success text-white py-2">
+                                <i class="bi bi-star-fill"></i> Qualified / Winners
+                            </div>
+                            <div class="card-body bg-white">
+                                <div class="row row-cols-1 row-cols-md-2 g-2">
+                                {% for player in form.winner_list %}
+                                    <div class="col">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="players" value="{{ player.id }}" id="p_win_{{ player.id }}" checked>
+                                            <label class="form-check-label fw-bold text-dark" for="p_win_{{ player.id }}">
+                                                {{ player }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {# --- SECTION 2: LOSERS (Eliminated) --- #}
+                        {% if form.eliminated_list %}
+                        <div class="card mb-3 border-danger shadow-sm">
+                            <div class="card-header bg-danger text-white py-2">
+                                <i class="bi bi-x-circle"></i> Eliminated (Wildcards)
+                            </div>
+                            <div class="card-body bg-white">
+                                <div class="row row-cols-1 row-cols-md-2 g-2">
+                                {% for player in form.eliminated_list %}
+                                    <div class="col">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="players" value="{{ player.id }}" id="p_lost_{{ player.id }}">
+                                            <label class="form-check-label text-muted" for="p_lost_{{ player.id }}">
+                                                {{ player }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {# --- SECTION 3: THE OTHERS --- #}
+                        <div class="card mb-3 border-secondary shadow-sm">
+                            <div class="card-header bg-secondary text-white py-2">
+                                <i class="bi bi-people"></i> Others / Bench
+                            </div>
+                            <div class="card-body bg-white">
+                                {% if form.other_list %}
+                                    <div class="row row-cols-1 row-cols-md-2 g-2">
+                                    {% for player in form.other_list %}
+                                        <div class="col">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="players" value="{{ player.id }}" id="p_other_{{ player.id }}"
+                                                       {% if not form.winner_list and not form.eliminated_list %}checked{% endif %}>
+                                                <label class="form-check-label" for="p_other_{{ player.id }}">
+                                                    {{ player }}
+                                                </label>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-center text-muted py-3">
+                                        <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+                                        No other players found in this tournament.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div> </form>
+</div>
 {% endblock %}

@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ player }} - Match History{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5" style="max-width: 800px;">
+
+    {# HEADER AND RETURN #}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <a href="{% url 'player_detail' player.id %}" class="text-decoration-none text-muted small fw-bold">
+                <i class="bi bi-arrow-left me-1"></i> Back to Profile
+            </a>
+            <h2 class="fw-bold mt-1">Match History</h2>
+        </div>
+
+        {# H2H FILTER (SELECT) #}
+        <form method="get" class="d-flex align-items-center">
+            <select name="opponent" class="form-select border-primary shadow-sm" onchange="this.form.submit()" style="max-width: 250px;">
+                <option value="">-- All Opponents --</option>
+                {% for opp in possible_opponents %}
+                    <option value="{{ opp.id }}" {% if selected_opponent.id == opp.id %}selected{% endif %}>
+                        vs {{ opp }}
+                    </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    {# --- H2H STATS SECTION (Visible only when opponent selected) --- #}
+    {% if selected_opponent %}
+    <div class="card bg-dark text-white shadow mb-4 border-0 overflow-hidden">
+        <div class="card-body p-4 position-relative">
+            <i class="bi bi-people-fill position-absolute text-white opacity-10" style="font-size: 8rem; right: -20px; top: -30px;"></i>
+
+            <div class="row align-items-center text-center position-relative" style="z-index: 1;">
+                {# YOU #}
+                <div class="col-4">
+                    {# Instead of player.first_name we use player (uses __str__) #}
+                    <h5 class="fw-bold mb-1">{{ player }}</h5>
+                    <div class="display-4 fw-bold text-success">{{ stats.wins }}</div>
+                    <small class="text-white-50">Wins</small>
+                </div>
+
+                {# MIDDLE #}
+                <div class="col-4">
+                    <div class="text-uppercase small fw-bold text-white-50 mb-2">Total Matches</div>
+                    <div class="fs-1 fw-bold">{{ stats.total }}</div>
+                    <div class="badge bg-light text-dark mt-2">{{ stats.win_rate|floatformat:0 }}% Win Rate</div>
+                </div>
+
+                {# OPPONENT #}
+                <div class="col-4">
+                    <h5 class="fw-bold mb-1">{{ selected_opponent }}</h5>
+                    <div class="display-4 fw-bold text-danger">{{ stats.losses }}</div>
+                    <small class="text-white-50">Wins</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# --- MATCH LIST --- #}
+    <div class="card shadow-sm border-0">
+        <div class="list-group list-group-flush" id="match-list-container">
+            {# Here we load the first page (partials) #}
+            {% include 'partials/match_rows.html' %}
+        </div>
+
+        {# MESSAGES AND LOAD MORE BUTTON #}
+        <div class="card-footer bg-white text-center py-3 border-0">
+            {% if matches.has_next %}
+                <button id="load-more-btn" class="btn btn-outline-primary rounded-pill px-4 fw-bold" data-page="2">
+                    <span class="spinner-border spinner-border-sm d-none me-2" role="status" aria-hidden="true"></span>
+                    Load More Matches
+                </button>
+            {% endif %}
+
+            <div id="no-more-msg" class="text-muted small py-2 {% if matches.has_next %}d-none{% endif %}">
+                No more matches to display.
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{# --- LOADING SCRIPT (AJAX) --- #}
+<script>
+    document.getElementById('load-more-btn')?.addEventListener('click', function() {
+        var btn = this;
+        var container = document.getElementById('match-list-container');
+        var page = btn.getAttribute('data-page');
+        var spinner = btn.querySelector('.spinner-border');
+
+        // Disable button and show spinner
+        btn.classList.add('disabled');
+        spinner.classList.remove('d-none');
+
+        // Keep current filters (e.g. opponent)
+        var url = new URL(window.location.href);
+        url.searchParams.set('page', page);
+
+        fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Append new rows
+            container.insertAdjacentHTML('beforeend', data.html);
+
+            // Update button
+            if (data.has_next) {
+                btn.setAttribute('data-page', parseInt(page) + 1);
+                btn.classList.remove('disabled');
+                spinner.classList.add('d-none');
+            } else {
+                btn.remove(); // Remove button
+                document.getElementById('no-more-msg').classList.remove('d-none');
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    });
+</script>
+{% endblock %}
