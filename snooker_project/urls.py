@@ -124,6 +124,7 @@ urlpatterns = [
          name='competition_print_bracket'),
     path('training/<int:pk>/', TrainingDetailView.as_view(), name='training_detail'),
     path('player/<int:pk>/stats/', TrainingStatsView.as_view(), name='player_training_stats'),
+    path('scoreboard/', views.scoreboard, name='scoreboard'),
 ]
 
 

@@ -24,6 +24,40 @@
         display: inline-flex;
         align-items: center;
     }
+
+    /* Style for the number ball icon */
+    .snooker-ball-icon {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 11px;
+        font-weight: bold;
+        margin: 0 2px;
+        box-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        border: 1px solid rgba(0,0,0,0.1);
+    }
+
+    /* Ball colors */
+    .ball-red    { background-color: #d63031; color: white; }
+    .ball-yellow { background-color: #f1c40f; color: black; }
+    .ball-green  { background-color: #009432; color: white; }
+    .ball-brown  { background-color: #8854d0; /* Or classic brown */ background-color: #795548; color: white; }
+    .ball-blue   { background-color: #0652dd; color: white; }
+    .ball-pink   { background-color: #ff79cd; color: black; }
+    .ball-black  { background-color: #2d3436; color: white; }
+
+    /* Container for statistics under the player */
+    .ball-stats-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-start; /* or center */
+        gap: 2px;
+        margin-top: 8px;
+        min-height: 28px; /* So it doesn't jump when it's empty */
+    }
 </style>
 
 <div class="container pb-5">
@@ -152,6 +186,38 @@
                         <td>{{ match.match_ast_p1 }}</td>
                         <td>AST (Avg Shot Time)</td>
                         <td>{{ match.match_ast_p2 }}</td>
+                    </tr>
+
+                    {# 8. BALL STATS (MATCH TOTAL) #}
+                    <tr>
+                        <td class="align-middle">
+                            <div class="d-flex justify-content-end flex-wrap gap-1">
+                                {% if p1_ball_totals %}
+                                    {# Tu będzie pętla jak już obliczymy sumy w Pythonie #}
+                                    {% for color, count in p1_ball_totals.items %}
+                                        {% if count > 0 %}
+                                            <span class="snooker-ball-icon ball-{{ color }}">{{ count }}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="align-middle">Ball Count</td>
+                        <td class="align-middle">
+                            <div class="d-flex justify-content-start flex-wrap gap-1">
+                                {% if p2_ball_totals %}
+                                    {% for color, count in p2_ball_totals.items %}
+                                        {% if count > 0 %}
+                                            <span class="snooker-ball-icon ball-{{ color }}">{{ count }}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </div>
+                        </td>
                     </tr>
 
                     {# 7. MATCH DURATION (New - "Total Match Time" in the middle) #}
@@ -359,6 +425,36 @@
                                                     <td class="text-center">{{ frame.average_shot_time_player1|stringformat:"s"|slice:":7"|default:"-" }}</td>
                                                     <td class="text-center text-muted">AST</td>
                                                     <td class="text-center">{{ frame.average_shot_time_player2|stringformat:"s"|slice:":7"|default:"-" }}</td>
+                                                </tr>
+                                                {# BALL COUNTS PER FRAME #}
+                                                <tr>
+                                                    <td class="text-end align-middle">
+                                                        <div class="d-flex justify-content-end flex-wrap" style="gap: 2px;">
+                                                            {% with stats=frame.ball_counts.player1 %}
+                                                                {% if stats.red > 0 %}<span class="snooker-ball-icon ball-red">{{ stats.red }}</span>{% endif %}
+                                                                {% if stats.yellow > 0 %}<span class="snooker-ball-icon ball-yellow">{{ stats.yellow }}</span>{% endif %}
+                                                                {% if stats.green > 0 %}<span class="snooker-ball-icon ball-green">{{ stats.green }}</span>{% endif %}
+                                                                {% if stats.brown > 0 %}<span class="snooker-ball-icon ball-brown">{{ stats.brown }}</span>{% endif %}
+                                                                {% if stats.blue > 0 %}<span class="snooker-ball-icon ball-blue">{{ stats.blue }}</span>{% endif %}
+                                                                {% if stats.pink > 0 %}<span class="snooker-ball-icon ball-pink">{{ stats.pink }}</span>{% endif %}
+                                                                {% if stats.black > 0 %}<span class="snooker-ball-icon ball-black">{{ stats.black }}</span>{% endif %}
+                                                            {% endwith %}
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-center text-muted align-middle">Balls Potted</td>
+                                                    <td class="text-start align-middle">
+                                                        <div class="d-flex justify-content-start flex-wrap" style="gap: 2px;">
+                                                            {% with stats=frame.ball_counts.player2 %}
+                                                                {% if stats.red > 0 %}<span class="snooker-ball-icon ball-red">{{ stats.red }}</span>{% endif %}
+                                                                {% if stats.yellow > 0 %}<span class="snooker-ball-icon ball-yellow">{{ stats.yellow }}</span>{% endif %}
+                                                                {% if stats.green > 0 %}<span class="snooker-ball-icon ball-green">{{ stats.green }}</span>{% endif %}
+                                                                {% if stats.brown > 0 %}<span class="snooker-ball-icon ball-brown">{{ stats.brown }}</span>{% endif %}
+                                                                {% if stats.blue > 0 %}<span class="snooker-ball-icon ball-blue">{{ stats.blue }}</span>{% endif %}
+                                                                {% if stats.pink > 0 %}<span class="snooker-ball-icon ball-pink">{{ stats.pink }}</span>{% endif %}
+                                                                {% if stats.black > 0 %}<span class="snooker-ball-icon ball-black">{{ stats.black }}</span>{% endif %}
+                                                            {% endwith %}
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             </tbody>
                                         </table>

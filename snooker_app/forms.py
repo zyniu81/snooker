@@ -555,22 +555,64 @@ class KnockoutStageForm(forms.ModelForm):
 
 
 class SignUpForm(UserCreationForm):
-    email = forms.EmailField(required=True, widget=forms.EmailInput(attrs={'class': 'form-control'}))
+    # 1. Login (Technical)
+    username = forms.CharField(
+        label='Username (Login)',
+        max_length=150,
+        help_text='Required. Letters, digits and @/./+/-/_ only. No spaces.',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. ac_milan'})
+    )
+
+    # 2. Display Name (Optional)
+    display_name = forms.CharField(
+        label='Display Name / Club Name',
+        max_length=150,
+        required=False,
+        help_text='Optional. If left empty, your login username will be used.',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. AC Milan'})
+    )
+
+    # 3. Email (Required & Unique check below)
+    email = forms.EmailField(
+        required=True,
+        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Email address'})
+    )
 
     class Meta:
         model = User
-        fields = ('username', 'email', 'password1', 'password2')
+        fields = ('username', 'display_name', 'email', 'password1', 'password2')
         widgets = {
-            'username': forms.TextInput(attrs={'class': 'form-control'}),
-            'password1': forms.PasswordInput(attrs={'class': 'form-control'}),
-            'password2': forms.PasswordInput(attrs={'class': 'form-control'}),
+            'password1': forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Password'}),
+            'password2': forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Confirm Password'}),
         }
 
+    # --- NEW: VALIDATION TO PREVENT DUPLICATE EMAILS ---
+    def clean_email(self):
+        # We download the entered email
+        email = self.cleaned_data.get('email')
+
+        # We check if such email already exists in the (User) database
+        if User.objects.filter(email=email).exists():
+            # If so - we throw an error that will block registration
+            raise ValidationError("A user with that email already exists.")
+
+        # If not - we return the email and the process continues
+        return email
+
     def save(self, commit=True):
-        user = super(SignUpForm, self).save(commit=False)
-        user.email = self.cleaned_data['email']
+        user = super(SignUpForm, self).save(commit=commit)
+
+        club_name_input = self.cleaned_data.get('display_name')
+
         if commit:
-            user.save()
+            if hasattr(user, 'profile'):
+                if club_name_input:
+                    user.profile.club_name = club_name_input
+                else:
+                    user.profile.club_name = user.username
+
+                user.profile.save()
+
         return user
 
 
@@ -923,22 +965,51 @@ class EquipmentPhotoForm(forms.ModelForm):
         fields = ['image', 'is_main']
 
 
-# --- USER FORM (Login, Email, Name) ---
+# --- FORM 1: USER DATA (Username, Email, Names) ---
 class UserUpdateForm(forms.ModelForm):
-    # FIX HERE: Force widget with form-control class directly in field definition
-    email = forms.EmailField(widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Email'}))
+    # We redefine email to ensure it's required and has consistent styling
+    email = forms.EmailField(
+        required=True,
+        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Email'})
+    )
+
+    # We verify the username format here as well
+    username = forms.CharField(
+        help_text="Required. Technical login. No spaces allowed.",
+        widget=forms.TextInput(attrs={'class': 'form-control'})
+    )
 
     class Meta:
         model = User
         fields = ['username', 'email', 'first_name', 'last_name']
         widgets = {
-            'username': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Username'}),
             'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'First Name'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Last Name'}),
         }
 
+    # --- VALIDATION: PREVENT DUPLICATE EMAILS ---
+    def clean_email(self):
+        email = self.cleaned_data.get('email')
 
-# --- PROFILE FORM (Club, Address, Socials) ---
+        # Logic: Check if this email exists in DB, BUT exclude the current user.
+        # Otherwise, the user would get an error for their own existing email.
+        if User.objects.filter(email=email).exclude(pk=self.instance.pk).exists():
+            raise ValidationError("This email is already in use by another account.")
+
+        return email
+
+    # --- VALIDATION: PREVENT SPACES IN USERNAME ---
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+
+        # Strict check for spaces
+        if ' ' in username:
+            raise ValidationError("Username cannot contain spaces. Use 'Display Name' in profile settings instead.")
+
+        return username
+
+
+# --- FORM 2: PROFILE DATA (Club Name, Bio, Socials) ---
 class ProfileUpdateForm(forms.ModelForm):
     class Meta:
         model = Profile
@@ -949,7 +1020,10 @@ class ProfileUpdateForm(forms.ModelForm):
             'website', 'facebook', 'instagram', 'twitter'
         ]
         widgets = {
+            # Image input hidden for styling via label
             'image': forms.FileInput(attrs={'class': 'd-none', 'id': 'real-file-input'}),
+
+            # Organization
             'club_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Club Name'}),
             'founded_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'bio': forms.Textarea(attrs={'rows': 3, 'class': 'form-control', 'placeholder': 'Short description...'}),

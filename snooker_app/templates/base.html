@@ -51,16 +51,42 @@
                                 <div class="nav-item dropdown ms-2">
                                     <a class="nav-link dropdown-toggle fw-bold text-primary d-flex align-items-center py-0" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
 
-                                        {# WE CHECK IF THERE IS A PHOTO #}
-                                        {% if user.profile.image %}
-                                            <img src="{{ user.profile.image.url }}"
-                                                 alt="{{ user.username }}"
-                                                 class="rounded-circle border border-2 border-white shadow-sm"
-                                                 style="width: 35px; height: 35px; object-fit: cover;">
-                                        {% else %}
-                                            <i class="bi bi-person-circle me-1 display-6"></i>
-                                            {{ user.username }}
-                                        {% endif %}
+                                        {# --- AVATAR LOGIC START --- #}
+                                        <div class="position-relative d-flex align-items-center justify-content-center">
+
+                                            {% if user.profile.image %}
+                                                {# CASE 1: USER HAS UPLOADED AN IMAGE #}
+                                                {# We try to show the image. If it fails (onerror), we hide it and show the div next to it. #}
+                                                <img src="{{ user.profile.image.url }}"
+                                                     alt="{{ user.username }}"
+                                                     class="rounded-circle border border-2 border-white shadow-sm"
+                                                     style="width: 35px; height: 35px; object-fit: cover;"
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+
+                                                {# Fallback Initial Avatar (Hidden by default via style='display: none') #}
+                                                {# This only appears if the img above fails to load #}
+                                                <div class="rounded-circle bg-secondary text-white fw-bold border border-2 border-white shadow-sm justify-content-center align-items-center"
+                                                     style="width: 35px; height: 35px; font-size: 16px; display: none;">
+                                                    {{ user.username|slice:":1"|upper }}
+                                                </div>
+
+                                            {% else %}
+                                                {# CASE 2: NO IMAGE UPLOADED #}
+                                                {# We show the Initial Avatar immediately #}
+                                                <div class="rounded-circle bg-secondary text-white fw-bold border border-2 border-white shadow-sm d-flex justify-content-center align-items-center"
+                                                     style="width: 35px; height: 35px; font-size: 16px;">
+                                                    {{ user.username|slice:":1"|upper }}
+                                                </div>
+                                            {% endif %}
+
+                                        </div>
+                                        {# --- AVATAR LOGIC END --- #}
+
+                                        {# USERNAME DISPLAY (Added margin start 'ms-2' for spacing) #}
+                                        <span class="ms-2">
+                                            {# If club_name exists, show it. If not, fallback to login username #}
+                                            {{ user.profile.club_name|default:user.username }}
+                                        </span>
 
                                     </a>
 

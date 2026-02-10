@@ -1,10 +1,10 @@
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
-from django.core.exceptions import ValidationError
+from django.db.models.signals import post_save, post_delete
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.utils import timezone
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.auth.models import User
-from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
 from datetime import timedelta
@@ -554,31 +554,6 @@ class Match(models.Model):
         if self.is_expired():
             self.delete()
 
-    def delete(self, *args, **kwargs):
-        # 1. Find temporary players associated with THIS match
-        # Collect them from player1 and player2 seats
-        temp_players_to_check = []
-
-        if self.player1 and self.player1.is_temporary:
-            temp_players_to_check.append(self.player1)
-
-        if self.player2 and self.player2.is_temporary:
-            temp_players_to_check.append(self.player2)
-
-        # 2. Perform standard match deletion
-        super().delete(*args, **kwargs)
-
-        # 3. Orphan Cleanup
-        for player in temp_players_to_check:
-            # Check if this player is assigned to other matches.
-            # Must check both roles: as Host (matches_as_p1) and as Guest (matches_as_p2)
-            # These related_names were added in ForeignKeys definition.
-
-            p1_count = player.matches_as_p1.count()
-            p2_count = player.matches_as_p2.count()
-
-            if (p1_count + p2_count) == 0:
-                player.delete()
 
     # --- VIRTUAL MATCH STATISTICS (Fixed: fetching via MatchPlayer) ---
 
@@ -779,6 +754,7 @@ class Frame(models.Model):
     pot_success_percentage_player2 = models.FloatField(default=0.0)
     total_pot_success_percentage_player1 = models.FloatField(default=0.0)
     total_pot_success_percentage_player2 = models.FloatField(default=0.0)
+    ball_counts = models.JSONField(default=dict, blank=True)
 
     # Safety Shots
     safety_shot_player1 = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0)])
@@ -1585,18 +1561,51 @@ class SharingToken(models.Model):
 
 
 # This decorator says: "Run me when a Match object is deleted"
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+from django.core.exceptions import ObjectDoesNotExist
+
+
 @receiver(post_delete, sender='snooker_app.Match')
 def update_stats_on_delete(sender, instance, **kwargs):
     """
-    Automatically updates player stats after match deletion.
+   Automatically updates stats after a match is deleted.
+   Additionally: Cleans up orphaned TEMPORARY players if they no longer have any matches.
     """
-    # Import here to avoid "circular import" error
     from .services import update_career_stats
 
-    print(f"--- MATCH DELETED! Updating players: {instance.player1} and {instance.player2} ---")
+    # We define a helper function to avoid writing the same thing twice (for P1 and P2)
+    def handle_player_cleanup(player):
+        # 1. Update stats (i.e. subtract this match from history if player stays)
+        update_career_stats(player)
 
-    if instance.player1:
-        update_career_stats(instance.player1)
+        #2. CLEANING LOGIC
+        # We check if the player is TEMPORARY. We don't touch permanent players!
+        if player.is_temporary:
+            # We check if this player plays in any OTHER matches.
+            # Since this particular match (instance) has already been deleted,
+            # count() will return the number of matches remaining.
+            remaining_matches = player.matches_as_p1.count() + player.matches_as_p2.count()
 
-    if instance.player2:
-        update_career_stats(instance.player2)
+            if remaining_matches == 0:
+                print(f"--- CLEANUP: Usuwanie osieroconego gracza tymczasowego: {player} ---")
+                player.delete()
+            else:
+                print(
+                    f"--- INFO: Gracz tymczasowy {player} zostaje (gra jeszcze w {remaining_matches} innych meczach) ---")
+
+    # --- PLAYER SERVICE 1 ---
+    try:
+        if instance.player1:
+            handle_player_cleanup(instance.player1)
+    except ObjectDoesNotExist:
+        # This error will occur if it was the deletion of Player 1 that caused the match to be deleted.
+        # Then Player 1 no longer exists, so we don't need to clean it up.
+        pass
+
+    # --- PLAYER SERVICE 2 ---
+    try:
+        if instance.player2:
+            handle_player_cleanup(instance.player2)
+    except ObjectDoesNotExist:
+        pass

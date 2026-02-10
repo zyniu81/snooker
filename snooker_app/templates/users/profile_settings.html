@@ -5,7 +5,7 @@
 {% block content %}
 {# --- CSS STYLES FOR THIS VIEW --- #}
 <style>
-    /* Modern Fields (Soft UI) - copied style from equipment */
+    /* Modern Fields (Soft UI) */
     .form-control, .form-select {
         background-color: #f8f9fa !important;
         border: 2px solid transparent !important;
@@ -33,7 +33,7 @@
         margin-bottom: 4px;
     }
 
-    /* Avatar */
+    /* Avatar Preview */
     .profile-img-preview {
         width: 150px;
         height: 150px;
@@ -59,7 +59,8 @@
 
 <div class="container mt-5 mb-5">
     <div class="row">
-            {# --- BACK BUTTON (NEW) --- #}
+
+        {# --- BACK BUTTON --- #}
         <div class="mb-3">
             <a href="{% url 'home' %}" class="text-decoration-none text-secondary fw-bold small">
                 <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
@@ -72,67 +73,110 @@
             <p class="text-muted small">Manage your personal account and club information.</p>
         </div>
 
-        {# --- FORM (One big form covering both columns) --- #}
+        {# --- FORM START (One form for both U_FORM and P_FORM) --- #}
         <form method="POST" enctype="multipart/form-data" class="row g-4">
             {% csrf_token %}
 
-            {# === LEFT COLUMN: IDENTITY (User Form) === #}
+            {# === LEFT COLUMN: IDENTITY & ACCOUNT === #}
             <div class="col-lg-4">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-body text-center p-4">
 
-                        {# PROFILE PICTURE #}
+                        {# 1. PROFILE PICTURE SECTION (With Logic for Broken Images) #}
                         <div class="position-relative d-inline-block text-center">
 
-                            {# 1. Display current photo #}
-                            {% if user.profile.image %}
-                                <img src="{{ user.profile.image.url }}" alt="Profile Pic" class="profile-img-preview mb-3">
-                            {% else %}
-                                <div class="profile-img-preview d-flex align-items-center justify-content-center bg-light text-muted mb-3 mx-auto">
-                                    <i class="bi bi-person-fill display-1"></i>
-                                </div>
-                            {% endif %}
+                            <div class="mb-3 d-flex justify-content-center">
+                                {% if user.profile.image %}
+                                    {# Case A: Image exists #}
+                                    <img src="{{ user.profile.image.url }}"
+                                         alt="Profile Pic"
+                                         class="profile-img-preview"
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
 
-                            {# 2. Custom button in English #}
+                                    {# Fallback: Initial Avatar #}
+                                    <div class="profile-img-preview bg-secondary text-white align-items-center justify-content-center"
+                                         style="display: none; font-size: 4rem; font-weight: bold;">
+                                        {{ user.username|slice:":1"|upper }}
+                                    </div>
+                                {% else %}
+                                    {# Case B: No Image #}
+                                    <div class="profile-img-preview bg-secondary text-white d-flex align-items-center justify-content-center"
+                                         style="font-size: 4rem; font-weight: bold;">
+                                        {{ user.username|slice:":1"|upper }}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            {# Upload Button #}
                             <div>
-                                {# This Label "targets" the hidden input thanks to for="real-file-input" #}
                                 <label for="real-file-input" class="btn btn-outline-dark btn-sm fw-bold shadow-sm">
                                     <i class="bi bi-upload me-2"></i>Change Photo
                                 </label>
-
-                                {# Django renders the hidden input here (thanks to d-none class in forms.py) #}
                                 {{ p_form.image }}
-
-                                {# Place to display selected file name #}
                                 <div id="file-name-display" class="small text-muted mt-2 fst-italic">
                                     No file selected
                                 </div>
                             </div>
                         </div>
 
-                        {# Small script to show file name after selection #}
+                        {# JS for file name #}
                         <script>
-                            document.getElementById('real-file-input').addEventListener('change', function() {
-                                var fileName = this.files[0] ? this.files[0].name : "No file selected";
-                                document.getElementById('file-name-display').textContent = fileName;
-                            });
+                            const fileInput = document.getElementById('real-file-input');
+                            if(fileInput){
+                                fileInput.addEventListener('change', function() {
+                                    var fileName = this.files[0] ? this.files[0].name : "No file selected";
+                                    document.getElementById('file-name-display').textContent = fileName;
+                                });
+                            }
                         </script>
 
                         <hr class="my-4 opacity-10">
 
-                        {# LOGIN DATA (User Update Form) #}
+                        {# 2. LOGIN & IDENTITY DATA #}
                         <div class="text-start">
+
+                            {# USERNAME (Login) #}
                             <div class="mb-3">
-                                <label class="form-label">Username</label>
+                                <label class="form-label">Username (Login)</label>
                                 {{ u_form.username }}
-                                <div class="form-text small">Used for login.</div>
+
+                                {# --- ERROR DISPLAY: USERNAME (e.g. spaces) --- #}
+                                {% if u_form.username.errors %}
+                                    <div class="text-danger small mt-1 fw-bold">
+                                        {% for error in u_form.username.errors %}
+                                            <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+
+                                <div class="form-text small">Technical login (no spaces).</div>
                             </div>
+
+                            {# DISPLAY NAME #}
+                            <div class="mb-3">
+                                <label class="form-label text-primary">Display Name / Club Name</label>
+                                {{ p_form.club_name }}
+                                <div class="form-text small">This name is visible on scoreboards (e.g. "AC Milan").</div>
+                            </div>
+
+                            {# EMAIL #}
                             <div class="mb-3">
                                 <label class="form-label">Email (Private)</label>
                                 {{ u_form.email }}
+
+                                {# --- ERROR DISPLAY: EMAIL (e.g. duplicate) --- #}
+                                {% if u_form.email.errors %}
+                                    <div class="text-danger small mt-1 fw-bold">
+                                        {% for error in u_form.email.errors %}
+                                            <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+
                                 <div class="form-text small">For password resets & notifications.</div>
                             </div>
 
+                            {# NAMES #}
                             <div class="row">
                                 <div class="col-6 mb-3">
                                     <label class="form-label">First Name</label>
@@ -149,38 +193,29 @@
                 </div>
             </div>
 
-            {# === RIGHT COLUMN: CLUB DATA (Profile Form) === #}
+            {# === RIGHT COLUMN: ORGANIZATION & DETAILS === #}
             <div class="col-lg-8">
                 <div class="card border-0 shadow-sm">
                     <div class="card-body p-4">
 
                         {# --- TOOLS SECTION --- #}
                         <div class="d-flex justify-content-end mb-4 border-bottom pb-3 gap-2">
-
-                            {# 1. Excel Button (FOR EVERYONE) #}
                             <a href="{% url 'export_excel' %}" class="btn btn-success fw-bold shadow-sm text-uppercase small ls-1">
                                 <i class="bi bi-file-earmark-excel-fill me-2"></i> Report (.xlsx)
                             </a>
-
-                            {# 2. Backup Button (ADMIN ONLY) #}
                             {% if user.is_superuser %}
                                 <a href="{% url 'admin_backup' %}" class="btn btn-danger fw-bold shadow-sm text-uppercase small ls-1">
                                     <i class="bi bi-database-fill-lock me-2"></i> FULL BACKUP (.json)
                                 </a>
                             {% endif %}
-
                         </div>
 
-                        {# SECTION 1: CLUB / ORGANIZATION #}
+                        {# SECTION 1: ORGANIZATION #}
                         <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3">
                             <i class="bi bi-building me-2"></i>Organization Details
                         </h6>
                         <div class="row g-3 mb-4">
-                            <div class="col-md-8">
-                                <label class="form-label">Club / Org Name</label>
-                                {{ p_form.club_name }}
-                            </div>
-                            <div class="col-md-4">
+                            <div class="col-md-12">
                                 <label class="form-label">Founded Date</label>
                                 {{ p_form.founded_date }}
                             </div>
@@ -214,7 +249,7 @@
                             </div>
                         </div>
 
-                        {# SECTION 3: SOCIAL MEDIA (With nice icons) #}
+                        {# SECTION 3: ONLINE PRESENCE #}
                         <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3 mt-4">
                             <i class="bi bi-globe me-2"></i>Online Presence
                         </h6>

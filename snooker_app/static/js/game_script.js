@@ -1,3 +1,14 @@
+// --- BILL STATISTICS (Detailed) ---
+// Default counter set
+const initialBallCounts = {
+    red: 0, yellow: 0, green: 0, brown: 0, blue: 0, pink: 0, black: 0
+};
+
+// We copy this set for players 1 and 2
+// (We use { ... } to create a copy, not a reference)
+let p1BallCounts = { ...initialBallCounts };
+let p2BallCounts = { ...initialBallCounts };
+
 let timerInterval;
 let elapsedSeconds = 0;
 let activePlayer = null;
@@ -50,6 +61,7 @@ let turnStartTime = Date.now();
 let currentTurnShots = 0; // Counts shots ONLY for the current visit to the table
 
 let isUnsafeToLeave = true;
+let isStatsVisible = false;
 
 
 function recordAction(action) {
@@ -213,6 +225,8 @@ function undo() {
     }
 
     updateActionLogUI();
+    updateBallStatsUI();
+    updateFrameStatus();
 }
 
 function redo() {
@@ -335,6 +349,8 @@ function redo() {
     }
 
     updateActionLogUI();
+    updateBallStatsUI();
+    updateFrameStatus();
 }
 
 // --- ACTION LOG FUNCTIONS (HISTORY UI) ---
@@ -454,6 +470,10 @@ function startTimer() {
         timerInterval = setInterval(() => {
             elapsedSeconds++;
             document.getElementById("match-timer").textContent = formatTime(elapsedSeconds);
+
+            if (typeof broadcastGameState === 'function') {
+                broadcastGameState();
+            }
         }, 1000);
     }
 }
@@ -527,6 +547,10 @@ function resetGame() {
     isFreeBall = false;
     lastShotWasFreeBall = false;
 
+    // Reset bill counters
+    p1BallCounts = { ...initialBallCounts };
+    p2BallCounts = { ...initialBallCounts };
+
     document.querySelectorAll("h4").forEach(header => {
         header.innerHTML = header.innerHTML.replace(" 🔴", "");
     });
@@ -542,6 +566,8 @@ function resetGame() {
         element.style.display = "inline-block";
     });
     updateActionLogUI();
+    updateBallStatsUI();
+    updateFrameStatus();
 }
 
 function setActivePlayer(playerId) {
@@ -578,6 +604,8 @@ function updateActivePlayerUI(playerId) {
     } else if (playerId === 2) {
         playerHeaders[1].innerHTML += " 🔴";
     }
+
+    updateFrameStatus();
 }
 
 function updateScore(points, ballType) {
@@ -586,22 +614,22 @@ function updateScore(points, ballType) {
         return;
     }
 
+    let currentCounts = (activePlayer === 1) ? p1BallCounts : p2BallCounts;
+
     // --- CHECKING THE PREVIOUS SAFETY ---
-    // We return true because a bet was placed (i.e., the safety failed)
     resolvePendingSafety(true);
     // --------------------------------------
 
-    // --- START NEW CODE (Counting Hits) ---
-    // Each updateScore call is a successful hit
+    // --- HIT STATISTICS ---
     if (activePlayer === 1) {
-        p1Shots++; // He fired a shot
-        p1Pots++;  // I trafił
+        p1Shots++;
+        p1Pots++;
     } else {
         p2Shots++;
         p2Pots++;
     }
 
-    // --- 1. FREE BALL LOGIC ---
+    // --- 1. FREE BALL LOGIC (Moved to TOP) ---
     let actualPoints = points;
     let effectiveBallType = ballType;
     let wasFreeBallShot = false;
@@ -612,8 +640,7 @@ function updateScore(points, ballType) {
         wasFreeBallShot = true;
     }
 
-    // --- 2. SAFELY GETTING INPUT RESULT (FIX) ---
-    // Instead of closest(), we use a specific selector that will work 100%
+    // --- 3. UI & SCORE UPDATE ---
     const playerScoreInput = document.querySelector(`.player-score[data-player="${activePlayer}"]`);
 
     if (!playerScoreInput) {
@@ -630,15 +657,15 @@ function updateScore(points, ballType) {
     const previousRedBalls = parseInt(document.getElementById("red-ball-count").textContent, 10);
     const previousPointsOnTable = parseInt(document.getElementById("points-on-table").textContent, 10);
 
-    // --- 3. THE LOGIC OF HISTORY (UNDO) ---
+    // --- 4. HISTORY & TABLE LOGIC ---
     let pointsToRemoveFromTable = 0;
     if (effectiveBallType === 'red' && !wasFreeBallShot) {
         pointsToRemoveFromTable = 8;
     }
 
-    // Safeguard in case a variable is not defined
     const safeLastShotWasFreeBall = (typeof lastShotWasFreeBall !== 'undefined') ? lastShotWasFreeBall : false;
 
+    // IMPORTANT: We make a history entry NOW, before we increment the ball counter!
     recordAction({
         type: "updateScore",
         playerId: activePlayer,
@@ -655,15 +682,28 @@ function updateScore(points, ballType) {
         previousLastShotWasFreeBall: safeLastShotWasFreeBall
     });
 
-    // --- 4. UI UPDATE ---
+    // Update UI Value
     playerScoreInput.value = newScore;
 
-    // --- 5. TABLE AND RED LOGIC ---
+    // --- 2. COUNTING SPECIFIC BALLS (MOVED HERE) ---
+    // Now we increment the counters. Undo will restore the state before this point.
+    if (wasFreeBallShot) {
+        currentCounts.red++;
+    } else {
+        if (points === 1) currentCounts.red++;
+        else if (points === 2) currentCounts.yellow++;
+        else if (points === 3) currentCounts.green++;
+        else if (points === 4) currentCounts.brown++;
+        else if (points === 5) currentCounts.blue++;
+        else if (points === 6) currentCounts.pink++;
+        else if (points === 7) currentCounts.black++;
+    }
+
+    // --- 5. RED BALL REMOVAL LOGIC ---
     if (effectiveBallType === 'red') {
         for (let i = 0; i < actualPoints; i++) {
             redBallsPottedThisTurn++;
 
-            // If it's a regular red (not a free ball) -> We take it off the table
             if (!wasFreeBallShot) {
                 updateRedBalls(1);
                 updatePointsOnTable(1);
@@ -674,26 +714,22 @@ function updateScore(points, ballType) {
             }
         }
         lastPottedRed = true;
-
-        // We set the global flag
         lastShotWasFreeBall = wasFreeBallShot;
 
     } else if (ballType === 'color') {
         if (lastPottedRed) {
-            // If it is a color after red (and the previous one was not a Free Ball), we take 7 points off
             if (!safeLastShotWasFreeBall) {
                 updatePointsOnTable(7);
             }
             lastShotWasFreeBall = false;
         } else {
-            // The end of the color game
             updatePointsOnTable(points);
         }
         lastPottedRed = false;
         redBallsPottedThisTurn = 0;
     }
 
-    // --- 6. HIDING THE BALLS ---
+    // --- 6. HIDING BALLS ---
     const currentPointsOnTable = parseInt(document.getElementById("points-on-table").textContent, 10);
     hideColorBallBasedOnPoints(currentPointsOnTable);
 
@@ -702,10 +738,13 @@ function updateScore(points, ballType) {
         hideColorBallBasedOnPoints(currentPointsOnTable);
     }
 
-    // --- 7. FREE BALL MODE RESET ---
+    // --- 7. RESET FREE BALL ---
     if (isFreeBall) {
         isFreeBall = false;
     }
+
+    updateBallStatsUI();
+    updateFrameStatus();
 }
 
 function resolvePendingSafety(opponentPottedBall) {
@@ -1166,6 +1205,8 @@ document.getElementById('confirmFoul').addEventListener('click', () => {
 
         setActivePlayer(nextPlayerId);
 
+        updateFrameStatus();
+
         const foulModalEl = document.getElementById('foulModal');
         const foulModal = bootstrap.Modal.getInstance(foulModalEl) || new bootstrap.Modal(foulModalEl);
         foulModal.hide();
@@ -1293,7 +1334,13 @@ function finalizeFrameEnd() {
             p2_shots: p2Shots, p2_misses: p2Misses, p2_pots: p2Pots,
             p1_safeties: p1Safeties, p2_safeties: p2Safeties,
             p1_safe_success_count: p1SuccessfulSafeties, p2_safe_success_count: p2SuccessfulSafeties,
-            p1_breaks: p1BreaksHistory, p2_breaks: p2BreaksHistory
+            p1_breaks: p1BreaksHistory, p2_breaks: p2BreaksHistory,
+
+            // --- TUTAJ DODAJEMY NASZE NOWE LICZNIKI ---
+            ball_counts: {
+                player1: p1BallCounts,
+                player2: p2BallCounts
+            }
         })
     })
     .then(response => response.json())
@@ -1359,7 +1406,12 @@ function getStatsSnapshot() {
 
         // Break arrays (important: we make a copy through [...])
         p1BreaksHistory: [...p1BreaksHistory],
-        p2BreaksHistory: [...p2BreaksHistory]
+        p2BreaksHistory: [...p2BreaksHistory],
+
+        // --- NEW: We save the state of the billiard counters ---
+        // IMPORTANT: We make a copy of the {...} objects to avoid saving references!
+        p1BallCounts: { ...p1BallCounts },
+        p2BallCounts: { ...p2BallCounts },
     };
 }
 
@@ -1380,6 +1432,33 @@ function restoreStatsSnapshot(snapshot) {
     // Restoring the tables
     p1BreaksHistory = snapshot.p1BreaksHistory;
     p2BreaksHistory = snapshot.p2BreaksHistory;
+
+    // --- NEW: We're bringing back ball counters ---
+    p1BallCounts = snapshot.p1BallCounts || { ...initialBallCounts };
+    p2BallCounts = snapshot.p2BallCounts || { ...initialBallCounts };
+}
+
+// Function that generates HTML with balls
+function updateBallStatsUI() {
+    function generateHTML(counts) {
+        let html = '';
+        // Display order: Red, Yellow, Green...
+        const order = ['red', 'yellow', 'green', 'brown', 'blue', 'pink', 'black'];
+
+        order.forEach(color => {
+            const count = counts[color];
+            if (count > 0) {
+                html += `<div class="snooker-ball-icon ball-${color}">${count}</div>`;
+            }
+        });
+        return html;
+    }
+
+    const p1Container = document.getElementById('p1-ball-stats');
+    const p2Container = document.getElementById('p2-ball-stats');
+
+    if (p1Container) p1Container.innerHTML = generateHTML(p1BallCounts);
+    if (p2Container) p2Container.innerHTML = generateHTML(p2BallCounts);
 }
 
 document.querySelectorAll('.set-active-player').forEach(button => {
@@ -1448,3 +1527,280 @@ window.addEventListener('beforeunload', function (e) {
 });
 
 resetBreak();
+
+/* =========================================
+   SNOOKER CALCULATOR (Logic: Active Player & Color Simulation)
+   ========================================= */
+
+// 1. Toggle Button Logic
+document.addEventListener('DOMContentLoaded', () => {
+    const toggleBtn = document.getElementById('btn-toggle-stats');
+    const btnText = document.getElementById('stats-btn-text');
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            isStatsVisible = !isStatsVisible;
+
+            document.querySelectorAll('.match-status-info').forEach(el => {
+                el.style.display = isStatsVisible ? 'block' : 'none';
+            });
+
+            if (isStatsVisible) {
+                toggleBtn.classList.remove('btn-outline-info');
+                toggleBtn.classList.add('btn-info');
+                toggleBtn.classList.add('text-white');
+                if (btnText) btnText.textContent = "Hide Stats";
+                updateFrameStatus();
+            } else {
+                toggleBtn.classList.add('btn-outline-info');
+                toggleBtn.classList.remove('btn-info');
+                toggleBtn.classList.remove('text-white');
+                if (btnText) btnText.textContent = "Show Stats";
+            }
+        });
+    }
+});
+
+// 2. Main Calculation Logic (DEBUG VERSION)
+function updateFrameStatus() {
+    // LOG: Are we entering the function at all?
+    console.log("--- [DEBUG] updateFrameStatus triggered ---");
+
+    if (!isStatsVisible) {
+        console.log("--- [DEBUG] Calculator hidden -> STOP");
+        return;
+    }
+
+    const p1ScoreInput = document.querySelector(`.player-score[data-player="1"]`);
+    const p2ScoreInput = document.querySelector(`.player-score[data-player="2"]`);
+    const remainingEl = document.getElementById("points-on-table");
+
+    // LOG: Who is active according to DOM?
+    let activePlayerId = null;
+    const activeBtn = document.querySelector('.set-active-player.active');
+    if (activeBtn) {
+        activePlayerId = parseInt(activeBtn.getAttribute('data-player'), 10);
+        console.log(`--- [DEBUG] Active Player (from button): P${activePlayerId}`);
+    } else {
+        console.warn("--- [DEBUG] No active player (no button has .active class)!");
+    }
+
+    if (!p1ScoreInput || !p2ScoreInput || !remainingEl) return;
+
+    const s1 = parseInt(p1ScoreInput.value, 10) || 0;
+    const s2 = parseInt(p2ScoreInput.value, 10) || 0;
+    const remaining = parseInt(remainingEl.textContent, 10) || 0;
+
+    // Determine Leader and Chaser
+    let leaderScore = s1;
+    let chaserScore = s2;
+    let leaderId = 1;
+
+    if (s2 > s1) {
+        leaderScore = s2;
+        chaserScore = s1;
+        leaderId = 2;
+    }
+
+    const diff = leaderScore - chaserScore;
+    console.log(`--- [DEBUG] Score: ${s1}-${s2}, On table: ${remaining}, Leader: P${leaderId}, Lead: ${diff}`);
+
+    // Get Status Containers
+    const p1Status = document.getElementById("status-p1");
+    const p2Status = document.getElementById("status-p2");
+
+    // LOG: Clear old entries
+    if (p1Status) p1Status.innerHTML = "";
+    if (p2Status) p2Status.innerHTML = "";
+
+    // --- LOGIC START ---
+
+    // SCENARIO 1: SNOOKERS REQUIRED
+    if (diff > remaining) {
+        const snookersNeeded = Math.ceil((diff - remaining) / 4);
+        console.log(`--- [DEBUG] Scenario: Snookers (${snookersNeeded})`);
+
+        const leaderDiv = (leaderId === 1) ? p1Status : p2Status;
+        if (leaderDiv && activePlayerId === leaderId) {
+             leaderDiv.innerHTML = `<span class="text-success">✅ Frame Secured</span>`;
+        }
+
+        const chaserDiv = (leaderId === 1) ? p2Status : p1Status;
+        if (chaserDiv) {
+            chaserDiv.innerHTML = `<span style="color: #d63384;">⚠️ Snookers needed: ${snookersNeeded}</span>`;
+        }
+    }
+    // SCENARIO 2: OPEN GAME (Open game - no snookers needed)
+    else {
+        // --- LOGIC FIX: Calculating for the ACTIVE player ---
+
+        // 1. Determine who is at the table
+        if (activePlayerId === null) return; // If no one is active, calculate nothing
+
+        const activeScore = (activePlayerId === 1) ? s1 : s2;
+        const opponentScore = (activePlayerId === 1) ? s2 : s1;
+
+        // Difference from ACTIVE player's perspective (can be negative if trailing!)
+        // E.g. I have 0, Opponent 58 -> myDiff = -58
+        const myDiff = activeScore - opponentScore;
+
+        let pointsToWin = 0;
+
+        // SUB-SCENARIO 2A: Reds on table (> 27 pts)
+        if (remaining > 27) {
+            // Universal formula: (Remaining - MyLead) / 2 + 1
+            // If myDiff is negative (chasing), minus and minus gives plus -> i.e. (Remaining + Deficit) / 2
+            pointsToWin = Math.floor((remaining - myDiff) / 2) + 1;
+        }
+
+        // SUB-SCENARIO 2B: Colors only (<= 27 pts) -> Simulation for ACTIVE player
+        else {
+            const balls = [2, 3, 4, 5, 6, 7];
+            let startIndex = -1;
+            if (remaining === 27) startIndex = 0;
+            else if (remaining === 25) startIndex = 1;
+            else if (remaining === 22) startIndex = 2;
+            else if (remaining === 18) startIndex = 3;
+            else if (remaining === 13) startIndex = 4;
+            else if (remaining === 7)  startIndex = 5;
+
+            if (startIndex !== -1) {
+                let simMyScore = activeScore;
+                let simRemaining = remaining;
+                let accumulatedPoints = 0;
+
+                for (let i = startIndex; i < balls.length; i++) {
+                    let ballValue = balls[i];
+                    simMyScore += ballValue;
+                    simRemaining -= ballValue;
+                    accumulatedPoints += ballValue;
+
+                    // Check if this pot secures the win
+                    // MyScore > Opponent + Remaining
+                    if (simMyScore > (opponentScore + simRemaining)) {
+                        break;
+                    }
+                }
+                pointsToWin = accumulatedPoints;
+            } else {
+                pointsToWin = Math.floor((remaining - myDiff) / 2) + 1;
+            }
+        }
+
+        if (pointsToWin < 0) pointsToWin = 0;
+
+        console.log(`--- [DEBUG] Active: P${activePlayerId}, Must score: ${pointsToWin}`);
+
+        // --- DISPLAY ---
+        // Display ONLY in the active player's container
+        const activeDiv = (activePlayerId === 1) ? p1Status : p2Status;
+
+        if (activeDiv && pointsToWin > 0) {
+            activeDiv.innerHTML = `<span class="text-primary">To win: ${pointsToWin} pts</span>`;
+        }
+
+        // Draw - display for both (optional, but at draw diff=0 so logic above works for active)
+        if (myDiff === 0 && activeDiv) {
+             let pts = (remaining > 27) ? (Math.floor(remaining / 2) + 1) : pointsToWin;
+             activeDiv.innerHTML = `<span class="text-secondary">To win: ${pts} pts</span>`;
+        }
+    }
+}
+
+/* =========================================
+   SCOREBOARD BROADCASTING (TELEBIM)
+   ========================================= */
+
+const scoreChannel = new BroadcastChannel('snooker_live_score');
+
+function broadcastGameState() {
+    // 1. Gather Data from DOM
+    const p1Name = document.querySelector("h4").textContent.replace(" 🔴", "").trim();
+    // Assuming P2 name is the second h4
+    const h4s = document.querySelectorAll("h4");
+    const p2Name = h4s.length > 1 ? h4s[1].textContent.replace(" 🔴", "").trim() : "Player 2";
+
+    const p1Score = document.querySelector('.player-score[data-player="1"]').value || 0;
+    const p2Score = document.querySelector('.player-score[data-player="2"]').value || 0;
+
+    const p1Frames = document.getElementById('player1-frames').value || 0;
+    const p2Frames = document.getElementById('player2-frames').value || 0;
+
+    // Removing parentheses from total frames: "( 5 )" -> "5"
+    let totalFramesText = document.getElementById('total-frames').value || "0";
+    totalFramesText = totalFramesText.replace(/[()]/g, '').trim();
+
+    const remaining = document.getElementById("points-on-table").textContent || 0;
+    const timerText = document.getElementById("match-timer").textContent || "00:00:00";
+
+    // Get Active Player ID
+    let activeId = null;
+    const activeBtn = document.querySelector('.set-active-player.active');
+    if (activeBtn) {
+        activeId = parseInt(activeBtn.getAttribute('data-player'), 10);
+    }
+
+    // Get Stats HTML (Points to win / Snookers)
+    // We grab innerHTML to preserve colors/styles
+    const p1Stats = document.getElementById("status-p1") ? document.getElementById("status-p1").innerHTML : "";
+    const p2Stats = document.getElementById("status-p2") ? document.getElementById("status-p2").innerHTML : "";
+
+    // 2. Build Payload Object
+    const payload = {
+        activePlayer: activeId,
+        currentBreak: typeof currentBreak !== 'undefined' ? currentBreak : 0,
+        pointsOnTable: remaining,
+        timer: timerText,
+        totalFrames: totalFramesText,
+        isStatsVisible: typeof isStatsVisible !== 'undefined' ? isStatsVisible : false,
+
+        p1: {
+            name: p1Name,
+            score: p1Score,
+            frames: p1Frames,
+            statsHTML: p1Stats
+        },
+        p2: {
+            name: p2Name,
+            score: p2Score,
+            frames: p2Frames,
+            statsHTML: p2Stats
+        }
+    };
+
+    // 3. Send Signal
+    scoreChannel.postMessage(payload);
+    // console.log("--- [BROADCAST] Sent data to scoreboard ---");
+}
+
+// 4. Hook into existing functions
+// Add broadcastGameState() to all places where UI updates
+// (Just add it to the end of these functions)
+
+// Helper to inject into existing functions without rewriting them
+function hookFunction(funcName) {
+    if (typeof window[funcName] === 'function') {
+        const original = window[funcName];
+        window[funcName] = function(...args) {
+            const result = original.apply(this, args);
+            // Run broadcast slightly after to ensure DOM is updated
+            setTimeout(broadcastGameState, 50);
+            return result;
+        };
+    }
+}
+
+// Automatically hook into key functions
+document.addEventListener('DOMContentLoaded', () => {
+    hookFunction('updateScore');
+    hookFunction('switchActivePlayer');
+    hookFunction('undo');
+    hookFunction('redo');
+    hookFunction('resetGame');
+    hookFunction('setActivePlayer');
+    hookFunction('updateFrameStatus'); // Important: when calc updates, scoreboard updates
+
+    // For Timer: Since it updates every second via setInterval,
+    // we need to add it to your startTimer loop manually or accept 1s delay.
+    // Better approach: Add broadcastGameState() inside your setInterval in startTimer
+});

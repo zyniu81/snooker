@@ -207,9 +207,10 @@ class PlayerDeleteView(DeleteView):
     success_url = reverse_lazy('player_list')
 
     def get_queryset(self):
-        # DeleteView uses this to fetch the object. Filtering only to own.
-        # User cannot delete a public player, even if they can see them.
-        return Player.objects.filter(owner=self.request.user)
+         from django.db.models import Q
+         return Player.objects.filter(
+            Q(owner=self.request.user) | Q(is_temporary=True)
+        )
 
 
 @login_required
@@ -431,7 +432,7 @@ def add_match(request):
 def match_detail(request, pk):
     match = get_object_or_404(Match, pk=pk)
 
-    # --- ACCESS LOGIC (Unchanged) ---
+    # --- ACCESS LOGIC ---
     has_access = False
     if match.owner is None:
         has_access = True
@@ -439,64 +440,76 @@ def match_detail(request, pk):
         has_access = True
     elif request.user.is_authenticated and match.owner == request.user:
         has_access = True
-
     # --- NEW: ALLOW ORIGINAL OWNER (READ ONLY) ---
     elif request.user.is_authenticated:
-        # Check if a CLONE belonging to current user (User B) played in the match
-        # P1 is a clone and their original belongs to me?
         if match.player1 and match.player1.cloned_from and match.player1.cloned_from.owner == request.user:
             has_access = True
-        # P2 is a clone and their original belongs to me?
         elif match.player2 and match.player2.cloned_from and match.player2.cloned_from.owner == request.user:
             has_access = True
-    # ----------------------------------------------------------
 
     if not has_access:
         if request.user.is_authenticated:
             raise PermissionDenied
         else:
             return redirect(f'{reverse("login")}?next={request.path}')
-    # ----------------------------------
+    # ---------------------
 
-    # Game status (uses new logic in model)
+    # Game status
     game_status = match.get_game_status()
 
-    # Get frames (linked via MatchPlayer, but filtered by match)
+    # Get frames
     frames = Frame.objects.filter(match_player__match=match).order_by('frame_number')
 
-    # --- NEW PLAYER FETCHING LOGIC (Straight from seats) ---
-    # No need to search MatchPlayer and sort. We have them handy.
-
+    # --- PLAYER DATA PREPARATION ---
     p1_data = None
-    p2_data = None
-
-    # Player 1 (Host / Left)
     if match.player1:
-        # Count won frames (winner in Frame is ForeignKey to Player, so this works directly)
         p1_wins = frames.filter(winner=match.player1).count()
         p1_data = {
             'name': str(match.player1),
-            'obj': match.player1,  # Pass Player object
+            'obj': match.player1,
             'wins': p1_wins
         }
 
-    # Player 2 (Guest / Right)
+    p2_data = None
     if match.player2:
         p2_wins = frames.filter(winner=match.player2).count()
         p2_data = {
             'name': str(match.player2),
-            'obj': match.player2,  # Pass Player object
+            'obj': match.player2,
             'wins': p2_wins
         }
 
-    return render(request, 'match_detail.html', {
+    # --- BALL COUNT SUMMATION (NOWE) ---
+    colors_order = ['red', 'yellow', 'green', 'brown', 'blue', 'pink', 'black']
+    p1_ball_totals = {color: 0 for color in colors_order}
+    p2_ball_totals = {color: 0 for color in colors_order}
+
+    for frame in frames:
+        # We get data from JSONField
+        counts = frame.ball_counts or {}
+
+        p1_frame_counts = counts.get('player1', {})
+        for color, count in p1_frame_counts.items():
+            if color in p1_ball_totals:
+                p1_ball_totals[color] += count
+
+        p2_frame_counts = counts.get('player2', {})
+        for color, count in p2_frame_counts.items():
+            if color in p2_ball_totals:
+                p2_ball_totals[color] += count
+
+    context = {
         'match': match,
         'is_finished': game_status['is_finished'],
         'winner': game_status['winner'],
         'frames': frames,
         'p1': p1_data,
         'p2': p2_data,
-    })
+        'p1_ball_totals': p1_ball_totals,
+        'p2_ball_totals': p2_ball_totals,
+    }
+
+    return render(request, 'match_detail.html', context)
 
 
 @login_required
@@ -1264,6 +1277,9 @@ def save_frame_result(request):
         p1_breaks_list = data.get('p1_breaks', [])
         p2_breaks_list = data.get('p2_breaks', [])
 
+        # --- NEW: Getting ball counters from JSON ---
+        ball_counts_data = data.get('ball_counts', {})
+
         if not all([match_id, winner_id, p1_score is not None, p2_score is not None]):
             return JsonResponse({'status': 'error', 'message': 'Missing data fields'})
 
@@ -1283,7 +1299,7 @@ def save_frame_result(request):
         # 2. Find the last frame
         last_frame = Frame.objects.filter(match_player__in=match_players).order_by('-frame_number').first()
 
-        # --- FRAME RESCUE SECTION (Keeping this, as creating a frame is safe if we have players) ---
+        # --- FRAME RESCUE SECTION ---
         if not last_frame:
             last_frame = Frame.objects.create(
                 match_player=match_players.first(),
@@ -1324,6 +1340,9 @@ def save_frame_result(request):
         last_frame.safety_shot_player2 = p2_safeties
         last_frame.successful_safety_shots_player1 = p1_safe_succ
         last_frame.successful_safety_shots_player2 = p2_safe_succ
+
+        # --- NEW: We save ball counters to the database ---
+        last_frame.ball_counts = ball_counts_data
 
         if duration_seconds > 0:
             last_frame.time_duration = timedelta(seconds=duration_seconds)
@@ -2363,16 +2382,23 @@ def manage_photos(request, pk):
 @login_required
 def profile_settings(request):
     if request.method == 'POST':
+        # Load forms with data sent by user
         u_form = UserUpdateForm(request.POST, instance=request.user)
         p_form = ProfileUpdateForm(request.POST, request.FILES, instance=request.user.profile)
 
+        # CRITICAL CHECK: Both forms must be valid
         if u_form.is_valid() and p_form.is_valid():
             u_form.save()
             p_form.save()
             messages.success(request, 'Your profile has been updated!')
-            return redirect('profile_settings')  # Reload page (PRG pattern)
+            return redirect('profile_settings')  # Reload to see changes
+        else:
+            # If validation fails (e.g. duplicate email), we DO NOT redirect.
+            # We let the code fall through to render(), displaying the form with errors.
+            messages.error(request, 'Update failed. Please correct the errors below.')
 
     else:
+        # GET request: Load current database data
         u_form = UserUpdateForm(instance=request.user)
         p_form = ProfileUpdateForm(instance=request.user.profile)
 
@@ -2937,3 +2963,11 @@ class CustomLoginView(LoginView):
         cache.delete(f'login_errors_{ip}')
         cache.delete(f'block_ip_{ip}')
         return super().form_valid(form)
+
+def scoreboard(request):
+    """
+    Displays the video wall (Scoreboard).
+    Data is sent live via JavaScript (BroadcastChannel),
+    so this view doesn't need to fetch anything from the database.
+    """
+    return render(request, 'scoreboard.html')
