@@ -176,6 +176,3 @@ static/*
 
 # Django media files
 media/
-
-# Ignore Django settings
-/snooker_project/settings.py
