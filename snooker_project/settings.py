@@ -152,7 +152,7 @@ STATIC_URL = 'static/'
 # Directory where 'collectstatic' will gather files for deployment.
 # CRITICAL for production on servers like AZ.pl
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 
 # Default primary key field type
