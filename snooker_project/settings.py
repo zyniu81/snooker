@@ -31,11 +31,13 @@ DEBUG = os.environ.get('DEBUG') == 'True'
 
 # Hosts allowed to access this app.
 # Example in .env: ALLOWED_HOSTS=localhost,127.0.0.1,mojadomena.pl
-allowed_hosts_env = os.environ.get('ALLOWED_HOSTS')
-if allowed_hosts_env:
-    ALLOWED_HOSTS = allowed_hosts_env.split(',')
-else:
-    ALLOWED_HOSTS = []
+# allowed_hosts_env = os.environ.get('ALLOWED_HOSTS')
+# if allowed_hosts_env:
+#     ALLOWED_HOSTS = allowed_hosts_env.split(',')
+# else:
+#     ALLOWED_HOSTS = []
+
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
