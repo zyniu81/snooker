@@ -28,7 +28,6 @@ from django.core.management import call_command
 from django.core.cache import cache
 
 from io import StringIO
-from openai import OpenAI
 import os, json, openpyxl, sys
 import datetime
 from datetime import date
@@ -1124,9 +1123,6 @@ def achievement_list(request):
 
     # Pass list of players to template (instead of achievements)
     return render(request, 'achievement_list.html', {'players': players})
-
-
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 
 @csrf_exempt
