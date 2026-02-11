@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="snooker@localhost" uuid="677032ee-a95a-4cee-ac63-f3292505cfce">
+    <data-source source="LOCAL" name="neondb@ep-aged-shadow-agaxu5cu-pooler.c-2.eu-central-1.aws.neon.tech" uuid="91090f85-6b01-4571-9187-c4b9d944b771">
       <driver-ref>postgresql</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.postgresql.Driver</jdbc-driver>
-      <jdbc-url>jdbc:postgresql://localhost:5432/snooker</jdbc-url>
+      <jdbc-url>jdbc:postgresql://ep-aged-shadow-agaxu5cu-pooler.c-2.eu-central-1.aws.neon.tech:5432/neondb</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
   </component>
