@@ -182,9 +182,9 @@ CLOUDINARY_STORAGE = {
 # We tell Django: "Save files to Cloudinary, not Render's disk"
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
-# Configuration email (Gmail)
+# --- KONFIGURACJA BREVO (SMTP) ---
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_HOST = 'smtp-relay.brevo.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
@@ -192,4 +192,5 @@ EMAIL_TIMEOUT = 10
 
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = f"Snooker App <{EMAIL_HOST_USER}>"
+
+DEFAULT_FROM_EMAIL = 'maxcorp13@gmail.com'
