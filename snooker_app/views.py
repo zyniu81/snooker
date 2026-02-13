@@ -2414,23 +2414,28 @@ def profile_settings(request):
         p_form = ProfileUpdateForm(request.POST, request.FILES, instance=request.user.profile)
 
         if u_form.is_valid() and p_form.is_valid():
-            #1. We check if the user is trying to change their email
+            # 1. Get email from form (the one user just typed)
             new_email = u_form.cleaned_data.get('email')
 
-            if new_email != request.user.email:
+            # 2. Force get the old email directly from the database for reliable comparison
+            from django.contrib.auth.models import User
+            db_user = User.objects.get(pk=request.user.pk)
+            current_email = db_user.email
+
+            if new_email != current_email:
                 # WE SAVE THE USER without changing the email!
                 user = u_form.save(commit=False)
                 # We restore the old email in the object that goes to the database
-                user.email = request.user.email
+                user.email = current_email
                 user.save()
 
                 # We save the new email to the temporary field in the profile
                 profile = p_form.save(commit=False)
                 profile.new_email_temp = new_email
-                profile.email_confirmed = False  # We undo verification (for a new email)
+                profile.email_confirmed = False  # Reset verification for the new address
                 profile.save()
 
-                # 2. We send a confirmation link (The logic is the same as in registration)
+                # 3. Send confirmation link to the NEW email address
                 current_site = get_current_site(request)
                 subject = 'Confirm your new email address'
                 message = render_to_string('acc_active_email.html', {
@@ -2439,7 +2444,10 @@ def profile_settings(request):
                     'uid': urlsafe_base64_encode(force_bytes(user.pk)),
                     'token': account_activation_token.make_token(user),
                 })
-                user.email_user(subject, message)
+
+                # We explicitly send the email to new_email_temp instead of user.email
+                email = EmailMessage(subject, message, to=[new_email])
+                email.send()
 
                 messages.warning(request,
                                  f'A confirmation link has been sent to {new_email}. '
