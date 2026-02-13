@@ -1067,18 +1067,17 @@ def activate(request, uidb64, token):
         user = None
 
     if user is not None and account_activation_token.check_token(user, token):
+        if user.profile.new_email_temp:
+            user.email = user.profile.new_email_temp
+            user.profile.new_email_temp = None
+
         user.is_active = True
         user.profile.email_confirmed = True
         user.save()
         user.profile.save()
 
-        # Automatic login after activation!
-        login(request, user)
-
-        messages.success(request, "Your account has been activated successfully!")
-        return redirect('home')
-    else:
-        return render(request, 'activation_invalid.html')
+        messages.success(request, "E-mail confirmed! You can now log in.")
+        return redirect('login')
 
 
 def home(request):
@@ -2405,30 +2404,54 @@ def manage_photos(request, pk):
 @login_required
 def profile_settings(request):
     if request.method == 'POST':
-        # Load forms with data sent by user
         u_form = UserUpdateForm(request.POST, instance=request.user)
         p_form = ProfileUpdateForm(request.POST, request.FILES, instance=request.user.profile)
 
-        # CRITICAL CHECK: Both forms must be valid
         if u_form.is_valid() and p_form.is_valid():
-            u_form.save()
-            p_form.save()
-            messages.success(request, 'Your profile has been updated!')
-            return redirect('profile_settings')  # Reload to see changes
-        else:
-            # If validation fails (e.g. duplicate email), we DO NOT redirect.
-            # We let the code fall through to render(), displaying the form with errors.
-            messages.error(request, 'Update failed. Please correct the errors below.')
+            #1. We check if the user is trying to change their email
+            new_email = u_form.cleaned_data.get('email')
 
+            if new_email != request.user.email:
+                # WE SAVE THE USER without changing the email!
+                user = u_form.save(commit=False)
+                # We restore the old email in the object that goes to the database
+                user.email = request.user.email
+                user.save()
+
+                # We save the new email to the temporary field in the profile
+                profile = p_form.save(commit=False)
+                profile.new_email_temp = new_email
+                profile.email_confirmed = False  # We undo verification (for a new email)
+                profile.save()
+
+                # 2. We send a confirmation link (The logic is the same as in registration)
+                current_site = get_current_site(request)
+                subject = 'Confirm your new email address'
+                message = render_to_string('acc_active_email.html', {
+                    'user': user,
+                    'domain': current_site.domain,
+                    'uid': urlsafe_base64_encode(force_bytes(user.pk)),
+                    'token': account_activation_token.make_token(user),
+                })
+                user.email_user(subject, message)
+
+                messages.warning(request,
+                                 f'A confirmation link has been sent to {new_email}. '
+                                 f'Please confirm it to change your address.')
+            else:
+                # If the email hasn't changed, we save everything as usual
+                u_form.save()
+                p_form.save()
+                messages.success(request, 'Your profile has been updated!')
+
+            return redirect('profile_settings')
+        else:
+            messages.error(request, 'Update failed. Please correct the errors below.')
     else:
-        # GET request: Load current database data
         u_form = UserUpdateForm(instance=request.user)
         p_form = ProfileUpdateForm(instance=request.user.profile)
 
-    context = {
-        'u_form': u_form,
-        'p_form': p_form
-    }
+    context = {'u_form': u_form, 'p_form': p_form}
     return render(request, 'users/profile_settings.html', context)
 
 
