@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-5 text-center">
+    <div class="card shadow p-5 border-danger">
+        <h2 class="text-danger">Invalid Link ❌</h2>
+        <p class="lead mt-3">Activation link is invalid or has expired.</p>
+        <p>Please try to register again or contact support.</p>
+        <a href="{% url 'register' %}" class="btn btn-primary mt-3">Try Registering Again</a>
+    </div>
+</div>
+{% endblock %}

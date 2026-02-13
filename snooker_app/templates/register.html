@@ -50,40 +50,50 @@
 
                         {% for field in form %}
                         <div class="mb-3">
-                            <label class="form-label fw-bold text-muted small">{{ field.label }}</label>
 
-                            {{ field }}
-
-                            {% if field.name == 'password1' %}
-                                <div class="mt-2 ps-2" id="password-requirements">
-                                    <div id="req-length" class="requirement-item">
-                                        <i class="bi bi-dot"></i><i class="bi bi-check"></i>
-                                        Your password must contain at least 8 characters.
-                                    </div>
-
-                                    <div id="req-numeric" class="requirement-item">
-                                        <i class="bi bi-dot"></i><i class="bi bi-check"></i>
-                                        Your password can’t be entirely numeric.
-                                    </div>
-
-                                    <div id="req-user-info" class="requirement-item">
-                                        <i class="bi bi-dot"></i><i class="bi bi-check"></i>
-                                        Your password can’t be too similar to your personal info.
-                                    </div>
-
-                                    <div class="requirement-item">
-                                        <i class="bi bi-info-circle"></i>
-                                        Your password can’t be a commonly used password.
-                                    </div>
+                            {% if field.name == 'terms_confirmed' %}
+                                <div class="form-check">
+                                    {{ field }}
+                                    <label class="form-check-label small" for="{{ field.id_for_label }}">
+                                        {{ field.label }}
+                                    </label>
                                 </div>
-                            {% else %}
-                                {% if field.help_text %}
-                                    <div class="form-text small">{{ field.help_text }}</div>
+                                {% if field.errors %}
+                                    <div class="text-danger small mt-1">{{ field.errors }}</div>
                                 {% endif %}
-                            {% endif %}
 
-                            {% if field.errors %}
-                                <div class="text-danger small mt-1">{{ field.errors }}</div>
+                            {% else %}
+                                <label class="form-label fw-bold text-muted small">{{ field.label }}</label>
+                                {{ field }}
+
+                                {% if field.name == 'password1' %}
+                                    <div class="mt-2 ps-2" id="password-requirements">
+                                        <div id="req-length" class="requirement-item">
+                                            <i class="bi bi-dot"></i><i class="bi bi-check"></i>
+                                            Your password must contain at least 8 characters.
+                                        </div>
+                                        <div id="req-numeric" class="requirement-item">
+                                            <i class="bi bi-dot"></i><i class="bi bi-check"></i>
+                                            Your password can’t be entirely numeric.
+                                        </div>
+                                        <div id="req-user-info" class="requirement-item">
+                                            <i class="bi bi-dot"></i><i class="bi bi-check"></i>
+                                            Your password can’t be too similar to your personal info.
+                                        </div>
+                                        <div class="requirement-item">
+                                            <i class="bi bi-info-circle"></i>
+                                            Your password can’t be a commonly used password.
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    {% if field.help_text %}
+                                        <div class="form-text small">{{ field.help_text }}</div>
+                                    {% endif %}
+                                {% endif %}
+
+                                {% if field.errors %}
+                                    <div class="text-danger small mt-1">{{ field.errors }}</div>
+                                {% endif %}
                             {% endif %}
                         </div>
                         {% endfor %}

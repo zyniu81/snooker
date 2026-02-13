@@ -1,38 +1,45 @@
-from django.shortcuts import render, redirect, get_object_or_404
-from django.urls import reverse_lazy, reverse
-from django.views.decorators.http import require_POST
-from django.views.generic import DeleteView, ListView, CreateView, UpdateView, DetailView, TemplateView
+import datetime
+import json
+import os
+import sys
+from collections import defaultdict
+from datetime import date, timedelta
+from io import StringIO
+
+import openpyxl
 from django.contrib import messages
-from django.db.models import Count, Sum, F, Case, When, IntegerField, Q, Max, Avg
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.contrib.auth.views import LoginView
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse, HttpResponseForbidden, HttpResponse
-from django.core.exceptions import PermissionDenied
-from django.core.paginator import Paginator
-from django.forms import modelformset_factory
-from django.utils import timezone
+from django.contrib.auth.models import User
 from django.contrib.auth.signals import user_logged_in
-from django.dispatch import receiver
-from datetime import timedelta
-from django.utils.safestring import mark_safe
-from django.urls import reverse, reverse_lazy
-from django.db import transaction, models
-from django.utils.crypto import get_random_string
-from django.template.loader import render_to_string
-from collections import defaultdict
-from django.core.management import call_command
+from django.contrib.auth.views import LoginView
+from django.contrib.sites.shortcuts import get_current_site
 from django.core.cache import cache
+from django.core.exceptions import PermissionDenied
+from django.core.mail import EmailMessage
+from django.core.management import call_command
+from django.core.paginator import Paginator
+from django.db import models, transaction
+from django.db.models import Avg, Case, Count, F, IntegerField, Max, Q, Sum, When
+from django.dispatch import receiver
+from django.forms import modelformset_factory
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
+from django.urls import reverse, reverse_lazy
+from django.utils import timezone
+from django.utils.crypto import get_random_string
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.safestring import mark_safe
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from django.views.generic import (CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView)
 
-from io import StringIO
-import os, json, openpyxl, sys
-import datetime
-from datetime import date
-
-from .services import update_career_stats, calculate_competition_results
+from .services import calculate_competition_results, update_career_stats
+from .tokens import account_activation_token
 
 from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueForm,
                                MatchForm, CompetitionForm, AddMatchesToCompetitionForm,
@@ -1003,55 +1010,75 @@ def register(request):
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login(request, user)
+            # 1. We save the user, but as inactive
+            user = form.save(commit=False)
+            user.is_active = False
+            user.save()
+
+            # 2. Email Sending Logic (New)
+            current_site = get_current_site(request)
+            subject = 'Activate your Snooker App account'
+            message = render_to_string('acc_active_email.html', {
+                'user': user,
+                'domain': current_site.domain,
+                'uid': urlsafe_base64_encode(force_bytes(user.pk)),
+                'token': account_activation_token.make_token(user),
+            })
+            user.email_user(subject, message)
 
             # --- CLAIMING TEMPORARY MATCH ---
             temp_match_id = request.session.get('temp_match_id')
-
             if temp_match_id:
                 try:
-                    # Find match by ID from session
                     match = Match.objects.get(pk=temp_match_id)
-
-                    # If match has no owner (orphan), we claim it
                     if match.owner is None:
                         match.owner = user
-                        match.is_temporary = False  # This is no longer a temporary match
-                        match.is_public = False  # Becomes private
+                        match.is_temporary = False
+                        match.is_public = False
                         match.save()
 
-                        # --- REPAIR: Iterate over specific seats ---
                         players_to_check = [match.player1, match.player2]
-
                         for player in players_to_check:
-                            # Check 'if player', because theoretically a seat could be empty
                             if player and player.owner is None:
                                 player.owner = user
                                 player.is_temporary = False
                                 player.save()
-                        # --------------------------------------------------
 
-                        messages.success(request, "Registration successful! Your temporary match has been saved to your account.")
-
-                        # Clear session
+                        # We clear the session immediately
                         del request.session['temp_match_id']
-
-                        # Redirect immediately to this match
-                        return redirect('match_detail', pk=match.pk)
-
                 except Match.DoesNotExist:
-                    # Match might have been deleted in the meantime, ignore it
                     pass
             # ---------------------------------------
 
-            messages.success(request, "Registration successful.")
-            return redirect('home')
+            # Instead of logging in and redirecting to home, we show an information page
+            return render(request, 'registration_pending.html')
         else:
             messages.error(request, "Registration failed. Check for errors below.")
     else:
         form = SignUpForm()
     return render(request, 'register.html', {'form': form})
+
+
+def activate(request, uidb64, token):
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except(TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    if user is not None and account_activation_token.check_token(user, token):
+        user.is_active = True
+        user.profile.email_confirmed = True
+        user.save()
+        user.profile.save()
+
+        # Automatic login after activation!
+        login(request, user)
+
+        messages.success(request, "Your account has been activated successfully!")
+        return redirect('home')
+    else:
+        return render(request, 'activation_invalid.html')
 
 
 def home(request):

@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <h1 class="mb-4">Privacy Policy for Snooker App</h1>
+            <p class="text-muted">Last updated: February 12, 2026</p>
+            <hr>
+
+            <h3>1. Who We Are</h3>
+            <p>
+                The controller of your personal data is the <strong>Snooker App</strong>, providing services through the <strong>maxcorp.it</strong> domain.
+                You can contact us regarding your data at: <a href="mailto:snooker@maxcorp.it">snooker@maxcorp.it</a>.
+            </p>
+
+            <h3>2. What Data We Collect</h3>
+            <p>We only collect the data necessary to provide the functionality of the Snooker App:</p>
+            <ul>
+                <li><strong>Email address:</strong> For account creation, identity verification, and password recovery.</li>
+                <li><strong>Username:</strong> To identify you within the game, on scoreboards, and in tournaments.</li>
+                <li><strong>Profile Picture:</strong> Only if you voluntarily choose to upload one (stored via Cloudinary).</li>
+                <li><strong>Technical Data:</strong> IP address and browser type (standard server logs for security purposes).</li>
+            </ul>
+
+            <h3>3. How We Use Your Data & Account Verification</h3>
+            <p>We use your data strictly to:</p>
+            <ul>
+                <li>Enable you to log in and use the application.</li>
+                <li><strong>Verify your identity:</strong> Upon registration, a verification link is sent to your email. You must click this link to activate your account.</li>
+                <li>Save your match history, tournament results, and statistics.</li>
+            </ul>
+            <p class="text-danger">
+                <strong>Note:</strong> Accounts that are not activated via the email link within 12 hours of registration may be automatically deleted to maintain database security.
+            </p>
+
+            <h3>4. Third-Party Services (Processors)</h3>
+            <p>
+                We do not sell or trade your data. To provide our services, we use trusted infrastructure providers:
+            </p>
+            <ul>
+                <li><strong>Render (USA/EU):</strong> Application hosting.</li>
+                <li><strong>Neon Tech (USA/EU):</strong> Database storage for your scores and profile.</li>
+                <li><strong>Cloudinary (USA/Israel):</strong> Secure storage for profile images.</li>
+                <li><strong>AZ.pl (Poland):</strong> Our email server infrastructure (where snooker@maxcorp.it is hosted).</li>
+            </ul>
+
+            <h3>5. Cookies</h3>
+            <p>
+                We use essential "session cookies" only. These are required to keep you logged in. We do not use any tracking or marketing cookies.
+            </p>
+
+            <h3>6. Your Rights & Account Deletion (GDPR)</h3>
+            <p>Under the GDPR, you have full control over your data. You have the right to:</p>
+            <ul>
+                <li><strong>Access and Correct your data:</strong> Directly via your Profile Settings.</li>
+                <li><strong>Delete your account ("Right to be forgotten"):</strong> You can permanently delete your account and all associated match data at any time using the <strong>"Delete Account"</strong> button in your settings. This process is immediate and irreversible.</li>
+                <li><strong>Request data portability:</strong> Contact us if you need an export of your statistics.</li>
+            </ul>
+            <p>
+                To exercise your rights or if you have any questions, please contact us at:
+                <a href="mailto:snooker@maxcorp.it">snooker@maxcorp.it</a>.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

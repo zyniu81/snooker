@@ -5,6 +5,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.forms import BaseModelFormSet
+from django.utils.safestring import mark_safe
 
 from .models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage, Group, GroupStanding,
                      Equipment, EquipmentPhoto, Profile, TrainingSession)
@@ -555,7 +556,6 @@ class KnockoutStageForm(forms.ModelForm):
 
 
 class SignUpForm(UserCreationForm):
-    # 1. Login (Technical)
     username = forms.CharField(
         label='Username (Login)',
         max_length=150,
@@ -563,7 +563,6 @@ class SignUpForm(UserCreationForm):
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. ac_milan'})
     )
 
-    # 2. Display Name (Optional)
     display_name = forms.CharField(
         label='Display Name / Club Name',
         max_length=150,
@@ -572,47 +571,41 @@ class SignUpForm(UserCreationForm):
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. AC Milan'})
     )
 
-    # 3. Email (Required & Unique check below)
     email = forms.EmailField(
         required=True,
         widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Email address'})
     )
 
+    terms_confirmed = forms.BooleanField(
+        required=True,
+        label=mark_safe('I have read and agree to the <a href="/privacy-policy/" target="_blank" class="text-primary text-decoration-none">Privacy Policy</a>'),
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
     class Meta:
         model = User
-        fields = ('username', 'display_name', 'email', 'password1', 'password2')
+        fields = ('username', 'display_name', 'email', 'terms_confirmed', 'password1', 'password2')
         widgets = {
             'password1': forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Password'}),
             'password2': forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Confirm Password'}),
         }
 
-    # --- NEW: VALIDATION TO PREVENT DUPLICATE EMAILS ---
     def clean_email(self):
-        # We download the entered email
         email = self.cleaned_data.get('email')
-
-        # We check if such email already exists in the (User) database
         if User.objects.filter(email=email).exists():
-            # If so - we throw an error that will block registration
             raise ValidationError("A user with that email already exists.")
-
-        # If not - we return the email and the process continues
         return email
 
     def save(self, commit=True):
         user = super(SignUpForm, self).save(commit=commit)
-
         club_name_input = self.cleaned_data.get('display_name')
-
         if commit:
             if hasattr(user, 'profile'):
                 if club_name_input:
                     user.profile.club_name = club_name_input
                 else:
                     user.profile.club_name = user.username
-
                 user.profile.save()
-
         return user
 
 

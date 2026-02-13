@@ -19,6 +19,8 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import TemplateView
+
 from snooker_app import views
 from snooker_app.views import (PlayerDeleteView, VenueDeleteView, TrainingDetailView, TrainingStatsView,
                                TrainingListView, TrainingCreateView)
@@ -125,6 +127,9 @@ urlpatterns = [
     path('training/<int:pk>/', TrainingDetailView.as_view(), name='training_detail'),
     path('player/<int:pk>/stats/', TrainingStatsView.as_view(), name='player_training_stats'),
     path('scoreboard/', views.scoreboard, name='scoreboard'),
+    path('privacy-policy/', TemplateView.as_view(template_name="privacy_policy.html"),
+         name='privacy_policy'),
+    path('activate/<uidb64>/<token>/', views.activate, name='activate'),
 ]
 
 
