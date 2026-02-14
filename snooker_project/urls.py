@@ -130,6 +130,7 @@ urlpatterns = [
     path('privacy-policy/', TemplateView.as_view(template_name="privacy_policy.html"),
          name='privacy_policy'),
     path('activate/<uidb64>/<token>/', views.activate, name='activate'),
+    path('complete-tutorial/', views.complete_tutorial, name='complete_tutorial'),
 ]
 
 

@@ -216,8 +216,10 @@
 
                         {# --- TOOLS SECTION --- #}
                         <div class="d-flex justify-content-end mb-4 border-bottom pb-3 gap-2">
-                            <a href="{% url 'export_excel' %}" class="btn btn-success fw-bold shadow-sm text-uppercase small ls-1">
-                                <i class="bi bi-file-earmark-excel-fill me-2"></i> Report (.xlsx)
+                            <a href="{% url 'export_excel' %}"
+                               class="btn btn-outline-success fw-bold shadow-sm text-uppercase small ls-1 me-2"
+                               title="Export to Excel">
+                                <i class="bi bi-file-earmark-excel-fill me-1"></i> Report
                             </a>
                             {% if user.is_superuser %}
                                 <a href="{% url 'admin_backup' %}" class="btn btn-danger fw-bold shadow-sm text-uppercase small ls-1">
@@ -297,6 +299,22 @@
                                     <span class="input-group-text text-dark"><i class="bi bi-twitter-x"></i></span>
                                     {{ p_form.twitter }}
                                 </div>
+                            </div>
+                        </div>
+
+                        {# TUTORIAL SETTINGS #}
+                        <h6 class="fw-bold text-uppercase ls-1 text-primary mb-3 mt-4">
+                            <i class="bi bi-info-circle me-2"></i>Help & Tutorial
+                        </h6>
+                        <div class="card border-0 bg-light p-3" style="border-radius: 12px;">
+                            <div class="form-check form-switch d-flex align-items-center justify-content-between">
+                                <label class="form-check-label fw-bold mb-0" for="{{ p_form.show_tutorial.id_for_label }}">
+                                    Show Help Tips
+                                    <p class="text-muted small mb-0 fw-normal">Switch this on to see the guided tour on the Dashboard.</p>
+                                </label>
+
+                                {# Tu musi być nowe pole #}
+                                {{ p_form.show_tutorial }}
                             </div>
                         </div>
 

@@ -1,7 +1,13 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container mt-5"> <div class="p-5 mb-4 bg-light rounded-3 border shadow-sm">
+<div class="container mt-5">
+    <div class="p-5 mb-4 bg-light rounded-3 border shadow-sm"
+        data-title="Welcome! 👋"
+        data-intro="Welcome to the Snooker App! 🔴<br><br>This quick tour will guide you through the key features.
+        You can skip it anytime and restart it later from your <b>Profile Settings</b>."
+        data-step="1">
+
         <h1 class="display-5 fw-bold">Welcome to the Snooker App</h1>
         <p class="col-md-8 fs-4">Manage your tournaments, players, and equipment in one place.</p>
     </div>
@@ -17,8 +23,18 @@
                         <p class="mb-3 text-muted">
                             Hello, <strong>{{ user.username }}</strong>! You are already logged in.
                         </p>
-                        <a href="{% url 'competition_list' %}" class="btn btn-primary w-100 fw-bold py-2">
-                            <i class="bi bi-speedometer2 me-2"></i> Go to Dashboard
+                        <a href="{% url 'competition_list' %}"
+                           class="btn btn-primary w-100 fw-bold py-2"
+                           data-title="Tournament Hub 🏆"
+                           data-intro="This is the heart of the application! Click here to create and manage professional snooker competitions.<br><br>
+                                       <ul class='mb-0 ps-3'>
+                                           <li class='mb-1'>Set <b>Dates</b> and Tournament Names.</li>
+                                           <li class='mb-1'>Assign <b>Players</b> and Referees.</li>
+                                           <li>Choose Format: <b>Group Stage</b> or <b>Knockout (Play-off)</b>.</li>
+                                       </ul><br>
+                                       Ready to organize your first event? Click <b>Got it!</b> to finish the tour."
+                           data-step="9">
+                            <i class="bi bi-trophy-fill me-2"></i> Open Tournament Hub
                         </a>
                     </li>
 
@@ -38,7 +54,11 @@
 
                 {# --- FOR ALL (Quick Match) --- #}
                 <li class="list-group-item p-3 bg-light">
-                    <a href="{% url 'create_temporary_match' %}" class="btn btn-info w-100 text-white fw-bold shadow-sm">
+                    <a href="{% url 'create_temporary_match' %}"
+                       class="btn btn-info w-100 text-white fw-bold shadow-sm"
+                       data-title="Quick Game ⚡"
+                       data-intro="Jump straight into action! Start a single frame with <b>minimal setup</b>. You can quickly choose your saved players or create temporary ones on the fly."
+                       data-step="2">
                         <i class="bi bi-lightning-fill me-2"></i> Quick Match
                     </a>
                 </li>

@@ -1007,12 +1007,22 @@ class ProfileUpdateForm(forms.ModelForm):
     class Meta:
         model = Profile
         fields = [
+            'show_tutorial',
             'image', 'club_name', 'founded_date', 'bio',
             'address', 'city',
             'public_email', 'phone_main', 'phone_secondary',
             'website', 'facebook', 'instagram', 'twitter'
         ]
+
+        labels = {
+            'show_tutorial': 'Restart Welcome Tour',
+            'image': 'Profile Image',
+        }
+
         widgets = {
+            # Tutorial Switch
+            'show_tutorial': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
+
             # Image input hidden for styling via label
             'image': forms.FileInput(attrs={'class': 'd-none', 'id': 'real-file-input'}),
 

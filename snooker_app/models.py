@@ -1414,6 +1414,7 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     email_confirmed = models.BooleanField(default=False)
     new_email_temp = models.EmailField(blank=True, null=True)
+    show_tutorial = models.BooleanField(default=False)
 
     # 1. VISUAL
     image = models.ImageField(default='default_profile.jpg', upload_to='profile_pics', blank=True, null=True)

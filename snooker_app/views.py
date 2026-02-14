@@ -3031,3 +3031,11 @@ def scoreboard(request):
     so this view doesn't need to fetch anything from the database.
     """
     return render(request, 'scoreboard.html')
+
+@login_required
+@require_POST
+def complete_tutorial(request):
+    """AJAX endpoint to disable tutorial for the user."""
+    request.user.profile.show_tutorial = False
+    request.user.profile.save()
+    return JsonResponse({'status': 'ok'})
