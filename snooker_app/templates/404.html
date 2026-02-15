@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container d-flex flex-column align-items-center justify-content-center mt-5 mb-5" style="min-height: 60vh;">
+
+    <div class="text-center p-5 rounded-3 shadow-sm bg-white border" style="max-width: 600px;">
+
+        <div class="d-inline-flex align-items-center justify-content-center mb-4 text-white fw-bold shadow"
+             style="width: 120px; height: 120px; border-radius: 50%;
+                    background: radial-gradient(circle at 30% 30%, #dc3545, #8a1f29);
+                    font-size: 40px; border: 2px solid #fff;">
+            404
+        </div>
+
+        <h1 class="display-5 fw-bold text-dark mb-3">Foul and a Miss! 🎱</h1>
+
+        <p class="fs-5 text-muted mb-4">
+            Oops! Looks like that cue ball landed in the wrong pocket.<br>
+            The page you are looking for does not exist or has been moved.
+        </p>
+
+        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+            <a href="{% url 'home' %}" class="btn btn-primary btn-lg px-4 gap-3 fw-bold shadow-sm">
+                <i class="bi bi-arrow-left-circle-fill me-2"></i> Return to Safety (Home)
+            </a>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
