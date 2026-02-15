@@ -73,6 +73,9 @@ MESSAGE_TAGS = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'snooker_project.middleware.MaintenanceModeMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -205,3 +208,9 @@ EMAIL_USE_SSL = True
 EMAIL_TIMEOUT = 20
 
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
+
+# --- MAINTENANCE MODE SETTINGS ---
+MAINTENANCE_MODE = os.environ.get('MAINTENANCE_MODE', 'False') == 'True'
+
+# We read the message from Render.
+MAINTENANCE_MSG = os.environ.get('MAINTENANCE_MSG', '')
