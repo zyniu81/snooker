@@ -16,8 +16,20 @@ import random
 class Player(models.Model):
     # --- 1. PERSONAL DATA AND CONFIGURATION ---
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='players', null=True, blank=True)
+
+    # For Sub-Admin:
+    managed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='managed_players',
+        null=True,
+        blank=True,
+        help_text="Designated manager (Sub-Admin) for this player"
+    )
+
     user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='player_profile')
-    # New field - link to original:
+
+    # Link to original:
     cloned_from = models.ForeignKey(
         'self',
         on_delete=models.SET_NULL,
@@ -1416,33 +1428,81 @@ class Profile(models.Model):
     new_email_temp = models.EmailField(blank=True, null=True)
     show_tutorial = models.BooleanField(default=False)
 
-    # 1. VISUAL
+    # --- 1. VISUAL ---
     image = models.ImageField(default='default_profile.jpg', upload_to='profile_pics', blank=True, null=True)
 
-    # 2. ORGANIZER / CLUB DATA
+    # --- 2. ORGANIZER / CLUB DATA ---
     club_name = models.CharField(max_length=150, blank=True, null=True, help_text="Name of club or organization")
     founded_date = models.DateField(blank=True, null=True, help_text="Date of club foundation")
 
-    # 3. LOCATION
+    # --- 3. LOCATION ---
     address = models.CharField(max_length=255, blank=True, null=True, help_text="Street and number")
     city = models.CharField(max_length=100, blank=True, null=True, help_text="City")
 
-    # 4. CONTACT (New)
+    # --- 4. CONTACT ---
     public_email = models.EmailField(blank=True, null=True, help_text="Public contact email (visible to players)")
     phone_main = models.CharField(max_length=20, blank=True, null=True, help_text="Main contact number")
     phone_secondary = models.CharField(max_length=20, blank=True, null=True, help_text="Alternative number")
 
-    # 5. SOCIAL MEDIA & WEB (New)
+    # --- 5. SOCIAL MEDIA & WEB ---
     website = models.URLField(blank=True, null=True, help_text="Official website URL")
     facebook = models.URLField(blank=True, null=True, help_text="Facebook profile URL")
     instagram = models.URLField(blank=True, null=True, help_text="Instagram profile URL")
     twitter = models.URLField(blank=True, null=True, help_text="X (Twitter) profile URL")
 
-    # 6. OTHER
+    # --- 6. BIO ---
     bio = models.TextField(max_length=500, blank=True, null=True, help_text="A short description about you or the club")
 
+    # ==========================================
+    # --- 7. SAAS FOUNDATIONS (FUTURE PROOF) ---
+    # ==========================================
+
+    # A. TIER / ACCOUNT TYPE
+    TIER_CHOICES = (
+        ('FREE', 'Free Tier'),
+        ('PRO', 'Pro Organizer'),
+        ('CLUB', 'Club Manager'),
+    )
+    account_tier = models.CharField(max_length=20, choices=TIER_CHOICES, default='FREE',
+                                    help_text="Current subscription plan")
+
+    # B. SUBSCRIPTION TIME & HISTORY
+    subscription_start = models.DateTimeField(blank=True, null=True, help_text="Start of current billing cycle")
+    subscription_end = models.DateTimeField(blank=True, null=True, help_text="End of current billing cycle")
+
+    # JSON for past subscriptions (e.g. [{'plan': 'PRO', 'start': '2025-01-01', 'end': '2026-01-01'}])
+    subscription_history = models.JSONField(default=dict, blank=True, null=True)
+
+    # C. QUOTAS / LIMITS (Hard Numbers)
+    # Default values are set for 'FREE' users. Pro users will have higher numbers set by logic.
+    limit_players = models.IntegerField(default=5, help_text="Max number of players allowed")
+    limit_tournaments = models.IntegerField(default=1, help_text="Max active tournaments allowed")
+    limit_venues = models.IntegerField(default=1, help_text="Max venues allowed")
+    limit_referees = models.IntegerField(default=2, help_text="Max referees allowed")
+    limit_storage_mb = models.IntegerField(default=50, help_text="Max storage for photos in MB")
+
+    # D. BILLING & INVOICE DATA
+    billing_company_name = models.CharField(max_length=200, blank=True, null=True,
+                                            help_text="Company name for invoices")
+    tax_id = models.CharField(max_length=50, blank=True, null=True, help_text="NIP / VAT ID")
+    billing_address = models.TextField(blank=True, null=True,
+                                       help_text="Full billing address if different from club address")
+
+    # JSON for Payment History, Stripe Customer IDs, Payment Methods, Tax Rules etc.
+    billing_metadata = models.JSONField(default=dict, blank=True, null=True)
+
+    # E. SETTINGS & EXTRAS
+    # JSON for UI preferences (Dark mode, notifications, language etc.)
+    preferences = models.JSONField(default=dict, blank=True, null=True)
+
+    # JSON "Backup" field for absolutely anything else in the future
+    extra_data = models.JSONField(default=dict, blank=True, null=True)
+
+    # Admin private notes about this user (e.g. "Friend of owner", "Suspicious activity")
+    admin_notes = models.TextField(blank=True, null=True)
+
     def __str__(self):
-        return f'{self.user.username} Profile'
+        return f'{self.user.username} Profile ({self.account_tier})'
 
 
 # --- SIGNALS (Unchanged - essential for automation) ---
@@ -1472,18 +1532,42 @@ class Ranking(models.Model):
     name = models.CharField(max_length=100, help_text="Ranking name, e.g. 'Season 2025/2026'")
     description = models.TextField(blank=True, null=True)
 
-    # Is ranking active (show on main list)
-    is_active = models.BooleanField(default=True)
+    # --- LOGO & VISIBILITY ---
+    ranking_logo = models.ImageField(upload_to='ranking_logos/', blank=True, null=True,
+                                     help_text="Sponsor logo or league crest")
+
+    # Active = whether it is counted, Public = whether guests can see it
+    is_active = models.BooleanField(default=True, help_text="Is this ranking currently active/calculated?")
+    is_public = models.BooleanField(default=False, help_text="Visible to everyone (including guests)?")
+
+    # --- RANKING TYPES ---
+    RANKING_TYPES = (
+        ('SEASON', 'Seasonal (Resets yearly)'),
+        ('ROLLING', 'Rolling (e.g. 2-year logic)'),
+        ('ALL_TIME', 'All-Time / General'),
+        ('CUSTOM', 'Custom Period'),
+    )
+    ranking_type = models.CharField(max_length=20, choices=RANKING_TYPES, default='SEASON',
+                                    help_text="Logic used for points calculation")
 
     # Validity dates (optional, for archiving)
     start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
 
+    # Scoring rules: e.g. {"win": 3, "draw": 1, "frame_win": 1}
+    points_system = models.JSONField(default=dict, blank=True, help_text="Rules for calculating points")
+
+    # Reward template: e.g. {"winner": 1000, "runner_up": 500}
+    prize_money_rules = models.JSONField(default=dict, blank=True, help_text="Default prize structure template")
+
+    # Reserve for other data (e.g. table colors, sponsor links)
+    extra_metadata = models.JSONField(default=dict, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} ({self.owner.username})"
+        return f"{self.name} ({self.get_ranking_type_display()})"
 
 
 class RankingPosition(models.Model):
@@ -1494,13 +1578,17 @@ class RankingPosition(models.Model):
     player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='ranking_positions')
 
     # --- MAIN CRITERIA ---
-    points = models.IntegerField(default=0, help_text="Main ranking points")
-    total_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0.00,
+    points = models.IntegerField(default=0, db_index=True, help_text="Main ranking points")
+    total_earnings = models.DecimalField(max_digits=12, decimal_places=2, default=0.00,
                                          help_text="Total prize money won")
 
-    # --- POSITION HISTORY (For up/down arrows) ---
+    # --- POSITION HISTORY & TRENDS ---
     current_rank = models.IntegerField(default=0, help_text="Current rank (calculated during update)")
     previous_rank = models.IntegerField(default=0, help_text="Previous rank (for showing rise/fall)")
+
+    # Trend (-1, 0, 1) and Form ("WWLWD")
+    trend_direction = models.IntegerField(default=0, help_text="1=Up, 0=Stable, -1=Down")
+    recent_form = models.CharField(max_length=20, blank=True, null=True, help_text="e.g. WWLWD")
 
     # --- TOURNAMENT STATISTICS ---
     tournaments_played = models.IntegerField(default=0, help_text="Number of tournaments played in this cycle")
@@ -1511,11 +1599,14 @@ class RankingPosition(models.Model):
     matches_played = models.IntegerField(default=0)
     matches_won = models.IntegerField(default=0)
     matches_lost = models.IntegerField(default=0)
-    matches_drawn = models.IntegerField(default=0)  # For leagues with draws
+    matches_drawn = models.IntegerField(default=0)
 
     # --- FRAME STATISTICS (SNOOKER SPECIFIC) ---
     frames_won = models.IntegerField(default=0)
     frames_lost = models.IntegerField(default=0)
+
+    # Physical field in database (instead of @property) for sorting!
+    frame_difference = models.IntegerField(default=0, help_text="Frames Won - Frames Lost (for sorting)")
 
     # --- SMALL POINTS ---
     small_points_scored = models.IntegerField(default=0)
@@ -1526,18 +1617,16 @@ class RankingPosition(models.Model):
     centuries_count = models.IntegerField(default=0, help_text="Number of century breaks (100+)")
     fifties_count = models.IntegerField(default=0, help_text="Number of 50+ breaks")
 
+    # Stock up on statistics
+    extra_stats = models.JSONField(default=dict, blank=True, help_text="Extra stats like fouls, avg shot time etc.")
+
     class Meta:
-        # A player can only be once in a given ranking
         unique_together = ('ranking', 'player')
-        # Default sort: points first, then titles won, then fewer losses
-        ordering = ['-points', '-titles_won', '-matches_won']
+        # Changed sorting: Points -> Frame Difference -> Matches Won
+        ordering = ['-points', '-frame_difference', '-matches_won']
 
     def __str__(self):
-        return f"{self.player.last_name} in {self.ranking.name}: {self.points} pts"
-
-    @property
-    def frame_difference(self):
-        return self.frames_won - self.frames_lost
+        return f"#{self.current_rank} {self.player.last_name} in {self.ranking.name}"
 
     @property
     def win_percentage(self):
