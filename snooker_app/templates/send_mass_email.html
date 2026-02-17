@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<form action="" method="post">
+    {% csrf_token %}
+
+    <h2>Write your message</h2>
+    <p>You are sending this email to the following users:</p>
+
+    <ul>
+        {% for item in items %}
+            <li>{{ item.user.username }} ({{ item.user.email }})</li>
+        {% endfor %}
+    </ul>
+
+    {% for item in items %}
+        <input type="hidden" name="{{ action_checkbox_name }}" value="{{ item.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="send_email_to_selected">
+    <input type="hidden" name="apply" value="True">
+
+    <div style="margin-top: 20px;">
+        <p><strong>Subject:</strong><br> {{ form.subject }}</p>
+        <p><strong>Message:</strong><br> {{ form.message }}</p>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <input type="submit" value="Send Emails" class="default" style="padding: 10px 20px; background: #417690; color: white; border: none; cursor: pointer;">
+        <a href="#" onclick="window.history.back(); return false;" style="margin-left: 10px; color: #666;">Cancel</a>
+    </div>
+</form>
+{% endblock %}

@@ -1,10 +1,69 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.core.mail import send_mail
+from django.http import HttpResponseRedirect
+from django import forms
+from django.shortcuts import render
 from django.utils.html import format_html
+
 from .models import (
-    Profile, Player, Match, Frame, MatchPlayer,
-    Referee, Venue, Competition,
-    GroupStage, KnockoutStage, Ranking, RankingPosition
-)
+    Profile, Player, Match, Frame, MatchPlayer, Referee, Venue, Competition, GroupStage,
+    KnockoutStage, Ranking, RankingPosition, Announcement, SnookerNews)
+
+
+# ==================================================
+# Sending email to all/selected
+# ==================================================
+# 1. We register Ads so you can post them
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ('title', 'style', 'start_date', 'end_date', 'is_active')
+    list_filter = ('is_active', 'style')
+    search_fields = ('title', 'content')
+
+
+# 2. Form for entering email content (only in admin's memory)
+class SendEmailForm(forms.Form):
+    subject = forms.CharField(widget=forms.TextInput(attrs={'size': '60'}))
+    message = forms.CharField(widget=forms.Textarea(attrs={'rows': 10, 'cols': 60}))
+
+
+#3. Action Function
+def send_email_to_selected(modeladmin, request, queryset):
+    # If admin clicked "Send" in intermediate form
+    if 'apply' in request.POST:
+        form = SendEmailForm(request.POST)
+        if form.is_valid():
+            subject = form.cleaned_data['subject']
+            message = form.cleaned_data['message']
+
+            count = 0
+            for profile in queryset:
+                if profile.user.email:
+                    # Sending (fail_silently=True so that an error in one email doesn't result in the whole thing being lost)
+                    send_mail(
+                        subject,
+                        message,
+                        None,
+                        [profile.user.email],
+                        fail_silently=True
+                    )
+                    count += 1
+
+            modeladmin.message_user(request, f"Email sent to {count} users.")
+            return HttpResponseRedirect(request.get_full_path())
+
+    # If you just selected users and chose the action -> Show form
+    else:
+        form = SendEmailForm()
+
+    return render(request, 'send_mass_email.html', {
+        'items': queryset,
+        'form': form,
+        'title': 'Send Email to Selected Users',
+        'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+    })
+
+send_email_to_selected.short_description = "Send Email to selected users"
 
 
 # ==================================================
@@ -16,6 +75,7 @@ class ProfileAdmin(admin.ModelAdmin):
     list_filter = ('account_tier', 'show_tutorial', 'email_confirmed', 'city')
     search_fields = ('user__username', 'user__email', 'club_name', 'phone_main')
     ordering = ('-subscription_end',)
+    actions = [send_email_to_selected]
 
     def status_icon(self, obj):
         color = 'green' if obj.account_tier != 'FREE' else 'gray'
@@ -156,7 +216,17 @@ class RankingPositionAdmin(admin.ModelAdmin):
 
 
 # ==================================================
-# 5. OTHER (Simple Registration)
+# Adding news to the home page
+# ==================================================
+@admin.register(SnookerNews)
+class SnookerNewsAdmin(admin.ModelAdmin):
+    list_display = ('title', 'created_at', 'is_active', 'external_link')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('title', 'short_description')
+
+
+# ==================================================
+# OTHER (Simple Registration)
 # ==================================================
 admin.site.register(Frame)
 admin.site.register(GroupStage)

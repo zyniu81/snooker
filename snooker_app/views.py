@@ -49,7 +49,7 @@ from snooker_app.forms import (PlayerForm, PlayerEditForm, RefereeForm, VenueFor
                                EquipmentPhotoForm, UserUpdateForm, ProfileUpdateForm, TrainingSessionForm)
 from snooker_app.models import (Player, Referee, Venue, Match, Competition, GroupStage, KnockoutStage,
                                 MatchPlayer, Frame, GroupStanding, SharingToken, CompetitionResult, Equipment,
-                                EquipmentPhoto, TrainingSession, Group)
+                                EquipmentPhoto, TrainingSession, Group, Announcement, SnookerNews)
 
 
 # --- HELPER FUNCTIONS ---
@@ -1087,8 +1087,26 @@ def activate(request, uidb64, token):
 
 
 def home(request):
-    # Home page available for everyone (logged-in users see different menu)
-    return render(request, 'home.html')
+    now = timezone.now()
+
+    # We download ads that:
+    # 1. They are active (is_active=True)
+    # 2. Start date is in the past (they have already started)
+    # 3. End date is empty OR in the future (not expired yet)
+    announcements = Announcement.objects.filter(
+        is_active=True,
+        start_date__lte=now
+    ).filter(
+        models.Q(end_date__isnull=True) | models.Q(end_date__gte=now)
+    ).order_by('-start_date')
+
+    # 4. News - 3 latest active news
+    latest_news = SnookerNews.objects.filter(is_active=True).order_by('-created_at')[:3]
+
+    return render(request, 'home.html', {
+        'announcements': announcements,
+        'latest_news': latest_news
+    })
 
 
 @login_required

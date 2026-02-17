@@ -2,6 +2,21 @@
 
 {% block content %}
 <div class="container mt-5">
+
+    {# --- ADVERTISEMENT SECTION --- #}
+    {% if announcements %}
+        <div class="mb-4">
+            {% for announcement in announcements %}
+                <div class="alert alert-{{ announcement.style }} alert-dismissible fade show shadow-sm" role="alert">
+                    <h4 class="alert-heading"><i class="bi bi-megaphone-fill me-2"></i> {{ announcement.title }}</h4>
+                    <p class="mb-0">{{ announcement.content|linebreaksbr }}</p>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+    {# --- END OF ADVERTISEMENT SECTION --- #}
+
     <div class="p-5 mb-4 bg-light rounded-3 border shadow-sm"
         data-title="Welcome! 👋"
         data-intro="Welcome to the Snooker App! 🔴<br><br>This quick tour will guide you through the key features.
@@ -64,6 +79,91 @@
                 </li>
             </ul>
         </div>
+
+    {# --- NEWS SECTION (MODAL VERSION) --- #}
+    {% if latest_news %}
+    <div class="mt-5">
+        <h3 class="mb-4 border-bottom pb-2"><i class="bi bi-newspaper me-2"></i> Snooker World News</h3>
+
+        <div class="row">
+            {% for news in latest_news %}
+            <div class="col-md-4 mb-4">
+                <div class="card h-100 shadow-sm hover-effect">
+                    {# PHOTO ON TILE #}
+                    {% if news.image %}
+                        <img src="{{ news.image.url }}" class="card-img-top" alt="{{ news.title }}"
+                             style="height: 200px; object-fit: cover; cursor: pointer;"
+                             data-bs-toggle="modal" data-bs-target="#newsModal{{ news.id }}">
+                    {% else %}
+                        <div class="card-img-top bg-secondary d-flex align-items-center justify-content-center text-white"
+                             style="height: 200px; cursor: pointer;"
+                             data-bs-toggle="modal" data-bs-target="#newsModal{{ news.id }}">
+                            <i class="bi bi-image fs-1"></i>
+                        </div>
+                    {% endif %}
+
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title fw-bold">{{ news.title }}</h5>
+                        <p class="card-text text-muted small mb-2">{{ news.created_at|date:"d M Y" }}</p>
+
+                        {# SUMMARY TILE CONTENT #}
+                        <p class="card-text">{{ news.short_description|truncatewords:15 }}</p>
+
+                        <div class="mt-auto d-flex gap-2">
+                            {# Button 1: Open in App (Modal) #}
+                            <button type="button" class="btn btn-sm btn-outline-dark flex-grow-1"
+                                    data-bs-toggle="modal" data-bs-target="#newsModal{{ news.id }}">
+                                <i class="bi bi-eye-fill"></i> Read
+                            </button>
+
+                            {# Button 2: External link (if any) #}
+                            {% if news.external_link %}
+                                <a href="{{ news.external_link }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Go to source">
+                                    <i class="bi bi-box-arrow-up-right"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# --- WINDOW (MODAL) FOR THIS SPECIFIC NEWS --- #}
+            <div class="modal fade" id="newsModal{{ news.id }}" tabindex="-1" aria-labelledby="newsModalLabel{{ news.id }}" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title fw-bold" id="newsModalLabel{{ news.id }}">{{ news.title }}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            {# Full modal image #}
+                            {% if news.image %}
+                                <img src="{{ news.image.url }}" class="img-fluid rounded mb-3 w-100" alt="{{ news.title }}">
+                            {% endif %}
+
+                            <h6 class="text-muted border-bottom pb-2 mb-3">Published: {{ news.created_at|date:"d F Y, H:i" }}</h6>
+
+                            {# FULL CONTENT (You'll see your 500 characters here) #}
+                            <p class="fs-5" style="white-space: pre-line;">{{ news.short_description }}</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            {% if news.external_link %}
+                                <a href="{{ news.external_link }}" target="_blank" class="btn btn-primary">
+                                    Go to full article <i class="bi bi-box-arrow-up-right ms-2"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {# --- END OF MODAL --- #}
+
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     </div>
 </div>
 {% endblock %}

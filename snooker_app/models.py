@@ -1701,3 +1701,46 @@ def update_stats_on_delete(sender, instance, **kwargs):
             handle_player_cleanup(instance.player2)
     except ObjectDoesNotExist:
         pass
+
+
+class Announcement(models.Model):
+    TYPES = (
+        ('info', 'Blue (Info)'),
+        ('success', 'Green (Success)'),
+        ('warning', 'Yellow (Warning)'),
+        ('danger', 'Red (Alert)'),
+    )
+
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    style = models.CharField(max_length=20, choices=TYPES, default='info')
+
+    is_active = models.BooleanField(default=True)
+    start_date = models.DateTimeField(default=timezone.now)
+    end_date = models.DateTimeField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.title
+
+
+class SnookerNews(models.Model):
+    title = models.CharField(max_length=200, help_text="Headline (e.g., 'Ronnie wins Masters')")
+    short_description = models.TextField(max_length=500, help_text="Short summary displayed on the card")
+
+    # Photo is optional but recommended for appearance
+    image = models.ImageField(upload_to='news_images/', blank=True, null=True)
+
+    # Link to full article (e.g. on Eurosport/BBC)
+    external_link = models.URLField(blank=True, null=True, help_text="Link to the full article source (optional)")
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Snooker News"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title
