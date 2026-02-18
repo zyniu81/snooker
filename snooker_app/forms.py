@@ -698,34 +698,30 @@ class SubstitutePlayerForm(forms.Form):
 
         if self.stage and self.owner:
 
-            # === CHANGE: STAGE TYPE RECOGNITION ===
+            # We get the Competition object to know which guests to show
+            competition = self.stage.competition
 
-            # Check if it is a GROUP stage (if model has 'groups' field)
+            # === STAGE TYPE RECOGNITION ===
             if hasattr(self.stage, 'groups'):
-                # --- LOGIC FOR GROUPS (OLD) ---
+                # --- LOGIC FOR GROUPS ---
                 finished_matches = Match.objects.filter(
                     group_stage=self.stage,
                     status='FINISHED'
                 )
-                # Players are pulled from group table (GroupStanding)
                 players_in_stage_ids = list(Player.objects.filter(
                     groupstanding__group__stage=self.stage
                 ).values_list('id', flat=True))
 
             else:
-                # --- LOGIC FOR PLAY-OFF (NEW) ---
-                # Here we look by knockout_stage
+                # --- LOGIC FOR PLAY-OFF ---
                 finished_matches = Match.objects.filter(
                     knockout_stage=self.stage,
                     status='FINISHED'
                 )
-                # Players are pulled directly from Tournament (because in Play-off, everyone remaining plays)
-                # Assumption: self.stage.competition.players
-                players_in_stage_ids = list(self.stage.competition.players.values_list('id', flat=True))
+                players_in_stage_ids = list(competition.players.values_list('id', flat=True))
 
             # ========================================
 
-            # Rest of code unchanged - works the same for both versions
             busy_ids = set()
             for m in finished_matches:
                 if m.player1: busy_ids.add(m.player1.id)
@@ -735,10 +731,15 @@ class SubstitutePlayerForm(forms.Form):
                 id__in=players_in_stage_ids
             ).exclude(id__in=busy_ids)
 
+            # We want: (My players) AND ( (Is not a guest) OR (Is a guest in THIS tournament) )
             self.fields['player_in'].queryset = Player.objects.filter(
                 owner=self.owner,
                 is_temporary=False
-            ).exclude(id__in=players_in_stage_ids)
+            ).filter(
+                Q(is_guest=False) | Q(competitions=competition)
+            ).exclude(
+                id__in=players_in_stage_ids
+            ).distinct().order_by('last_name', 'nickname')
 
 
 # Form to change group for existing player (table row)
@@ -782,12 +783,22 @@ class AddPlayerToGroupForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         if self.stage and self.owner:
-            # Available players = All my players MINUS those already in groups
+            # 0. We download the tournament to know which guests to allow
+            competition = self.stage.competition
+
+            # 1. Available players = All my players MINUS those already in groups
             players_in_stage = Player.objects.filter(groupstanding__group__stage=self.stage)
 
+            # 2. We add a Q filter
             self.fields['player'].queryset = Player.objects.filter(
-                owner=self.owner, is_temporary=False
-            ).exclude(id__in=players_in_stage.values('id'))
+                owner=self.owner,
+                is_temporary=False
+            ).filter(
+                # Show player IF: (Is permanent) OR (Is assigned to THIS tournament)
+                Q(is_guest=False) | Q(competitions=competition)
+            ).exclude(
+                id__in=players_in_stage.values('id')
+            ).distinct().order_by('last_name', 'nickname')
 
             self.fields['group'].queryset = Group.objects.filter(stage=self.stage)
 

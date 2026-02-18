@@ -177,4 +177,4 @@ static/*
 # Django media files
 media/
 
-czyszczenie_temp.txt
+clean_temp.txt

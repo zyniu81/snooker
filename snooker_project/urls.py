@@ -83,6 +83,7 @@ urlpatterns = [
     path('stage/<int:stage_id>/manage-groups/', views.manage_groups, name='manage_groups'),
     path('stage/<int:stage_id>/manage-knockout/', views.manage_knockout, name='manage_knockout'),
     path('generate-token/', views.generate_token, name='generate_token'),
+    path('generate-token/<int:player_id>/', views.generate_token, name='generate_token_specific'),
     path('competition/<int:comp_id>/import/', views.import_players_to_competition,
          name='import_players_to_competition'),
     path('match/import-guest/', views.import_guest_for_match, name='import_guest_for_match'),

@@ -136,7 +136,7 @@
                         <i class="bi bi-pencil-fill"></i> Edit Profile
                     </a>
 
-                    {# --- NEW BUTTON: TRAINING --- #}
+                    {# --- TRAINING --- #}
                     <a href="{% url 'player_training_list' player.pk %}" class="btn btn-outline-success fw-bold shadow-sm">
                         <i class="bi bi-journal-check me-2"></i> Training Diary
                     </a>
@@ -144,6 +144,11 @@
                     {# --- EQUIPMENT --- #}
                     <a href="{% url 'equipment_list' player.pk %}" class="btn btn-outline-dark fw-bold shadow-sm">
                         <i class="bi bi-backpack2-fill me-2"></i> Equipment / Gear
+                    </a>
+
+                    {# --- NEW: SHARE BUTTON --- #}
+                    <a href="{% url 'generate_token_specific' player.pk %}" class="btn btn-outline-info fw-bold shadow-sm">
+                        <i class="bi bi-share-fill me-2"></i> Share Player
                     </a>
 
                     <a href="{% url 'player_delete' player.pk %}" class="btn btn-outline-danger btn-sm border-0 mt-2">

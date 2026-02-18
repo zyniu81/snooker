@@ -1970,24 +1970,45 @@ def substitute_player_knockout(request, competition_id):
 
 # 1. TOKEN GENERATION (For Guest)
 @login_required
-def generate_token(request):
-    """Generates a 6-digit code valid for 90 seconds and sends it back (e.g., to a modal)."""
-    # Remove old user tokens to avoid clutter
+def generate_token(request, player_id=None):
+    """
+    Generates a 6-digit code.
+    If player_id is given -> The code works ONLY for that player.
+    If player_id is missing (None) -> The code works for ALL players of the user.
+    """
+    # 1. We delete old user tokens (to avoid garbage)
     SharingToken.objects.filter(owner=request.user).delete()
 
-    # Generate digits
+    #2. We check if we are generating for a specific player
+    target_player = None
+    if player_id:
+        # get_object_or_404 with owner=request.user is a security shield.
+        # This will prevent anyone from generating a code for someone else's player by entering their ID.
+        target_player = get_object_or_404(Player, id=player_id, owner=request.user)
+
+    # 3. We generate numbers
     new_code = get_random_string(length=6, allowed_chars='0123456789')
 
+    # 4. We save it in the database
+    # If target_player exists, Django will fill it in the specific_player field.
+    # If it is None, the field will be empty (i.e. generic code).
     SharingToken.objects.create(
         owner=request.user,
-        code=new_code
+        code=new_code,
+        specific_player=target_player
     )
 
-    # If AJAX request, return JSON, but here simple redirect/message
-    # In practice, best as API, but let's keep it simple for now:
-    messages.success(request, f"Your Code: {new_code} (Valid for 90 seconds)")
-    # Redirect to where they came from (e.g., profile)
-    return redirect(request.META.get('HTTP_REFERER', 'player_list'))
+    # 5. Message to the user
+    if target_player:
+        msg = f"Code for {target_player}: {new_code}"
+        messages.success(request, f"{msg} (Valid for 90s)")
+        # CONDITION: If it was a specific player, we go back to his details
+        return redirect('player_detail', pk=target_player.pk)
+    else:
+        msg = f"Master Code (All players): {new_code}"
+        messages.success(request, f"{msg} (Valid for 90s)")
+        # Otherwise we go back to the player list (or where we came from)
+        return redirect('player_list')
 
 
 # 2. IMPORTING PLAYERS (For Organizer)
@@ -2007,10 +2028,19 @@ def import_players_to_competition(request, comp_id):
             code = code_form.cleaned_data['code']
             try:
                 token = SharingToken.objects.get(code=code)
-                if token.is_valid():
+
+                # >>> 1. "SELF" LOCK <<<
+                if token.owner == request.user:
+                    code_form.add_error('code', "You cannot use your own sharing code.")
+
+                elif token.is_valid():
                     token_owner = token.owner
                     # Find players of the token owner
                     found_players = Player.objects.filter(owner=token_owner)
+
+                    # Optional: If the token is for a specific player
+                    if token.specific_player:
+                        found_players = found_players.filter(id=token.specific_player.id)
 
                     if not found_players.exists():
                         messages.warning(request, "Code valid, but user has no players.")
@@ -2031,41 +2061,36 @@ def import_players_to_competition(request, comp_id):
                 for source in source_players:
                     suffix = f" ({source.owner.username})"
 
-                    # Name logic (to be unique and readable)
-                    new_last_name = source.last_name + suffix if source.last_name else ""
+                    # We download the original data
+                    new_last_name = source.last_name
                     new_first_name = source.first_name
                     new_nickname = source.nickname
 
-                    if not new_last_name:
-                        if new_nickname:
-                            new_nickname += suffix
-                        else:
-                            new_first_name += suffix
+                    # >>> 2. SMART NAME LOGIC (Compatible with __str__) <<<
+                    if new_last_name:
+                        new_last_name += suffix
+                    elif new_nickname:
+                        new_nickname += suffix
+                    elif new_first_name:
+                        new_first_name += suffix
+                    else:
+                        new_nickname = f"Guest{suffix}"
 
-                    # Check tournament conflict (is this player already here?)
-                    # Check by name/surname OR by OneToOne relation with User (if exists)
-                    is_conflict = False
-                    if source.user:
-                        is_conflict = competition.players.filter(user=source.user).exists()
+                    # >>> 3. CREATING A GUEST (No messing around with conflicts) <<<
+                    # We always create a new guest for this tournament
+                    new_guest = Player.objects.create(
+                        owner=request.user,
+                        cloned_from=source,
+                        is_guest=True,
+                        first_name=new_first_name,
+                        last_name=new_last_name,
+                        nickname=new_nickname,
+                        # image=source.image (optional if you want to copy a photo)
+                    )
 
-                    # You can add string name check here if you want to be very strict
-
-                    if not is_conflict:
-                        # CREATE CLONE-GUEST
-                        new_guest = Player.objects.create(
-                            owner=request.user,
-                            # user=source.user,  <-- REMOVE THIS (Clone cannot be linked to the original User account)
-                            cloned_from=source,  # <--- ADDING THIS (Our new bridge)
-                            is_guest=True,
-                            first_name=source.first_name,
-                            # Typo in variables here, better to take straight from source or your variables above
-                            last_name=new_last_name,  # Using your suffix logic
-                            nickname=new_nickname,  # Using your suffix logic
-                            # photo=source.photo
-                        )
-                        # Add to tournament
-                        competition.players.add(new_guest)
-                        count += 1
+                    # Adding a guest to the tournament player list
+                    competition.players.add(new_guest)
+                    count += 1
 
                 messages.success(request, f"Imported {count} guests to the tournament.")
                 return redirect('competition_detail', pk=competition.id)
@@ -2073,7 +2098,7 @@ def import_players_to_competition(request, comp_id):
                 messages.error(request, "No players selected.")
 
     return render(request, 'import_players.html', {
-        'competition': competition,  # Important for Cancel button
+        'competition': competition,
         'code_form': code_form,
         'select_form': select_form,
         'token_owner': token_owner
@@ -2084,27 +2109,41 @@ def import_players_to_competition(request, comp_id):
 def import_guest_for_match(request):
     """
     Imports guest specifically for a single match.
-    On success returns to add_match with parameter ?guest=ID
+    On success returns to add_match with parameter ?guest_id=ID
     """
     code_form = ImportCodeForm(request.POST or None)
 
-    # If GET request (show form)
+    # 1. Displaying the form (GET)
     if request.method == 'GET':
         return render(request, 'import_players.html', {
             'code_form': code_form,
-            'is_match_import': True  # Flag for template
+            'is_match_import': True
         })
 
-    # If POST request (confirm code)
+    #2. Form Processing (POST)
     if request.method == 'POST':
+
+        # --- STEP A: CODE CHECK ---
         if 'check_code' in request.POST and code_form.is_valid():
             code = code_form.cleaned_data['code']
             try:
                 token = SharingToken.objects.get(code=code)
-                if token.is_valid():
-                    # Show selection form (same mechanism as before)
+
+                # >>> "SELF" LOCK <<<
+                if token.owner == request.user:
+                    code_form.add_error('code', "You cannot use your own sharing code.")
+
+                # Time validity check (90 seconds)
+                elif token.is_valid():
+                    # Code is OK - we show a list of players to choose from
                     found_players = Player.objects.filter(owner=token.owner)
+
+                    # If the token was for a specific player (option in the model), we filter
+                    if token.specific_player:
+                        found_players = found_players.filter(id=token.specific_player.id)
+
                     select_form = SelectImportedPlayersForm(found_players=found_players)
+
                     return render(request, 'import_players.html', {
                         'code_form': code_form,
                         'select_form': select_form,
@@ -2112,49 +2151,63 @@ def import_guest_for_match(request):
                         'is_match_import': True
                     })
                 else:
-                    code_form.add_error('code', "Code expired.")
+                    code_form.add_error('code', "This code has expired (valid for 90s).")
+
             except SharingToken.DoesNotExist:
                 code_form.add_error('code', "Invalid code.")
 
+        # --- STEP B: CREATING A COPY OF THE PLAYER (IMPORT) ---
         elif 'confirm_import' in request.POST:
             player_ids = request.POST.getlist('selected_players')
-            if player_ids:
-                # Take first selected (match is usually 1 vs 1)
-                # Loop handles multiple selections, taking the last one as "Active"
-                last_created_id = None
 
+            if player_ids:
+                last_created_id = None
                 source_players = Player.objects.filter(id__in=player_ids)
+
                 for source in source_players:
+                    # Suffix, e.g. " (Ronnie147)"
                     suffix = f" ({source.owner.username})"
 
-                    new_last_name = source.last_name + suffix if source.last_name else ""
+                    # We download the original data
+                    new_last_name = source.last_name
                     new_first_name = source.first_name
                     new_nickname = source.nickname
 
-                    if not new_last_name:
-                        if new_nickname:
-                            new_nickname += suffix
-                        else:
-                            new_first_name += suffix
+                    # >>> NAME LOGIC (modeled on __str__) <<<
+                    # We add the suffix to the most important field that exists
+                    if new_last_name:
+                        new_last_name += suffix
+                    elif new_nickname:
+                        new_nickname += suffix
+                    elif new_first_name:
+                        new_first_name += suffix
+                    else:
+                        # Fallback if player had nothing (unlikely)
+                        new_nickname = f"Guest{suffix}"
 
-                            # Create Guest (is_guest=True)
-                            new_guest = Player.objects.create(
-                                owner=request.user,
-                                # user=source.user,  <-- REMOVE THIS
-                                cloned_from=source,  # <--- ADD THIS
-                                is_guest=True,
-                                first_name=new_first_name,
-                                last_name=new_last_name,
-                                nickname=new_nickname,
-                            )
+                    # >>> CREATION (Always Happening) <<<
+                    new_guest = Player.objects.create(
+                        owner=request.user,
+                        cloned_from=source,
+                        is_guest=True,
+
+                        first_name=new_first_name,
+                        last_name=new_last_name,
+                        nickname=new_nickname,
+
+                        # Optionally, copy other fields (statistics are reset to zero)
+                    )
+
                     last_created_id = new_guest.id
 
-                messages.success(request, "Guest imported for the match.")
-                # RETURN TO ADD MATCH WITH PLAYER ID
+                messages.success(request, f"Guest imported successfully from {source.owner.username}.")
+                # We go back to adding a match with the new guest ID
                 return redirect(f"{reverse('add_match')}?guest_id={last_created_id}")
+
             else:
                 messages.error(request, "No players selected.")
 
+    # If the form is not valid or another POST error
     return render(request, 'import_players.html', {'code_form': code_form})
 
 
