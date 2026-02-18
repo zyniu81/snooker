@@ -106,7 +106,9 @@ class PlayerAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
 
     def get_full_name(self, obj):
-        return f"{obj.first_name} {obj.last_name}" if (obj.first_name and obj.last_name) else obj.nickname
+        return str(obj)
+
+    get_full_name.short_description = "Full Name"
 
 
 @admin.register(Match)
