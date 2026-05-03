@@ -351,8 +351,12 @@ def venue_detail(request, pk):
 
 @login_required
 def match_list(request):
-    # 1. BASE: Your original query
-    matches = Match.objects.filter(owner=request.user).order_by('-date', '-time')
+    # 1. BASE: Matches owned by the user OR where user's player/clone participated
+    matches = Match.objects.filter(
+        Q(owner=request.user) |
+        Q(player1__owner=request.user) | Q(player2__owner=request.user) |
+        Q(player1__cloned_from__owner=request.user) | Q(player2__cloned_from__owner=request.user)
+    ).distinct().order_by('-date', '-time')
 
     # 2. Get years for dropdown (before filtering the list!)
     # Method .dates() returns unique dates (years) from QuerySet
@@ -2254,9 +2258,10 @@ def competition_ranking(request, competition_id):
 def player_match_history(request, pk):
     player = get_object_or_404(Player, pk=pk)
 
-    # 1. Fetch ALL matches of the player
+    # 1. Fetch ALL matches of the player (FIXED FOR CLONES)
     matches_qs = Match.objects.filter(
-        Q(player1=player) | Q(player2=player)
+        Q(player1=player) | Q(player1__cloned_from=player) |
+        Q(player2=player) | Q(player2__cloned_from=player)
     ).order_by('-date', '-time')
 
     # --- H2H FILTER (Head-to-Head) ---
@@ -2266,8 +2271,11 @@ def player_match_history(request, pk):
 
     if opponent_id:
         opponent = get_object_or_404(Player, pk=opponent_id)
-        # Filter only matches with this opponent
-        matches_qs = matches_qs.filter(Q(player1=opponent) | Q(player2=opponent))
+        # Filter only matches with this opponent (also checking clones)
+        matches_qs = matches_qs.filter(
+            (Q(player1=opponent) | Q(player1__cloned_from=opponent)) |
+            (Q(player2=opponent) | Q(player2__cloned_from=opponent))
+        )
 
         # Calculate quick H2H stats
         total = matches_qs.count()
@@ -2284,10 +2292,15 @@ def player_match_history(request, pk):
         }
 
     # 2. List of all opponents for dropdown (for filter)
-    # Get IDs of all opponents from player's matches
-    # This query might be heavy with thousands of players, but OK for now
-    p1_ids = Match.objects.filter(player2=player).values_list('player1', flat=True)
-    p2_ids = Match.objects.filter(player1=player).values_list('player2', flat=True)
+    # We must also include matches where our clone played to find all opponents
+    p1_ids = Match.objects.filter(
+        Q(player2=player) | Q(player2__cloned_from=player)
+    ).values_list('player1', flat=True)
+
+    p2_ids = Match.objects.filter(
+        Q(player1=player) | Q(player1__cloned_from=player)
+    ).values_list('player2', flat=True)
+
     all_opponent_ids = list(set(list(p1_ids) + list(p2_ids)))
 
     possible_opponents = Player.objects.filter(id__in=all_opponent_ids).order_by('last_name')
