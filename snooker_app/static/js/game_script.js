@@ -88,6 +88,9 @@ function recordAction(action) {
     redoStack = [];
 
     updateActionLogUI();
+
+    // --- UPDATE MAX POSSIBLE BREAK ---
+    updateMaxPossibleBreak();
 }
 
 function undo() {
@@ -227,6 +230,8 @@ function undo() {
     updateActionLogUI();
     updateBallStatsUI();
     updateFrameStatus();
+    // --- UPDATE MAX POSSIBLE BREAK ---
+    updateMaxPossibleBreak();
 }
 
 function redo() {
@@ -351,6 +356,8 @@ function redo() {
     updateActionLogUI();
     updateBallStatsUI();
     updateFrameStatus();
+    // --- UPDATE MAX POSSIBLE BREAK ---
+    updateMaxPossibleBreak();
 }
 
 // --- ACTION LOG FUNCTIONS (HISTORY UI) ---
@@ -1799,8 +1806,59 @@ document.addEventListener('DOMContentLoaded', () => {
     hookFunction('resetGame');
     hookFunction('setActivePlayer');
     hookFunction('updateFrameStatus'); // Important: when calc updates, scoreboard updates
+    updateMaxPossibleBreak();
 
     // For Timer: Since it updates every second via setInterval,
     // we need to add it to your startTimer loop manually or accept 1s delay.
     // Better approach: Add broadcastGameState() inside your setInterval in startTimer
 });
+
+// ==========================================
+// MAX POSSIBLE BREAK CALCULATOR
+// ==========================================
+function updateMaxPossibleBreak() {
+    // We use setTimeout to ensure all variables and the DOM
+    // are fully updated BEFORE we calculate the new max break.
+    setTimeout(() => {
+        const redCountEl = document.getElementById("red-ball-count");
+        const pointsOnTableEl = document.getElementById("points-on-table");
+        const maxBreakEl = document.getElementById("max-possible-break");
+
+        if (!redCountEl || !pointsOnTableEl || !maxBreakEl) return;
+
+        const redsLeft = parseInt(redCountEl.textContent, 10) || 0;
+        const pointsOnTable = parseInt(pointsOnTableEl.textContent, 10) || 0;
+
+        let potentialFromTable = 0;
+
+        // 1. Base Calculation from table
+        if (redsLeft > 0) {
+            potentialFromTable = (redsLeft * 8) + 27;
+        } else {
+            potentialFromTable = pointsOnTable;
+        }
+
+        // 2. Get active player's ongoing break
+        let activeBreak = 0;
+        if (typeof currentBreak !== 'undefined') {
+            activeBreak = currentBreak;
+        }
+
+        let extraPotential = 0;
+
+        // 3. SCENARIO A: Player potted a red/freeball and is currently on a color
+        if (typeof lastPottedRed !== 'undefined' && lastPottedRed === true) {
+            extraPotential = 7;
+        }
+        // 4. SCENARIO B: Free Ball awarded, but shot NOT taken yet
+        else if (typeof isFreeBall !== 'undefined' && isFreeBall === true && activeBreak === 0) {
+            extraPotential = 8;
+        }
+
+        // 5. Calculate total max break
+        const maxBreak = activeBreak + potentialFromTable + extraPotential;
+
+        // 6. Update the HTML
+        maxBreakEl.textContent = maxBreak;
+    }, 50); // 50ms micro-delay for perfect DOM synchronization
+}
